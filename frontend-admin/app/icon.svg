@@ -1,0 +1,48 @@
+<!--
+  Admin PWA icon. Deliberately distinct from the user-facing app icon
+  (which uses a leaf on emerald) so admins can tell the two installed
+  PWAs apart on their home screen at a glance:
+    - Dark slate background (instead of bright emerald) -> "control room"
+    - Shield silhouette -> "admin / restricted access"
+    - Mini bar-chart inside the shield -> "trading ops dashboard"
+    - Tiny emerald accent dot top-right -> brand continuity
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- Shield -->
+  <path
+    d="M32 9 L50 16 V32 C50 43 42 51 32 55 C22 51 14 43 14 32 V16 Z"
+    fill="url(#shield)"
+    stroke="#34d399"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+  />
+  <!-- Mini bars (dashboard motif) -->
+  <g fill="#ffffff">
+    <rect x="22" y="32" width="4" height="10" rx="1"/>
+    <rect x="30" y="26" width="4" height="16" rx="1"/>
+    <rect x="38" y="22" width="4" height="20" rx="1"/>
+  </g>
+  <!-- Trend arrow over the bars -->
+  <path
+    d="M22 30 L30 24 L40 18"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.85"
+  />
+  <!-- Brand accent dot -->
+  <circle cx="52" cy="12" r="4" fill="#10b981" stroke="#0f172a" stroke-width="1.5"/>
+</svg>

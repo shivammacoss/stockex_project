@@ -1,0 +1,277 @@
+"""GameSettings singleton — the master config for the whole games system.
+
+One document only (enforced by a unique `key` index). `get_settings()` lazily
+creates it and AUTO-HEALS any of the 7 known game blocks that are missing, so
+adding a game to the schema never 404s an existing install (mirrors
+`netting_service.get_global_risk`).
+
+SuperAdmin is the only role that can write these. Hierarchy / referral fields
+are stored but UNUSED in v1 (deferred — see plan §Decisions).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, Field
+from pymongo import ASCENDING, IndexModel
+
+from app.models._base import TimestampMixin
+
+# ── Canonical game keys (GameSettings keys, spec §7) ─────────────────────
+GAME_KEYS: tuple[str, ...] = (
+    "niftyUpDown",
+    "btcUpDown",
+    "niftyNumber",
+    "btcNumber",
+    "niftyBracket",
+    "niftyJackpot",
+    "btcJackpot",
+)
+
+
+class HierarchyShare(BaseModel):
+    """Stored but UNUSED in v1 (hierarchy commission deferred)."""
+
+    sub_broker_percent: float = 0.0
+    broker_percent: float = 0.0
+    admin_percent: float = 0.0
+
+
+class ReferralDistribution(BaseModel):
+    """Stored but UNUSED in v1 (referral rewards deferred)."""
+
+    win_percent: float = 0.0
+    first_win_by_tickets: bool = False
+    top_ranks_only: bool = False
+    top_ranks_count: int = 0
+
+
+class GameConfig(BaseModel):
+    """Per-game config. Superset of every game's levers (spec §2.2–2.3);
+    fields not relevant to a given game are simply ignored by that game's
+    service. Every field has a safe default so a partially-specified block
+    still validates."""
+
+    enabled: bool = True
+    min_tickets: int = 1
+    max_tickets: int = 500
+    win_multiplier: float = 1.95
+    brokerage_percent: float = 5.0  # fee on profit (v1: informational)
+    ticket_price: float = 300.0
+    max_bets_per_round: int = 0  # 0 = unlimited
+
+    # Up/Down window timing
+    round_duration: int = 900  # seconds (15m)
+    cooldown_between_rounds: int = 0
+    start_time: str = "09:15:00"
+    end_time: str = "15:45:00"
+    max_tickets_up_per_window: int = 0  # 0 = unlimited
+    max_tickets_down_per_window: int = 0
+    # BTC up/down
+    allowed_expiry_times: list[int] = Field(default_factory=list)
+    default_expiry_time: int = 60
+
+    # Number game
+    fixed_profit: float = 0.0  # 0 → use ticket_price × win_multiplier
+    bets_per_day: int = 10
+    max_tickets_per_number: int = 2
+    all_decimals: bool = False  # False → .00–.95 step 5 ; True → .00–.99
+
+    # Bracket
+    bracket_gap: float = 20.0
+    bracket_gap_type: str = "point"  # "point" | "percentage"
+    bracket_gap_percent: float = 0.1
+    bracket_anchor_to_spot: bool = True
+    bracket_session_close_rule: str = "directionVsEntry"  # | "breakPastBands"
+    expiry_minutes: int = 5
+
+    # Bidding / result windows (Number, Bracket, Jackpot)
+    bidding_start_time: str = "09:15:00"
+    bidding_end_time: str = "15:24:00"
+    result_time: str = "15:45:00"
+    max_bid_time: str = "15:40:00"
+
+    # Jackpot
+    top_winners: int = 20
+    bids_per_day: int = 100
+    max_tickets_per_request: int = 1
+    # rank (as string "1".."N") → percent of pool
+    prize_percentages: dict[str, float] = Field(default_factory=dict)
+
+    # ── Hierarchy commission (ACTIVE) ────────────────────────────────
+    # Up/Down + Bracket use the WIN-BROKERAGE model: T = brokerage_percent%
+    # of profit, then split by profit_*_percent (user rebate + SubBroker +
+    # Broker + Admin + SuperAdmin remainder), funded from the house.
+    profit_user_percent: float = 0.0
+    profit_sub_broker_percent: float = 10.0
+    profit_broker_percent: float = 20.0
+    profit_admin_percent: float = 30.0
+    sub_broker_share_to_broker: bool = True
+    # Number + Jackpot use the GROSS-PRIZE model: hierarchy takes
+    # gross_prize_*_percent of the winner's gross, funded from the house.
+    gross_prize_sub_broker_percent: float = 0.0
+    gross_prize_broker_percent: float = 0.0
+    gross_prize_admin_percent: float = 0.0
+
+    # Referral-per-win: referrer earns referral_win_percent% of one ticket
+    # price on the referred user's FIRST win in this game (funded from the
+    # house). 0 disables. threshold = min house games-earnings before payout.
+    # (DEPRECATED — superseded by the 4-level %-of-win-profit model below;
+    # kept for back-compat, no longer used for distribution.)
+    referral_win_percent: float = 0.0
+    referral_top_ranks_only: bool = False
+    referral_top_ranks_count: int = 0
+
+    # ── 4-level %-of-win-profit model (ACTIVE) ───────────────────────
+    # On EVERY win, profit = payout − stake (per winning bet, ≥0). Each of the
+    # four levels gets a FLAT % of that profit, funded from the house:
+    #   Admin/Broker/Sub-broker → HELD (temporary) wallet via the hierarchy
+    #     cascade (missing role bubbles up; receives_hierarchy_brokerage gates).
+    #   Referrer (player.referred_by, a CLIENT) → their GAMES wallet, every win.
+    admin_profit_pct: float = 0.0
+    broker_profit_pct: float = 0.0
+    sub_broker_profit_pct: float = 0.0
+    referrer_profit_pct: float = 0.0
+
+    # Legacy embedded blocks (kept for backward-compat; unused by v2 flow).
+    hierarchy: HierarchyShare = Field(default_factory=HierarchyShare)
+    referral_distribution: ReferralDistribution = Field(default_factory=ReferralDistribution)
+
+
+class ProfitDistribution(BaseModel):
+    super_admin_percent: float = 40.0
+    admin_percent: float = 30.0
+    broker_percent: float = 20.0
+    sub_broker_percent: float = 10.0
+
+
+class GameSettings(TimestampMixin):
+    # Singleton guard — exactly one row.
+    key: str = "GLOBAL"
+
+    # ── Global levers ────────────────────────────────────────────────
+    games_enabled: bool = True
+    maintenance_mode: bool = False
+    maintenance_message: str = "Games are under maintenance. Please check back soon."
+    token_value: float = 300.0  # 1 token = ₹300 (display as "tickets")
+    platform_commission: float = 5.0
+
+    profit_distribution: ProfitDistribution = Field(default_factory=ProfitDistribution)
+
+    global_min_tickets: int = 1
+    global_max_tickets: int = 1000
+    daily_bet_limit: float = 500000.0
+    daily_win_limit: float = 1000000.0
+    game_position_expiry_grace_seconds: int = 3600
+
+    # Per-game config keyed by GameSettings key (GAME_KEYS).
+    games: dict[str, GameConfig] = Field(default_factory=dict)
+
+    class Settings:
+        name = "game_settings"
+        indexes = [IndexModel([("key", ASCENDING)], unique=True)]
+
+    # ── Singleton accessor ───────────────────────────────────────────
+    # NOTE: must NOT be named `get_settings` — Beanie's Document reserves
+    # that classmethod (used internally by get_motor_collection()).
+    @classmethod
+    async def load_singleton(cls) -> "GameSettings":
+        """Lazily create the singleton and auto-heal any missing game block."""
+        doc = await cls.find_one(cls.key == "GLOBAL")
+        if doc is None:
+            doc = cls(games={k: GameConfig(**_DEFAULTS[k]) for k in GAME_KEYS})
+            try:
+                await doc.insert()
+            except Exception:
+                # Lost a create race with another worker — re-read.
+                doc = await cls.find_one(cls.key == "GLOBAL")
+                if doc is None:
+                    raise
+        # Auto-heal newly added game keys.
+        healed = False
+        for k in GAME_KEYS:
+            if k not in doc.games:
+                doc.games[k] = GameConfig(**_DEFAULTS[k])
+                healed = True
+        if healed:
+            await doc.save()
+        return doc
+
+
+def _jackpot_prizes() -> dict[str, float]:
+    """Top-20 rank → pool % (sums ~100). Rank 1 45%, tapering."""
+    return {
+        "1": 45.0, "2": 10.0, "3": 8.0, "4": 6.0, "5": 5.0,
+        "6": 4.0, "7": 3.5, "8": 3.0, "9": 2.5, "10": 2.0,
+        "11": 1.7, "12": 1.5, "13": 1.3, "14": 1.1, "15": 1.0,
+        "16": 0.9, "17": 0.8, "18": 0.7, "19": 0.6, "20": 0.4,
+    }
+
+
+# Per-game defaults (spec §2.3). Only the fields that differ from GameConfig
+# defaults are listed; the rest fall back to the GameConfig field defaults.
+_DEFAULTS: dict[str, dict[str, Any]] = {
+    "niftyUpDown": {
+        "win_multiplier": 1.95, "round_duration": 900, "brokerage_percent": 5.0,
+        "start_time": "09:15:00", "end_time": "15:45:00", "ticket_price": 300.0,
+        "profit_sub_broker_percent": 10.0, "profit_broker_percent": 20.0, "profit_admin_percent": 30.0,
+        "referral_win_percent": 10.0,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+    "btcUpDown": {
+        "win_multiplier": 1.95, "round_duration": 900, "brokerage_percent": 5.0,
+        "start_time": "00:00:01", "end_time": "23:45:00", "ticket_price": 300.0,
+        "allowed_expiry_times": [60, 120, 300, 600, 900], "default_expiry_time": 60,
+        "profit_sub_broker_percent": 5.0, "profit_broker_percent": 1.0, "profit_admin_percent": 1.0,
+        "referral_win_percent": 10.0,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+    "niftyNumber": {
+        "win_multiplier": 9.0, "fixed_profit": 4000.0, "ticket_price": 300.0,
+        "bets_per_day": 10, "max_tickets_per_number": 2, "all_decimals": False,
+        "bidding_start_time": "09:15:00", "bidding_end_time": "15:24:00",
+        "result_time": "15:45:00", "max_bid_time": "15:40:00",
+        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
+        "referral_win_percent": 10.0,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+    "btcNumber": {
+        "win_multiplier": 9.0, "fixed_profit": 4000.0, "ticket_price": 300.0,
+        "bets_per_day": 10, "max_tickets_per_number": 2, "all_decimals": True,
+        "bidding_start_time": "00:00:01", "bidding_end_time": "23:24:00",
+        "result_time": "23:30:00", "max_bid_time": "23:25:00",
+        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
+        "referral_win_percent": 10.0,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+    "niftyBracket": {
+        "ticket_price": 1000.0, "win_multiplier": 1.9, "bracket_gap": 20.0,
+        "bracket_gap_type": "point", "bracket_anchor_to_spot": True,
+        "bracket_session_close_rule": "directionVsEntry", "expiry_minutes": 5,
+        "bidding_start_time": "09:15:29", "bidding_end_time": "15:29:00",
+        "result_time": "15:31:00", "brokerage_percent": 5.0,
+        "profit_sub_broker_percent": 10.0, "profit_broker_percent": 20.0, "profit_admin_percent": 30.0,
+        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 1.0,
+        "referral_win_percent": 2.0,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+    "niftyJackpot": {
+        "top_winners": 20, "ticket_price": 300.0, "bids_per_day": 100,
+        "max_tickets_per_request": 1, "bidding_start_time": "00:00:00",
+        "bidding_end_time": "23:59:00", "result_time": "15:45:00",
+        "prize_percentages": _jackpot_prizes(),
+        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
+        "referral_win_percent": 5.0, "referral_top_ranks_only": True, "referral_top_ranks_count": 3,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+    "btcJackpot": {
+        "top_winners": 20, "ticket_price": 500.0, "bids_per_day": 200,
+        "max_tickets_per_request": 1, "bidding_start_time": "00:00:00",
+        "bidding_end_time": "23:29:00", "result_time": "23:30:00",
+        "prize_percentages": _jackpot_prizes(),
+        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
+        "referral_win_percent": 5.0, "referral_top_ranks_only": True, "referral_top_ranks_count": 3,
+        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+    },
+}

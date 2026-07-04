@@ -1,0 +1,132 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Ported Stockex landing theme — SCOPED under `.stockex-landing` so it
+   never leaks into the trading app. Defines the blue/yellow palette CSS
+   variables (which Tailwind's bg-primary / bg-background / etc. resolve
+   against) plus the landing's custom color utilities and animations.
+   ───────────────────────────────────────────────────────────────────── */
+
+.stockex-landing {
+  --background: 0 0% 100%;
+  --foreground: 210 50% 24%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 50% 24%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 50% 24%;
+  --primary: 212 85% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 20% 96%;
+  --secondary-foreground: 210 50% 24%;
+  --muted: 210 20% 96%;
+  --muted-foreground: 210 15% 45%;
+  --accent: 45 100% 51%;
+  --accent-foreground: 210 50% 24%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 20% 90%;
+  --input: 210 20% 90%;
+  --ring: 212 85% 50%;
+  --radius: 0.5rem;
+  --deep-blue: 210 80% 24%;
+  --royal-blue: 212 85% 50%;
+  --yellow-accent: 45 100% 51%;
+  --profit-green: 145 100% 39%;
+  --loss-red: 0 84% 60%;
+}
+
+.dark .stockex-landing {
+  --background: 222 47% 6%;
+  --foreground: 210 20% 98%;
+  --card: 222 47% 8%;
+  --card-foreground: 210 20% 98%;
+  --popover: 222 47% 8%;
+  --popover-foreground: 210 20% 98%;
+  --primary: 212 85% 55%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 30% 14%;
+  --secondary-foreground: 210 20% 98%;
+  --muted: 222 30% 14%;
+  --muted-foreground: 210 15% 65%;
+  --accent: 45 100% 51%;
+  --accent-foreground: 210 50% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 222 30% 18%;
+  --input: 222 30% 18%;
+  --ring: 212 85% 55%;
+  --deep-blue: 210 80% 70%;
+  --royal-blue: 212 85% 60%;
+  --yellow-accent: 45 100% 51%;
+  --profit-green: 145 100% 45%;
+  --loss-red: 0 84% 60%;
+}
+
+/* Custom color utilities used by the landing sections */
+.stockex-landing .text-deep-blue,
+.text-deep-blue { color: hsl(var(--deep-blue)); }
+.stockex-landing .bg-deep-blue,
+.bg-deep-blue { background-color: hsl(var(--deep-blue)); }
+.stockex-landing .text-royal-blue,
+.text-royal-blue { color: hsl(var(--royal-blue)); }
+.stockex-landing .bg-royal-blue,
+.bg-royal-blue { background-color: hsl(var(--royal-blue)); }
+.stockex-landing .text-yellow-accent,
+.text-yellow-accent { color: hsl(var(--yellow-accent)); }
+.stockex-landing .bg-yellow-accent,
+.bg-yellow-accent { background-color: hsl(var(--yellow-accent)); }
+.stockex-landing .text-profit-green,
+.text-profit-green { color: hsl(var(--profit-green)); }
+.stockex-landing .bg-profit-green,
+.bg-profit-green { background-color: hsl(var(--profit-green)); }
+.stockex-landing .text-loss-red,
+.text-loss-red { color: hsl(var(--loss-red)); }
+.stockex-landing .bg-loss-red,
+.bg-loss-red { background-color: hsl(var(--loss-red)); }
+.gradient-blue { background: linear-gradient(135deg, #0B3C6D 0%, #1A73E8 100%); }
+
+/* Dark-mode overrides for standard Tailwind classes — scoped to the landing */
+.dark .stockex-landing .bg-white { background-color: hsl(222 47% 10%); }
+.dark .stockex-landing .bg-gray-50 { background-color: hsl(222 47% 8%); }
+.dark .stockex-landing .bg-gray-100 { background-color: hsl(222 30% 18%); }
+.dark .stockex-landing .text-gray-700 { color: hsl(210 20% 85%); }
+.dark .stockex-landing .text-gray-600 { color: hsl(210 15% 70%); }
+.dark .stockex-landing .text-gray-500 { color: hsl(210 15% 60%); }
+.dark .stockex-landing .text-gray-400 { color: hsl(210 15% 55%); }
+.dark .stockex-landing .border-gray-100 { border-color: hsl(222 30% 18%); }
+.dark .stockex-landing .border-gray-200 { border-color: hsl(222 30% 20%); }
+
+/* ── Animations ───────────────────────────────────────────────────── */
+@keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+.animate-ticker { animation: ticker 30s linear infinite; }
+
+@keyframes countUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.animate-count-up { animation: countUp 0.6s ease-out forwards; }
+
+@keyframes market-icon-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.animate-market-icon-float { animation: market-icon-float 3s ease-in-out infinite; }
+
+@keyframes market-card-glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
+.animate-market-glow { animation: market-card-glow 2.5s ease-in-out infinite; }
+
+@keyframes gradient-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.animate-gradient-text { background-size: 200% auto; animation: gradient-shift 4s ease-in-out infinite; }
+
+@keyframes fade-slide-up { from { opacity: 0; transform: translateY(1.25rem); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-slide-up { animation: fade-slide-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+@keyframes orb-drift { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(2rem, -1.25rem) scale(1.08); } 66% { transform: translate(-1.5rem, 1rem) scale(0.92); } }
+.animate-orb-drift { animation: orb-drift 10s ease-in-out infinite; }
+.animate-orb-drift-slow { animation: orb-drift 14s ease-in-out infinite reverse; }
+
+@keyframes live-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
+.animate-live-pulse { animation: live-pulse 1.5s ease-in-out infinite; }
+
+@keyframes grid-fade { 0%, 100% { opacity: 0.03; } 50% { opacity: 0.07; } }
+.animate-grid-fade { animation: grid-fade 6s ease-in-out infinite; }
+
+@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+.animate-marquee { animation: marquee 100s linear infinite; }
+
+@keyframes accordion-down { from { height: 0; } to { height: var(--radix-accordion-content-height); } }
+@keyframes accordion-up { from { height: var(--radix-accordion-content-height); } to { height: 0; } }
+.animate-accordion-down { animation: accordion-down 0.2s ease-out; }
+.animate-accordion-up { animation: accordion-up 0.2s ease-out; }

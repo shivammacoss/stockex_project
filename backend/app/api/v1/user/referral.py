@@ -1,0 +1,89 @@
+"""User referral API — share code/link, stats, and earnings ledger."""
+
+from __future__ import annotations
+
+from app.core.config import settings
+from app.core.dependencies import CurrentUser
+from app.models.referral import Referral
+from app.models.transaction import TransactionType, WalletTransaction
+from app.models.user import User
+from app.schemas.common import APIResponse
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/referral", tags=["user-referral"])
+
+
+@router.get("/stats", response_model=APIResponse[dict])
+async def referral_stats(user: CurrentUser):
+    """The user's own referral code (= user_code), share link, rollup totals,
+    and the list of users they've referred (with per-referral earnings)."""
+    code = user.user_code
+    base = (getattr(settings, "USER_APP_URL", "") or "").rstrip("/")
+    share_link = f"{base}/register?ref={code}" if base else f"/register?ref={code}"
+
+    refs = await Referral.find(Referral.referrer == user.id).sort("-created_at").to_list()
+    referred_ids = [r.referred_user for r in refs]
+    users = {}
+    if referred_ids:
+        for u in await User.find({"_id": {"$in": referred_ids}}).to_list():
+            users[str(u.id)] = u
+
+    items = []
+    total_earn = 0.0
+    for r in refs:
+        ru = users.get(str(r.referred_user))
+        earn = float(str(r.earnings.to_decimal())) if r.earnings else 0.0
+        total_earn += earn
+        items.append(
+            {
+                "referred_user_code": ru.user_code if ru else None,
+                "referred_name": ru.full_name if ru else None,
+                "status": r.status.value if hasattr(r.status, "value") else str(r.status),
+                "earnings": earn,
+                "first_game_win": bool(r.first_game_win.credited),
+                "trading_referral_count": r.trading_referral_count,
+                "joined_at": r.created_at,
+            }
+        )
+
+    st = user.referral_stats
+    return APIResponse(
+        data={
+            "code": code,
+            "share_link": share_link,
+            "total_referrals": st.total_referrals if st else len(refs),
+            "active_referrals": st.active_referrals if st else len(refs),
+            "total_earnings": (
+                float(str(st.total_referral_earnings.to_decimal())) if st else total_earn
+            ),
+            "referrals": items,
+        }
+    )
+
+
+@router.get("/earnings", response_model=APIResponse[list])
+async def referral_earnings(user: CurrentUser, limit: int = 200):
+    """Ledger of REFERRAL_COMMISSION credits paid to this user (trading side,
+    from the main / segment wallets). Games-side referral credits live in the
+    games ledger and surface on the games wallet screen."""
+    limit = max(1, min(500, limit))
+    rows = (
+        await WalletTransaction.find(
+            WalletTransaction.user_id == user.id,
+            WalletTransaction.transaction_type == TransactionType.REFERRAL_COMMISSION,
+        )
+        .sort("-created_at")
+        .limit(limit)
+        .to_list()
+    )
+    out = []
+    for t in rows:
+        out.append(
+            {
+                "amount": float(str(t.amount.to_decimal())) if t.amount else 0.0,
+                "narration": t.narration,
+                "reference_type": t.reference_type,
+                "created_at": t.created_at,
+            }
+        )
+    return APIResponse(data=out)

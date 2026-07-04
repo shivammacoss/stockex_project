@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 44" width="250" height="44">
+  <rect width="44" height="44" rx="10" fill="#10b981"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="11,31 20,22 26,27 34,17"/>
+    <polyline points="28,17 34,17 34,23"/>
+  </g>
+  <text x="56" y="30" font-family="'Space Grotesk', Inter, -apple-system, system-ui, sans-serif" font-size="24" font-weight="700" letter-spacing="-0.5" fill="#10b981">StockEx</text>
+</svg>

@@ -1,0 +1,291 @@
+"""Inter-admin fund flow (mirrors D:\\Stockex adminManagementRoutes fund ops).
+
+- Direct transfers: a parent (or SUPER_ADMIN) pushes funds to / pulls funds
+  from a child admin/broker — settles immediately.
+- Fund-request chain: a child asks its parent (or SA) for funds; the parent
+  approves (crediting the child) or rejects.
+
+SA funding uses the kuber+personal split (kuber_service). SA approving skips
+the balance gate (unlimited), mirroring the reference. All moves write ledgers.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from beanie import PydanticObjectId
+from bson import Decimal128
+
+from app.core.exceptions import InsufficientFundsError, NotFoundError, ValidationFailedError
+from app.models.admin_fund import AdminFundRequest, AdminFundStatus
+from app.models.transaction import TransactionType
+from app.models.user import User, UserRole
+from app.services import kuber_service, wallet_service
+from app.utils.decimal_utils import ZERO, quantize_money, to_decimal
+from app.utils.time_utils import now_utc
+
+logger = logging.getLogger(__name__)
+
+# Platform-settings key for the live ON/OFF toggle (super-admin flips it from
+# the panel). When the row is absent, the env default `settings.ADMIN_FLOAT_
+# ENABLED` applies — so the toggle is authoritative once set, env is the seed.
+ADMIN_FLOAT_ENABLED_KEY = "admin_float_enabled"
+
+
+async def is_admin_float_enabled() -> bool:
+    """Is the admin fund-cap / float feature ON? Reads the DB toggle (live,
+    no restart), falling back to the env default when unset."""
+    from app.core.config import settings
+    from app.models.platform_setting import PlatformSetting
+
+    row = await PlatformSetting.find_one(PlatformSetting.setting_key == ADMIN_FLOAT_ENABLED_KEY)
+    if row is None:
+        return bool(settings.ADMIN_FLOAT_ENABLED)
+    return bool(row.setting_value)
+
+
+async def _super_admin_id() -> PydanticObjectId | None:
+    from app.services import netting_service
+
+    return await netting_service._resolve_super_admin_id()
+
+
+def _parent_id(user: User, sa_id):
+    """The admin/broker directly above `user` (who funds/approves for them)."""
+    return (
+        getattr(user, "assigned_broker_id", None)
+        or getattr(user, "assigned_admin_id", None)
+        or sa_id
+    )
+
+
+def _is_admin_tier(u: User) -> bool:
+    return u.role in (UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.BROKER)
+
+
+async def _assert_can_manage(actor: User, child: User) -> None:
+    """Actor may fund/pull a child only if they are SA or the child's parent."""
+    if actor.role == UserRole.SUPER_ADMIN:
+        return
+    sa_id = await _super_admin_id()
+    if _parent_id(child, sa_id) != actor.id:
+        raise ValidationFailedError("Not your direct member")
+
+
+# ── Direct transfers ───────────────────────────────────────────────────
+async def add_funds(actor: User, child_id, amount, description: str = "") -> dict:
+    """Parent (or SA) credits a child admin/broker. SA funds from kuber+main."""
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        raise ValidationFailedError("amount must be positive")
+    child = await User.get(PydanticObjectId(str(child_id)))
+    if child is None or not _is_admin_tier(child):
+        raise NotFoundError("Member not found")
+    await _assert_can_manage(actor, child)
+
+    narration = description or f"Funds from {actor.user_code}"
+    # Debit the funder.
+    if actor.role == UserRole.SUPER_ADMIN:
+        plan = kuber_service.resolve_funding_plan_for_admin(child)
+        await kuber_service.fund_admin_share_from_sa_wallets(
+            actor.id, amt, plan["kuber_pct"], narration=f"Fund {child.user_code}", actor_id=actor.id
+        )
+    else:
+        pw = await wallet_service.get_or_create(actor.id)
+        if to_decimal(pw.available_balance) < amt:
+            raise InsufficientFundsError("Insufficient balance to fund member")
+        await wallet_service.adjust(actor.id, -amt, transaction_type=TransactionType.ADMIN_TRANSFER,
+                                    narration=f"Fund {child.user_code}", reference_type="ADMIN_FUND", actor_id=actor.id)
+    # Credit the child.
+    await wallet_service.adjust(child.id, amt, transaction_type=TransactionType.ADMIN_DEPOSIT,
+                                narration=narration, reference_type="ADMIN_FUND", actor_id=actor.id)
+    return {"ok": True, "amount": str(amt)}
+
+
+async def deduct_funds(actor: User, child_id, amount, description: str = "") -> dict:
+    """Parent (or SA) pulls funds back from a child admin/broker."""
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        raise ValidationFailedError("amount must be positive")
+    child = await User.get(PydanticObjectId(str(child_id)))
+    if child is None or not _is_admin_tier(child):
+        raise NotFoundError("Member not found")
+    await _assert_can_manage(actor, child)
+
+    cw = await wallet_service.get_or_create(child.id)
+    if to_decimal(cw.available_balance) < amt:
+        raise InsufficientFundsError("Member has insufficient balance")
+    # Debit child, credit the actor's main wallet (pulled funds land in main;
+    # SA can move main → kuber afterwards if it should return to the pool).
+    await wallet_service.adjust(child.id, -amt, transaction_type=TransactionType.ADMIN_WITHDRAW,
+                                narration=f"Funds pulled by {actor.user_code}", reference_type="ADMIN_FUND", actor_id=actor.id)
+    await wallet_service.adjust(actor.id, amt, transaction_type=TransactionType.ADMIN_TRANSFER,
+                                narration=f"Pulled from {child.user_code}", reference_type="ADMIN_FUND", actor_id=actor.id)
+    return {"ok": True, "amount": str(amt)}
+
+
+# ── Admin float ↔ user funding (SA→admin allocation caps user deposits) ─
+# The admin's spendable ceiling IS their own Wallet.available_balance (one
+# shared float, same pool the inter-admin transfers above draw from). When a
+# downline USER is funded the OWNING admin's float is debited; a user
+# withdrawal replenishes it. SA is always unlimited (never capped/debited).
+# All of this is a NO-OP unless settings.ADMIN_FLOAT_ENABLED is True — so the
+# legacy "mint into the user wallet" behaviour is byte-identical until the
+# operator turns the feature on (after giving each admin a float).
+async def _owning_admin_id(user_or_id):
+    """The admin/broker whose float funds this user, plus the SA id."""
+    sa_id = await _super_admin_id()
+    user = user_or_id if isinstance(user_or_id, User) else await User.get(PydanticObjectId(str(user_or_id)))
+    if user is None:
+        return None, sa_id, None
+    return _parent_id(user, sa_id), sa_id, user
+
+
+async def debit_admin_float_for_user(
+    user_or_id, amount, *, reference_type: str, reference_id: str | None = None,
+    actor_id=None, narration: str | None = None,
+) -> None:
+    """Debit the user's OWNING-admin float by `amount` before crediting the user.
+
+    NO-OP when the feature flag is off or the owning admin is the SUPER_ADMIN
+    (SA is unlimited). Raises InsufficientFundsError when a non-SA owning admin
+    can't cover it — the caller must let that propagate so the funding is blocked.
+    """
+    if not await is_admin_float_enabled():
+        return
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        return
+    owner_id, sa_id, user = await _owning_admin_id(user_or_id)
+    if owner_id is None or (sa_id is not None and str(owner_id) == str(sa_id)):
+        return  # SA-owned user → unlimited
+    ow = await wallet_service.get_or_create(owner_id)
+    if to_decimal(ow.available_balance) < amt:
+        raise InsufficientFundsError(
+            f"Admin float insufficient: ₹{to_decimal(ow.available_balance):,.2f} available, "
+            f"₹{amt:,.2f} needed. Fund the admin (opening fund / fund request) first."
+        )
+    await wallet_service.adjust(
+        owner_id, -amt, transaction_type=TransactionType.ADMIN_FLOAT_DISPENSE,
+        narration=narration or f"Float dispensed to {getattr(user, 'user_code', user_or_id)}",
+        reference_type=reference_type, reference_id=reference_id, actor_id=actor_id,
+    )
+
+
+async def credit_admin_float_for_user(
+    user_or_id, amount, *, reference_type: str, reference_id: str | None = None,
+    actor_id=None, narration: str | None = None,
+) -> None:
+    """Replenish the user's OWNING-admin float by `amount` (mirror of debit —
+    used on a user withdrawal / debit, and to roll back a failed deposit).
+    NO-OP when the flag is off or the owning admin is the SUPER_ADMIN."""
+    if not await is_admin_float_enabled():
+        return
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        return
+    owner_id, sa_id, user = await _owning_admin_id(user_or_id)
+    if owner_id is None or (sa_id is not None and str(owner_id) == str(sa_id)):
+        return
+    await wallet_service.adjust(
+        owner_id, amt, transaction_type=TransactionType.ADMIN_FLOAT_REPLENISH,
+        narration=narration or f"Float replenished from {getattr(user, 'user_code', user_or_id)}",
+        reference_type=reference_type, reference_id=reference_id, actor_id=actor_id,
+    )
+
+
+# ── Fund-request chain (requests up, approvals down) ───────────────────
+async def create_fund_request(requester: User, amount, reason: str = "") -> AdminFundRequest:
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        raise ValidationFailedError("amount must be positive")
+    if requester.role == UserRole.SUPER_ADMIN:
+        raise ValidationFailedError("Super-admin does not request funds")
+    sa_id = await _super_admin_id()
+    target = _parent_id(requester, sa_id)
+    req = AdminFundRequest(
+        requester_id=requester.id,
+        target_admin_id=target,
+        amount=Decimal128(str(amt)),
+        reason=reason,
+    )
+    await req.insert()
+    return req
+
+
+async def _resolve(approver: User, req_id, approve: bool, remarks: str | None) -> AdminFundRequest:
+    coll = AdminFundRequest.get_motor_collection()
+    new_status = AdminFundStatus.APPROVED.value if approve else AdminFundStatus.REJECTED.value
+    claimed = await coll.find_one_and_update(
+        {"_id": PydanticObjectId(str(req_id)), "status": AdminFundStatus.PENDING.value, "target_admin_id": approver.id},
+        {"$set": {"status": new_status, "remarks": remarks, "resolved_by": approver.id, "resolved_at": now_utc()}},
+    )
+    if claimed is None:
+        raise NotFoundError("Request not found, already resolved, or not yours to approve")
+    req = await AdminFundRequest.get(PydanticObjectId(str(req_id)))
+    if approve:
+        amt = to_decimal(req.amount)
+        requester = await User.get(req.requester_id)
+        # Credit the requester. SA approver skips the balance gate (unlimited);
+        # a non-SA approver is debited.
+        if approver.role != UserRole.SUPER_ADMIN:
+            pw = await wallet_service.get_or_create(approver.id)
+            if to_decimal(pw.available_balance) < amt:
+                # roll the request back to PENDING and refuse
+                await coll.update_one({"_id": req.id}, {"$set": {"status": AdminFundStatus.PENDING.value, "resolved_by": None, "resolved_at": None}})
+                raise InsufficientFundsError("Insufficient balance to approve")
+            await wallet_service.adjust(approver.id, -amt, transaction_type=TransactionType.ADMIN_TRANSFER,
+                                        narration=f"Approved fund request of {requester.user_code if requester else ''}",
+                                        reference_type="FUND_REQUEST", reference_id=str(req.id), actor_id=approver.id)
+        await wallet_service.adjust(req.requester_id, amt, transaction_type=TransactionType.ADMIN_DEPOSIT,
+                                    narration="Fund request approved", reference_type="FUND_REQUEST",
+                                    reference_id=str(req.id), actor_id=approver.id)
+    return req
+
+
+async def approve_fund_request(approver: User, req_id) -> AdminFundRequest:
+    return await _resolve(approver, req_id, True, None)
+
+
+async def reject_fund_request(approver: User, req_id, remarks: str | None = None) -> AdminFundRequest:
+    return await _resolve(approver, req_id, False, remarks)
+
+
+async def list_incoming(approver: User, status: str = "PENDING") -> list[dict]:
+    rows = (
+        await AdminFundRequest.find(AdminFundRequest.target_admin_id == approver.id, AdminFundRequest.status == status)
+        .sort("-created_at").limit(200).to_list()
+    )
+    return await _serialize(rows)
+
+
+async def list_mine(requester: User) -> list[dict]:
+    rows = (
+        await AdminFundRequest.find(AdminFundRequest.requester_id == requester.id)
+        .sort("-created_at").limit(200).to_list()
+    )
+    return await _serialize(rows)
+
+
+async def _serialize(rows: list[AdminFundRequest]) -> list[dict]:
+    uids = {r.requester_id for r in rows} | {r.target_admin_id for r in rows}
+    users = {}
+    if uids:
+        for u in await User.find({"_id": {"$in": list(uids)}}).to_list():
+            users[str(u.id)] = u
+    out = []
+    for r in rows:
+        req = users.get(str(r.requester_id))
+        tgt = users.get(str(r.target_admin_id))
+        out.append({
+            "id": str(r.id),
+            "amount": float(to_decimal(r.amount)),
+            "reason": r.reason,
+            "status": r.status.value if hasattr(r.status, "value") else str(r.status),
+            "remarks": r.remarks,
+            "requester_code": req.user_code if req else None,
+            "requester_role": req.role.value if req else None,
+            "target_code": tgt.user_code if tgt else None,
+            "created_at": r.created_at,
+        })
+    return out

@@ -1,0 +1,497 @@
+"""User & UserSegment documents.
+
+A single User collection holds clients, dealers, masters, admins, super-admin
+— role-based filtering keeps query plans simple. Hierarchical relationships
+(master → dealer → client) are modelled via `parent_id`.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from enum import Enum
+
+from beanie import Indexed, Link, PydanticObjectId
+from bson import Decimal128
+from pydantic import BaseModel, Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
+
+from app.models._base import PermissionLevel, StrEnum, TimestampMixin
+from app.models._types import Money
+from app.utils.time_utils import now_utc
+
+
+class UserRole(StrEnum):
+    SUPER_ADMIN = "SUPER_ADMIN"
+    ADMIN = "ADMIN"
+    MASTER = "MASTER"
+    DEALER = "DEALER"
+    CLIENT = "CLIENT"
+    # New tier: a broker sits under an admin and manages their own client
+    # pool. Brokers can also create sub-brokers (nested, via broker_ancestry).
+    BROKER = "BROKER"
+
+
+class UserStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    BLOCKED = "BLOCKED"
+    PENDING = "PENDING"
+    CLOSED = "CLOSED"
+
+
+class AccountType(StrEnum):
+    LIVE = "LIVE"
+    DEMO = "DEMO"
+
+
+# ── Embedded sub-documents ──────────────────────────────────────────
+class KycInfo(BaseModel):
+    pan: str | None = None
+    aadhaar: str | None = None  # store hashed/last-4 in production
+    dob: date | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    pincode: str | None = None
+    country: str = "India"
+    is_verified: bool = False
+    verified_at: datetime | None = None
+
+
+class UserPermissions(BaseModel):
+    can_place_orders: bool = True
+    can_modify_orders: bool = True
+    can_cancel_orders: bool = True
+    can_withdraw: bool = True
+    can_deposit: bool = True
+    can_view_charts: bool = True
+    api_access: bool = False
+    algo_trading: bool = False
+
+
+class TradingHours(BaseModel):
+    login_start: str = "00:00"  # HH:MM, IST
+    login_end: str = "23:59"
+    ip_whitelist: list[str] = Field(default_factory=list)
+
+
+class RiskProfile(BaseModel):
+    max_daily_loss: float = 0.0  # 0 = no limit
+    max_position_value: float = 0.0
+    max_open_positions: int = 0
+    auto_squareoff_enabled: bool = True
+    m2m_squareoff_percent: float = 80.0  # squareoff at -80% of margin
+
+
+class CommunicationPrefs(BaseModel):
+    email_alerts: bool = True
+    sms_alerts: bool = True
+    whatsapp_alerts: bool = False
+    push_alerts: bool = True
+
+
+# Section toggles for sub-admins (role == ADMIN). One boolean per admin nav
+# section; SUPER_ADMIN ignores this object entirely. Adding a new section
+# means: append a field here, gate it in admin endpoints with
+# require_admin_permission(<name>), and surface a toggle in the
+# `frontend-admin/management` page.
+class AdminPermissions(BaseModel):
+    users: bool = False
+    kyc: bool = False
+    deposits: bool = False
+    withdrawals: bool = False
+    segment_settings: bool = False
+    risk: bool = False
+    netting: bool = False
+    trading_view: bool = False
+    ledger: bool = False
+    reports: bool = False
+    brokerage: bool = False
+    # Gates access to /management/brokers — admin needs this ON to create
+    # brokers under their pool. Super-admin always has it.
+    brokers: bool = False
+    # Gates the Bank Accounts tab on the Payments page (list/create/edit/
+    # delete of CompanyBankAccount rows in the admin's own pool). Default
+    # True so existing admins keep their bank-management capability —
+    # super-admin can turn it OFF per sub-admin to lock down.
+    banks: bool = True
+
+
+# Tri-state permissions granted by an admin to a broker (or by a broker to
+# a sub-broker). Each key mirrors a section in the admin nav; the level
+# decides what the broker sees and can do on that page:
+#   OFF  → section hidden from sidebar; backend rejects all calls with 403
+#   VIEW → page loads, list/details readable; mutation buttons disabled,
+#          backend rejects writes with 403
+#   EDIT → full access (read + write)
+# The `sub_brokers` key here is the broker-level equivalent of admin's
+# `brokers` flag — gates the broker's ability to mint sub-brokers.
+class BrokerPermissions(BaseModel):
+    users: PermissionLevel = PermissionLevel.OFF
+    kyc: PermissionLevel = PermissionLevel.OFF
+    deposits: PermissionLevel = PermissionLevel.OFF
+    withdrawals: PermissionLevel = PermissionLevel.OFF
+    segment_settings: PermissionLevel = PermissionLevel.OFF
+    risk: PermissionLevel = PermissionLevel.OFF
+    netting: PermissionLevel = PermissionLevel.OFF
+    trading_view: PermissionLevel = PermissionLevel.OFF
+    ledger: PermissionLevel = PermissionLevel.OFF
+    reports: PermissionLevel = PermissionLevel.OFF
+    brokerage: PermissionLevel = PermissionLevel.OFF
+    sub_brokers: PermissionLevel = PermissionLevel.OFF
+    # Bank Accounts tab — VIEW lets broker see existing banks in their pool,
+    # EDIT lets them add / update / delete banks for their own users.
+    banks: PermissionLevel = PermissionLevel.OFF
+
+
+class GameReferralStats(BaseModel):
+    """Reserved for the deferred games referral-per-win feature (v1 unused).
+    `first_win_by_game` maps a GameSettings key → whether the user has already
+    had their first win (so a referrer is rewarded at most once per game)."""
+
+    first_win_by_game: dict[str, bool] = Field(default_factory=dict)
+
+
+class ReferralStats(BaseModel):
+    """Rollup of what a user has earned by referring others (mirror of
+    Stockex User.referralStats). Bumped whenever a referral reward is paid to
+    this user from a referred user's game win / trade."""
+
+    total_referral_earnings: Money = Field(default_factory=lambda: Decimal128("0"))
+    total_referrals: int = 0
+    active_referrals: int = 0
+
+
+class ReferralEligibility(BaseModel):
+    """SUPER_ADMIN-owned gate: a referral is only paid once the referred user's
+    hierarchy has earned enough for the house. `threshold_unit`:
+    PER_CRORE → total_earnings / 1e7 >= threshold_amount; ABSOLUTE → >=."""
+
+    enabled: bool = True
+    threshold_amount: float = 1000.0
+    threshold_unit: str = "PER_CRORE"  # "PER_CRORE" | "ABSOLUTE"
+
+
+class ReferralDistributionEnabled(BaseModel):
+    """Per-admin toggle of which segments pay referral rewards for their
+    subtree. mcx/crypto/forex additionally require the master `trading` flag."""
+
+    games: bool = True
+    trading: bool = True
+    mcx: bool = True
+    crypto: bool = True
+    forex: bool = True
+
+
+class PattiSegmentShare(BaseModel):
+    """This admin-tier node's GROSS share of the per-trade house pool for a
+    segment (set CUMULATIVELY up the chain). `pnl_pct` = % of the house's P&L
+    pool (house gains on a user loss, is debited on a user profit — shared both
+    ways); `brokerage_pct` = % of the brokerage charged. At settlement each node
+    NETS its own % minus the nearest downline's % (so the chain never exceeds
+    100%); the remainder stays with the SUPER_ADMIN house that funds it. Mirrors
+    the reference `resolvePattiCascadeCredits`."""
+
+    pnl_pct: float = 0.0
+    brokerage_pct: float = 0.0
+
+
+class PattiSharing(BaseModel):
+    """Admin-hierarchy "patti" — a real-time, SUPER_ADMIN-funded cascade of a
+    user's trading book result to the admin/broker/sub-broker above them.
+    OPT-IN per admin-tier node (default off → no behaviour change). Keep OFF
+    for a subtree that already uses the weekly `pnl_sharing` agreement to avoid
+    double-counting. `segments` key = "trading"/"mcx"/"crypto"/"forex" or
+    "ALL" (fallback)."""
+
+    enabled: bool = False
+    applied_to: str = "ALL_TRADES"  # ALL_TRADES | SPECIFIC_CLIENTS (v1: ALL)
+    segments: dict[str, PattiSegmentShare] = Field(default_factory=dict)
+
+
+# ── User document ───────────────────────────────────────────────────
+class User(TimestampMixin):
+    user_code: Indexed(str, unique=True)  # type: ignore[valid-type]
+    # Stored as plain `str` (NOT EmailStr) on purpose: the soft-delete flow
+    # rewrites a closed user's email to "<orig>+deleted-<id>" to free the
+    # unique index (see /admin/users DELETE). That suffix is not a valid
+    # RFC email, so an EmailStr field would raise ValidationError when
+    # beanie re-parses the row — crashing any `.to_list()` whose scope
+    # includes a closed user (admin Users list, sub-admin drill-in, money
+    # / accounts aggregations). Email FORMAT is still validated at the API
+    # input layer (register / create-user / create-sub-admin / create-broker
+    # request schemas all use EmailStr), so new accounts stay well-formed.
+    email: Indexed(str, unique=True)  # type: ignore[valid-type]
+    mobile: Indexed(str, unique=True)  # type: ignore[valid-type]
+    password_hash: str
+    full_name: str
+    photo_url: str | None = None
+
+    # Tombstones stamped by /admin/users/{id} DELETE when the row is
+    # soft-closed.  email/mobile are rewritten to "<orig>+deleted-<id>"
+    # and "DEL<oid-tail>" respectively so the unique index frees up for
+    # a future registration with the same contact; the originals are
+    # kept here for the audit trail / KYC lookup.
+    deleted_email_original: str | None = None
+    deleted_mobile_original: str | None = None
+
+    # ── Terms & Conditions (admin-tier writes; cascades to clients) ──
+    # Each admin-tier user (SUPER_ADMIN / ADMIN / BROKER) can set their
+    # own T&C text + toggle. When `terms_enabled=True`, every CLIENT
+    # in their downline sees the T&C modal once after register and
+    # again whenever the text changes (acceptance is tracked via
+    # `terms_accepted_at` on the client row).
+    terms_text: str | None = None
+    terms_enabled: bool = False
+    # CLIENT-side: timestamp of the last accept click. Reset to None by
+    # admin if they update terms_text and want re-acceptance.
+    terms_accepted_at: datetime | None = None
+
+    role: UserRole = UserRole.CLIENT
+    status: UserStatus = UserStatus.PENDING
+    account_type: AccountType = AccountType.LIVE
+    is_demo: bool = False
+
+    # Session epoch. Stamped into every access token as the `ver` claim;
+    # the per-request auth dependency rejects any token whose `ver` doesn't
+    # match. Bumping this (on block / admin password reset) instantly
+    # invalidates EVERY outstanding access token for the user — they can't
+    # ride out the 15-min access-token window or refresh back in, so the
+    # account is force-logged-out on its very next request.
+    token_version: int = 0
+
+    parent_id: PydanticObjectId | None = None  # hierarchy
+
+    kyc: KycInfo = Field(default_factory=KycInfo)
+    permissions: UserPermissions = Field(default_factory=UserPermissions)
+    trading_hours: TradingHours = Field(default_factory=TradingHours)
+    risk: RiskProfile = Field(default_factory=RiskProfile)
+    communication: CommunicationPrefs = Field(default_factory=CommunicationPrefs)
+
+    # Brokerage plan (FK to brokerage_plans, optional → uses default)
+    brokerage_plan_id: PydanticObjectId | None = None
+
+    # 2FA
+    two_fa_enabled: bool = False
+    two_fa_secret: str | None = None
+    two_fa_backup_codes: list[str] = Field(default_factory=list)
+
+    # Login telemetry
+    last_login_at: datetime | None = None
+    last_login_ip: str | None = None
+    failed_login_count: int = 0
+    locked_until: datetime | None = None
+    password_changed_at: datetime | None = None
+    must_change_password: bool = False
+
+    created_by: PydanticObjectId | None = None
+
+    # Pool transfer telemetry — stamped every time a super-admin /
+    # admin / broker moves this user into a new pool via the admin
+    # `Transfer User` action. Lets the destination dashboard render a
+    # "Transferred" badge so the new owner can spot users that landed
+    # in their pool through reassignment vs. ones they personally
+    # created. NULL on freshly-created users (the originating admin
+    # is `created_by`).
+    last_transferred_at: datetime | None = None
+    last_transferred_by: PydanticObjectId | None = None
+
+    # Sub-admin ownership (CLIENT/DEALER/MASTER → which ADMIN owns them).
+    # NULL ⇒ owned by super-admin (the platform itself).
+    assigned_admin_id: PydanticObjectId | None = None
+
+    # Sub-admin profile — only populated for role == ADMIN.
+    admin_permissions: AdminPermissions | None = None
+    pnl_share_pct: Decimal128 | None = None  # 0..100
+
+    # Immediate broker owner. For BROKER role: their parent broker (NULL for
+    # a top-level broker created by an admin/super-admin). For CLIENT role:
+    # the broker that minted them (NULL when client belongs to admin pool).
+    assigned_broker_id: PydanticObjectId | None = None
+
+    # Materialised broker ancestry, root-first, NOT including self. Lets us
+    # scope an entire subtree in O(1) via a single multikey index lookup:
+    #     User.find({"broker_ancestry": broker.id})
+    # matches every descendant (sub-brokers + their clients) since the array
+    # contains the broker.id at any depth. Top broker under an admin: [].
+    # Sub-broker: [top_broker.id]. Sub-sub-broker: [top_broker.id, parent.id].
+    broker_ancestry: list[PydanticObjectId] = Field(default_factory=list)
+
+    # Broker profile — only meaningful when role == BROKER.
+    broker_permissions: BrokerPermissions | None = None
+    broker_pnl_share_pct: Decimal128 | None = None  # 0..100
+    # Separate brokerage-sharing %, independent of the PnL share. None on
+    # brokers created before the split — those inherit broker_pnl_share_pct
+    # everywhere, so their settlement math stays byte-identical to before.
+    broker_brokerage_share_pct: Decimal128 | None = None  # 0..100
+
+    # Per-user "auto settle" toggle (default ON). When True (default),
+    # `wallet_service.adjust()` floors any debit that would push
+    # available_balance below 0 and books the overflow into
+    # settlement_outstanding automatically — that's the existing
+    # 21-May floor-at-0 behaviour every legacy user runs.
+    #
+    # When False (admin opt-out via the user-detail toggle), the
+    # wallet is allowed to go NEGATIVE. The same path queues a
+    # pending `SettlementRequest` instead so the admin can manually
+    # approve from the Payments → Settlement Requests tab. While a
+    # PENDING request exists the order validator refuses new-opening
+    # orders (closing trades still pass through via the existing
+    # `is_reducing` exemption).
+    auto_settlement: bool = True
+
+    # Per-admin support WhatsApp number, shown to that admin's downstream
+    # users on the "Add funds → Support" button and any other Contact-
+    # support affordance in the apk/user web. Cascade resolution: when a
+    # user requests their support number, we walk up the parent_id chain
+    # (CLIENT → DEALER/MASTER/BROKER → ADMIN → SUPER_ADMIN) and return
+    # the first non-empty value. Falls back to the global
+    # `platform.support_whatsapp` PlatformSetting if nothing is set
+    # anywhere in the chain. Only meaningful for admin-tier roles
+    # (SUPER_ADMIN / ADMIN / BROKER); CLIENT rows leave this NULL.
+    # Stored as a free-form string so country code + spacing + the
+    # leading `+` survive round-trips — the apk's `buildWhatsappUrl`
+    # strips non-digits before composing the wa.me link.
+    support_whatsapp: str | None = None
+
+    # ── White-label branding (Phase 1: schema-only, gated by
+    # `settings.BRANDING_ENABLED`). All optional, default `None`, so
+    # existing 10k user rows behave exactly as today on read. Only
+    # meaningful when role == ADMIN, except `signup_origin` which is
+    # stamped on every newly-registered user post-rollout. None for any
+    # legacy user is treated as "PLATFORM" by the resolution logic, so
+    # zero backfill is needed.
+    #
+    # Why these fields can ship invisibly:
+    #   * Pydantic/Beanie auto-fills missing keys with `None` on read.
+    #   * The unique index on `custom_domain` below is *sparse* — rows
+    #     with `None` are simply not indexed, so the existing 10k rows
+    #     contribute zero index entries and zero write overhead.
+    #   * No code path consumes these fields until BRANDING_ENABLED
+    #     flips on (Phase 2+) and the public `/branding/*` endpoints
+    #     ship.
+    brand_name: str | None = None
+    logo_url: str | None = None  # "/uploads/logos/logo-<admin_id>-<ts>.png"
+
+    # Custom domain (sparse-unique — see Settings.indexes). Stored
+    # lowercased, no scheme: "mybroker.com".
+    custom_domain: str | None = None
+
+    # Lifecycle state machine for `custom_domain` provisioning.
+    #   PENDING_DNS  → admin saved domain, hasn't verified yet
+    #   DNS_VERIFIED → backend confirmed A records point to platform IP
+    #   PROVISIONING → certbot Celery task running
+    #   READY        → cert installed, nginx reloaded — domain live
+    #   FAILED       → cert issuance failed (last_error populated)
+    custom_domain_status: str | None = None
+    custom_domain_last_error: str | None = None
+    custom_domain_verified_at: datetime | None = None
+
+    # ── Games subsystem ────────────────────────────────────────────────
+    # Referral tracking (first-win-per-game gate for referral rewards).
+    game_referral: GameReferralStats | None = None
+    # Referrer link (mirrors Stockex User.referredBy). Set at signup when a
+    # user joins via a referral; default None → no referral. Additive.
+    referred_by: PydanticObjectId | None = None
+    # What THIS user has earned by referring others (rollup). Additive.
+    referral_stats: ReferralStats | None = None
+    # ── Admin/broker-tier referral config (SUPER_ADMIN / ADMIN only) ────
+    # Which segments pay referral rewards for this admin's subtree, and the
+    # house-earnings threshold gate. Only meaningful on admin-tier users;
+    # None on clients → defaults apply. Additive.
+    referral_distribution_enabled: ReferralDistributionEnabled | None = None
+    referral_eligibility: ReferralEligibility | None = None
+    # Admin-hierarchy patti (trading P&L cascade). Only meaningful on
+    # admin-tier users; None → this node takes no patti. Additive, opt-in.
+    patti_sharing: PattiSharing | None = None
+    # Kuber funding-plan flags (used by kuber_service.resolve_funding_plan).
+    is_franchise_root: bool = False
+    patti_child_pct: float | None = None
+
+    # ── Multi-wallet (per-segment trading wallets — wallet.md) ──────────
+    # The user's PRIMARY trading wallet — drives the default Market/trade view.
+    # Default NSE_BSE. Additive; existing users default to NSE_BSE on read.
+    primary_wallet_kind: str = "NSE_BSE"
+    # Hierarchy-commission eligibility (mirrors Stockex Admin.receivesHierarchyBrokerage).
+    # When False, this admin/broker's games commission share is diverted to the
+    # super-admin. Default True → everyone eligible. Only meaningful for
+    # ADMIN/BROKER-tier users.
+    receives_hierarchy_brokerage: bool = True
+
+    # How this user originally signed up — drives the post-login
+    # cross-origin redirect gate. `None` ≡ "PLATFORM" (the default for
+    # every existing legacy user, hence no backfill).
+    #   PLATFORM         : signed up at marginplant.com/register (or pre-rollout)
+    #   BRANDED_REFERRAL : signed up via /r/<admin_user_code>/signup or ?ref=
+    #   CUSTOM_DOMAIN    : signed up directly on admin's custom_domain host
+    signup_origin: str | None = None
+
+    class Settings:
+        name = "users"
+        use_state_management = True
+        indexes = [
+            IndexModel([("email", ASCENDING)], unique=True),
+            IndexModel([("mobile", ASCENDING)], unique=True),
+            IndexModel([("user_code", ASCENDING)], unique=True),
+            IndexModel([("parent_id", ASCENDING)]),
+            IndexModel([("role", ASCENDING), ("status", ASCENDING)]),
+            IndexModel([("created_at", DESCENDING)]),
+            IndexModel([("kyc.pan", ASCENDING)]),
+            IndexModel([("assigned_admin_id", ASCENDING), ("role", ASCENDING)]),
+            IndexModel([("assigned_broker_id", ASCENDING), ("role", ASCENDING)]),
+            # Multikey index — Mongo creates one entry per element of the
+            # array, so {"broker_ancestry": <id>} matches in O(log n).
+            IndexModel([("broker_ancestry", ASCENDING)]),
+            # White-label custom domain — partial + unique. `sparse=True`
+            # was wrong: MongoDB sparse only skips MISSING fields, not
+            # explicit `null` values, and Beanie/Pydantic always serializes
+            # the field (default None) so every user row had `custom_domain: null`,
+            # collapsing the unique constraint to "at most one row with null".
+            # `partialFilterExpression` correctly indexes only rows that
+            # actually have a string custom_domain set.
+            IndexModel(
+                [("custom_domain", ASCENDING)],
+                unique=True,
+                partialFilterExpression={"custom_domain": {"$type": "string"}},
+                name="custom_domain_unique_partial",
+            ),
+        ]
+
+    def is_admin(self) -> bool:
+        # BROKER role is considered admin-tier for purposes of the admin
+        # login endpoint + admin-side JWT audience. Permission gating then
+        # narrows behavior down via require_admin_permission /
+        # require_broker_permission.
+        return self.role in {
+            UserRole.SUPER_ADMIN,
+            UserRole.ADMIN,
+            UserRole.BROKER,
+        }
+
+    def is_internal(self) -> bool:
+        return self.role in {
+            UserRole.SUPER_ADMIN,
+            UserRole.ADMIN,
+            UserRole.BROKER,
+            UserRole.MASTER,
+            UserRole.DEALER,
+        }
+
+    def record_successful_login(self, ip: str) -> None:
+        self.last_login_at = now_utc()
+        self.last_login_ip = ip
+        self.failed_login_count = 0
+        self.locked_until = None
+
+
+# ── User segment toggle (which segments this user may even *see*) ────
+class UserSegment(TimestampMixin):
+    user_id: PydanticObjectId
+    segment: str  # SegmentType.value
+    enabled: bool = True
+
+    class Settings:
+        name = "user_segments"
+        indexes = [
+            IndexModel([("user_id", ASCENDING), ("segment", ASCENDING)], unique=True),
+        ]

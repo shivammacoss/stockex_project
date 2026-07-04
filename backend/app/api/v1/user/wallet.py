@@ -1,0 +1,587 @@
+"""User wallet endpoints — balance, transactions, deposit/withdrawal requests."""
+
+from __future__ import annotations
+
+import asyncio
+import uuid
+from pathlib import Path
+
+from beanie import PydanticObjectId
+from fastapi import APIRouter, File, HTTPException, UploadFile
+
+from app.core.dependencies import CurrentUser
+from app.models.bank_account import CompanyBankAccount, UserBankAccount
+from app.models.transaction import (
+    DepositRequest,
+    DepositStatus,
+    PaymentMode,
+    WithdrawalRequest,
+    WithdrawalStatus,
+    BankSnapshot,
+)
+from app.schemas.common import APIResponse
+from app.schemas.trading import DepositCreate, WalletSummary, WithdrawalCreate
+from app.services import wallet_service
+from app.utils.decimal_utils import to_decimal128
+
+router = APIRouter(prefix="/wallet", tags=["user-wallet"])
+
+# Screenshot uploads — saved to ./uploads/screenshots/<user_id>/<uuid>.<ext>
+# and served back via the static mount at /uploads (configured in main.py).
+UPLOAD_ROOT = Path("uploads") / "screenshots"
+ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+# Server-side ceiling. The user-side compresses to ~300-500 KB before sending,
+# so this is just a safety cap for clients that bypass compression.
+MAX_BYTES = 10 * 1024 * 1024
+
+
+@router.post("/upload-screenshot", response_model=APIResponse[dict])
+async def upload_screenshot(user: CurrentUser, file: UploadFile = File(...)):
+    """Accepts a single image file. Returns `{ url }` to embed in the deposit request."""
+    ext = (Path(file.filename or "").suffix or "").lower()
+    if ext not in ALLOWED_EXTS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type. Allowed: {sorted(ALLOWED_EXTS)}")
+
+    contents = await file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_BYTES // (1024*1024)} MB)")
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    user_dir = UPLOAD_ROOT / str(user.id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{uuid.uuid4().hex}{ext}"
+    out_path = user_dir / fname
+    # write_bytes blocks the event loop; offload so concurrent uploads from
+    # other users aren't serialized behind a single big disk write.
+    await asyncio.to_thread(out_path.write_bytes, contents)
+
+    # Public URL (served by StaticFiles mount in main.py)
+    url = f"/uploads/screenshots/{user.id}/{fname}"
+    return APIResponse(data={"url": url, "size": len(contents)})
+
+
+@router.get("/summary", response_model=APIResponse[WalletSummary])
+async def summary(user: CurrentUser):
+    return APIResponse(data=WalletSummary(**(await wallet_service.summary(user.id))))
+
+
+@router.get("/transactions", response_model=APIResponse[list])
+async def transactions(user: CurrentUser, limit: int = 100, skip: int = 0):
+    txns = await wallet_service.list_transactions(user.id, limit=limit, skip=skip)
+    return APIResponse(
+        data=[
+            {
+                "id": str(t.id),
+                "transaction_type": t.transaction_type.value,
+                "amount": str(t.amount),
+                "balance_before": str(t.balance_before),
+                "balance_after": str(t.balance_after),
+                "narration": t.narration,
+                "status": t.status.value,
+                "reference_type": t.reference_type,
+                "reference_id": t.reference_id,
+                "created_at": t.created_at,
+            }
+            for t in txns
+        ]
+    )
+
+
+_COMPANY_BANKS_CACHE_PREFIX = "wallet:company-banks:"
+_COMPANY_BANKS_CACHE_TTL = 3600  # 1 h — admin edits invalidate; otherwise rare
+
+
+@router.get("/company-banks", response_model=APIResponse[list])
+async def company_banks(user: CurrentUser):
+    # Cascade owner resolution: deepest broker → walk up broker_ancestry
+    # → admin → platform default. Earlier the cascade only checked the
+    # IMMEDIATE broker before falling all the way back to admin, which
+    # skipped any parent broker in a multi-level chain (sub-broker
+    # without own banks went straight to admin, ignoring its parent
+    # broker's banks). User-flagged: "admin ne jo details laga rakhi
+    # hai broker / sub-broker ke user ko bhi wahi show kare, jab tak
+    # broker / sub-broker change na kare". Walking the full ancestry
+    # makes the cascade match that intent — each level shows the
+    # closest ancestor's banks until someone in the chain authors
+    # their own.
+    from app.core.redis_client import cache_get, cache_set
+
+    cascade: list[tuple[str, dict]] = []
+    # Immediate broker first.
+    if user.assigned_broker_id is not None:
+        cascade.append(
+            (f"broker:{user.assigned_broker_id}", {"owner_broker_id": user.assigned_broker_id})
+        )
+    # Walk broker_ancestry root-to-tip in REVERSE — closest-to-user
+    # parent first, root last. Skip the immediate broker (already
+    # added above). Skip empty ancestry safely.
+    ancestry = list(user.broker_ancestry or [])
+    if ancestry:
+        # broker_ancestry stores root-first (root, ..., parent-of-immediate).
+        # The immediate broker is `assigned_broker_id`, NOT in the array.
+        for parent_broker_id in reversed(ancestry):
+            if parent_broker_id == user.assigned_broker_id:
+                continue
+            cascade.append(
+                (
+                    f"broker:{parent_broker_id}",
+                    {"owner_broker_id": parent_broker_id},
+                )
+            )
+    if user.assigned_admin_id is not None:
+        cascade.append(
+            (
+                f"admin:{user.assigned_admin_id}",
+                {"owner_admin_id": user.assigned_admin_id, "owner_broker_id": None},
+            )
+        )
+    cascade.append(("default", {"owner_admin_id": None, "owner_broker_id": None}))
+
+    for pool_key, owner_filter in cascade:
+        cache_key = f"{_COMPANY_BANKS_CACHE_PREFIX}{pool_key}"
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            if cached:
+                return APIResponse(data=cached)
+            continue
+
+        rows = await CompanyBankAccount.find(
+            {"is_active": True, **owner_filter}
+        ).sort("-is_default").to_list()
+        data = [
+            {
+                "id": str(r.id),
+                "bank_name": r.bank_name,
+                "account_holder": r.account_holder,
+                "account_number": r.account_number,
+                "ifsc_code": r.ifsc_code,
+                "upi_id": r.upi_id,
+                "qr_code_url": r.qr_code_url,
+                "is_default": r.is_default,
+            }
+            for r in rows
+        ]
+        await cache_set(cache_key, data, ttl_sec=_COMPANY_BANKS_CACHE_TTL)
+        if data:
+            return APIResponse(data=data)
+
+    return APIResponse(data=[])
+
+
+@router.post("/deposits", response_model=APIResponse[dict])
+async def create_deposit(payload: DepositCreate, user: CurrentUser):
+    if getattr(user, "is_demo", False):
+        raise HTTPException(status_code=403, detail="Demo accounts cannot deposit funds. Open a real account to trade with real money.")
+    # Enforce the effective deposit rule for this user — min/max/daily
+    # limit/day/time window/mandatory-remark. Tier cascade is resolved
+    # inside the service (broker → admin → super-admin → global). Raises
+    # OrderRejectedError with a stable code on violation; AppError handler
+    # converts that to 400 + machine-readable error envelope.
+    from app.services import wd_rules_service
+
+    await wd_rules_service.validate_request(
+        user_id=user.id,
+        rule_type="DEPOSIT",
+        amount=float(payload.amount),
+        user_remark=payload.user_remark,
+    )
+
+    # Payment screenshot is mandatory — the admin approves a deposit on the
+    # uploaded proof, so a request without one can't be verified.
+    if not (payload.screenshot_url or "").strip():
+        raise HTTPException(status_code=400, detail="Payment screenshot is required.")
+
+    # Idempotency: a client-supplied key dedups double / triple clicks and
+    # retried-after-timeout requests — if a deposit with this key already
+    # exists for the user, return it instead of inserting a duplicate. The
+    # `deposit_requests` collection has a unique index on idempotency_key, so
+    # we fall back to a fresh UUID when the client sends none.
+    client_idem = (payload.idempotency_key or "").strip() or None
+    if client_idem:
+        dup = await DepositRequest.find_one(
+            DepositRequest.user_id == user.id,
+            DepositRequest.idempotency_key == client_idem,
+        )
+        if dup is not None:
+            return APIResponse(data={"id": str(dup.id), "status": dup.status.value})
+    idem = client_idem or uuid.uuid4().hex
+    req = DepositRequest(
+        user_id=user.id,
+        amount=to_decimal128(payload.amount),
+        payment_mode=PaymentMode(payload.payment_mode),
+        utr_number=payload.utr_number,
+        screenshot_url=payload.screenshot_url,
+        user_remark=payload.user_remark,
+        bank_account_id=PydanticObjectId(payload.bank_account_id) if payload.bank_account_id else None,
+        status=DepositStatus.PENDING,
+        idempotency_key=idem,
+    )
+    await req.insert()
+    # Scope-aware push fan-out — survives PWA force-stop / locked phone
+    # AND only pings the admins/brokers who actually own this user, NOT
+    # the whole platform. Compute the recipient set first so we can
+    # include it in the WS publish below; the frontend bridge mirrors
+    # the same filter so the in-page toast is scoped identically.
+    recipient_ids: list[str] = []
+    try:
+        import asyncio as _asyncio
+
+        from app.services.push_service import (
+            _compute_recipient_admin_ids as _compute_owners,
+            send_to_user_owners as _push_owners,
+        )
+
+        owners = await _compute_owners(user.id)
+        recipient_ids = [str(x) for x in owners]
+        _asyncio.create_task(
+            _push_owners(
+                user.id,
+                title="💰 New deposit request",
+                body=f"₹{payload.amount} · {user.full_name or user.user_code} · {payload.payment_mode.upper()}",
+                url="/payments?tab=deposits",
+                tag=f"deposit-{req.id}",
+            )
+        )
+    except Exception:  # pragma: no cover
+        pass
+    # Fan out to admin dashboards so the Deposits inbox shows the new
+    # request immediately — no F5. Includes `recipient_admin_ids` so the
+    # frontend AdminWsBridge can suppress the toast/native-notification
+    # for admins who don't own this user (background invalidation still
+    # runs — data stays fresh, just no noise for out-of-scope admins).
+    try:
+        from app.services.admin_events import publish_admin_event
+
+        await publish_admin_event(
+            "deposit_update",
+            {
+                "event": "submitted",
+                "user_id": str(user.id),
+                "deposit_id": str(req.id),
+                "user_name": user.full_name,
+                "user_code": user.user_code,
+                "amount": str(payload.amount),
+                "mode": payload.payment_mode,
+                "recipient_admin_ids": recipient_ids,
+            },
+        )
+    except Exception:  # pragma: no cover
+        pass
+    # Admin notification bell — fan out a per-recipient AdminNotification
+    # row up the tier chain (super-admin + assigned admin + every broker
+    # in the ancestry). Best-effort: a notification failure must NOT
+    # roll back the deposit insert above.
+    try:
+        from app.models.notification import (
+            AdminNotificationEventType,
+            NotificationLevel,
+        )
+        from app.services import notification_service
+
+        await notification_service.create_for_admins(
+            source_user_id=user.id,
+            event_type=AdminNotificationEventType.DEPOSIT_SUBMITTED,
+            level=NotificationLevel.INFO,
+            title=f"New deposit from {user.full_name}",
+            message=(
+                f"₹{payload.amount} via {payload.payment_mode.upper()}"
+                + (f" · UTR {payload.utr_number}" if payload.utr_number else "")
+            ),
+            link="/payments?tab=deposits",
+            reference_type="DepositRequest",
+            reference_id=str(req.id),
+            data={"amount": str(payload.amount), "payment_mode": payload.payment_mode},
+        )
+    except Exception:  # pragma: no cover
+        pass
+    return APIResponse(data={"id": str(req.id), "status": req.status.value})
+
+
+@router.get("/deposits", response_model=APIResponse[list])
+async def my_deposits(user: CurrentUser):
+    rows = await DepositRequest.find(DepositRequest.user_id == user.id).sort("-created_at").limit(100).to_list()
+    return APIResponse(
+        data=[
+            {
+                "id": str(r.id),
+                "amount": str(r.amount),
+                "payment_mode": r.payment_mode.value,
+                "utr_number": r.utr_number,
+                "screenshot_url": r.screenshot_url,
+                "status": r.status.value,
+                "user_remark": r.user_remark,
+                "admin_remark": r.admin_remark,
+                "created_at": r.created_at,
+                "processed_at": r.processed_at,
+            }
+            for r in rows
+        ]
+    )
+
+
+@router.post("/withdrawals", response_model=APIResponse[dict])
+async def create_withdrawal(payload: WithdrawalCreate, user: CurrentUser):
+    if getattr(user, "is_demo", False):
+        raise HTTPException(status_code=403, detail="Demo accounts cannot withdraw funds. Open a real account to trade with real money.")
+    # Enforce the effective withdrawal rule (same cascade as deposits).
+    # Mandatory_remark + day/time window matter more here in practice —
+    # most brokers gate withdrawals to working days + a daytime window.
+    from app.services import wd_rules_service
+
+    await wd_rules_service.validate_request(
+        user_id=user.id,
+        rule_type="WITHDRAWAL",
+        amount=float(payload.amount),
+        user_remark=payload.remarks,
+    )
+
+    # Open-position gate (admin-configurable, per-pool, default OFF). When the
+    # user's effective WITHDRAWAL rule has `block_withdrawal_with_open_positions`
+    # turned on by their owning admin / super-admin, they must flatten every
+    # open trade before they can raise a withdrawal request.
+    _wd_rule = await wd_rules_service.get_effective_rule(user.id, "WITHDRAWAL")
+    if _wd_rule.get("block_withdrawal_with_open_positions"):
+        from app.models.position import Position, PositionStatus
+
+        _open_count = await Position.find(
+            Position.user_id == user.id,
+            Position.status == PositionStatus.OPEN,
+        ).count()
+        if _open_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "You have open positions. Close all your open trades "
+                    "before requesting a withdrawal."
+                ),
+            )
+
+    # Balance pre-check — reject immediately if user doesn't have
+    # enough available_balance.  Without this, requests would sit in
+    # the admin queue and only fail (or worse, book settlement
+    # outstanding) at approval time.
+    from app.models.wallet import Wallet
+    from app.utils.decimal_utils import to_decimal
+
+    wallet = await Wallet.find_one(Wallet.user_id == user.id)
+    if wallet:
+        avail = to_decimal(wallet.available_balance)
+        req_amt = to_decimal(payload.amount)
+        if avail < req_amt:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient balance: available ₹{avail:,.2f}, requested ₹{req_amt:,.2f}",
+            )
+
+    b = payload.bank or {}
+    upi_id = (b.get("upi_id") or "").strip()
+    account_number = (b.get("account_number") or "").strip()
+
+    # Require ONE of: a valid bank set (account+ifsc) OR a UPI ID. We do
+    # not require the user to save the destination — every withdrawal
+    # carries its own snapshot so they can pay to a different account
+    # any time without managing a saved-banks list.
+    if not upi_id and not (account_number and (b.get("ifsc") or "").strip()):
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either a UPI ID or full bank details (account number + IFSC).",
+        )
+
+    snap = BankSnapshot(
+        name=(b.get("name") or "").strip() or None,
+        account_number=account_number or None,
+        ifsc=(b.get("ifsc") or "").strip().upper() or None,
+        holder=(b.get("holder") or "").strip() or (user.full_name if account_number else None),
+        branch=(b.get("branch") or "").strip() or None,
+        account_type=(b.get("account_type") or "").strip() or None,
+        upi_id=upi_id or None,
+        qr_url=(b.get("qr_url") or "").strip() or None,
+    )
+    # Idempotency: a client-supplied key dedups double / triple clicks and
+    # retried-after-timeout requests — return the existing withdrawal instead
+    # of creating a duplicate payout. Falls back to a fresh UUID when absent.
+    client_idem = (payload.idempotency_key or "").strip() or None
+    if client_idem:
+        dup = await WithdrawalRequest.find_one(
+            WithdrawalRequest.user_id == user.id,
+            WithdrawalRequest.idempotency_key == client_idem,
+        )
+        if dup is not None:
+            return APIResponse(data={"id": str(dup.id), "status": dup.status.value})
+    idem = client_idem or uuid.uuid4().hex
+    req = WithdrawalRequest(
+        user_id=user.id,
+        amount=to_decimal128(payload.amount),
+        bank=snap,
+        remarks=payload.remarks,
+        status=WithdrawalStatus.PENDING,
+        idempotency_key=idem,
+    )
+    await req.insert()
+    # Scope-aware push + WS fan-out — see deposit hook for rationale.
+    recipient_ids: list[str] = []
+    try:
+        import asyncio as _asyncio
+
+        from app.services.push_service import (
+            _compute_recipient_admin_ids as _compute_owners,
+            send_to_user_owners as _push_owners,
+        )
+
+        owners = await _compute_owners(user.id)
+        recipient_ids = [str(x) for x in owners]
+        _asyncio.create_task(
+            _push_owners(
+                user.id,
+                title="🏦 New withdrawal request",
+                body=f"₹{payload.amount} · {user.full_name or user.user_code}",
+                url="/payments?tab=withdrawals",
+                tag=f"withdrawal-{req.id}",
+            )
+        )
+    except Exception:  # pragma: no cover
+        pass
+    try:
+        from app.services.admin_events import publish_admin_event
+
+        await publish_admin_event(
+            "withdrawal_update",
+            {
+                "event": "submitted",
+                "user_id": str(user.id),
+                "withdrawal_id": str(req.id),
+                "user_name": user.full_name,
+                "user_code": user.user_code,
+                "amount": str(payload.amount),
+                "recipient_admin_ids": recipient_ids,
+            },
+        )
+    except Exception:  # pragma: no cover
+        pass
+    # Admin notification bell — see deposit-submit hook for rationale.
+    try:
+        from app.models.notification import (
+            AdminNotificationEventType,
+            NotificationLevel,
+        )
+        from app.services import notification_service
+
+        dest_label = (
+            f"UPI {snap.upi_id}"
+            if snap.upi_id
+            else f"A/C {snap.account_number} ({snap.ifsc or '—'})"
+        )
+        await notification_service.create_for_admins(
+            source_user_id=user.id,
+            event_type=AdminNotificationEventType.WITHDRAWAL_SUBMITTED,
+            level=NotificationLevel.WARNING,
+            title=f"Withdrawal request from {user.full_name}",
+            message=f"₹{payload.amount} → {dest_label}",
+            link="/payments?tab=withdrawals",
+            reference_type="WithdrawalRequest",
+            reference_id=str(req.id),
+            data={
+                "amount": str(payload.amount),
+                "destination": dest_label,
+            },
+        )
+    except Exception:  # pragma: no cover
+        pass
+    return APIResponse(data={"id": str(req.id), "status": req.status.value})
+
+
+@router.get("/withdrawals", response_model=APIResponse[list])
+async def my_withdrawals(user: CurrentUser):
+    rows = await WithdrawalRequest.find(WithdrawalRequest.user_id == user.id).sort("-created_at").limit(100).to_list()
+    return APIResponse(
+        data=[
+            {
+                "id": str(r.id),
+                "amount": str(r.amount),
+                "bank": r.bank.model_dump(),
+                "status": r.status.value,
+                "remarks": r.remarks,
+                "utr_number": r.utr_number,
+                "rejection_reason": r.rejection_reason,
+                "created_at": r.created_at,
+                "processed_at": r.processed_at,
+            }
+            for r in rows
+        ]
+    )
+
+
+@router.get("/wd-rules", response_model=APIResponse[dict])
+async def my_wd_rules(user: CurrentUser):
+    """Effective deposit + withdrawal rules for the calling user — resolved
+    through the tier cascade (broker pool → admin pool → super-admin pool →
+    global). Used by the user-side wallet UI to render the inline rules
+    banner ("min ₹100, ₹10k daily, Mon–Fri 10–18 IST") so the user knows
+    exactly what's allowed before they submit a request.
+
+    Returns both rules in one payload to save a round trip — the wallet
+    page typically renders the deposit info card and withdrawal info card
+    side by side. Fields that the cascade left unset are still populated
+    via the platform-global default, so the UI never has to handle nulls.
+    """
+    from app.services import wd_rules_service
+
+    def _ser(values: dict) -> dict:
+        out: dict = {}
+        for k, v in values.items():
+            if v is None:
+                out[k] = None
+            elif k == "allowed_days":
+                out[k] = list(v) if v else None
+            elif k == "allowed_times":
+                out[k] = [
+                    w.model_dump() if hasattr(w, "model_dump") else dict(w)
+                    for w in v
+                ] if v else None
+            elif k == "charges_percent":
+                out[k] = float(v)
+            elif k in ("mandatory_remark", "block_withdrawal_with_open_positions"):
+                out[k] = bool(v)
+            else:
+                out[k] = str(v)
+        return out
+
+    dep = await wd_rules_service.get_effective_rule(user.id, "DEPOSIT")
+    wd = await wd_rules_service.get_effective_rule(user.id, "WITHDRAWAL")
+    return APIResponse(data={"deposit": _ser(dep), "withdrawal": _ser(wd)})
+
+
+@router.get("/bank-accounts", response_model=APIResponse[list])
+async def my_bank_accounts(user: CurrentUser):
+    rows = await UserBankAccount.find(UserBankAccount.user_id == user.id).to_list()
+    return APIResponse(
+        data=[
+            {
+                "id": str(r.id),
+                "bank_name": r.bank_name,
+                "account_holder": r.account_holder,
+                "account_number": r.account_number,
+                "ifsc_code": r.ifsc_code,
+                "is_default": r.is_default,
+                "is_verified": r.is_verified,
+                "nickname": r.nickname,
+            }
+            for r in rows
+        ]
+    )
+
+
+@router.post("/bank-accounts", response_model=APIResponse[dict])
+async def add_bank_account(payload: dict, user: CurrentUser):
+    row = UserBankAccount(
+        user_id=user.id,
+        bank_name=payload.get("bank_name", ""),
+        account_holder=payload.get("account_holder", user.full_name),
+        account_number=payload.get("account_number", ""),
+        ifsc_code=payload.get("ifsc_code", ""),
+        nickname=payload.get("nickname"),
+        is_default=bool(payload.get("is_default") or False),
+    )
+    await row.insert()
+    return APIResponse(data={"id": str(row.id)})

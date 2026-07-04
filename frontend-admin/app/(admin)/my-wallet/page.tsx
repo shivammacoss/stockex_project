@@ -1,0 +1,569 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  Wallet,
+  Coins,
+  Clock,
+  PiggyBank,
+  Vault,
+  RefreshCw,
+  ArrowLeftRight,
+  Users,
+  Search,
+  ArrowRightLeft,
+  Send,
+  ReceiptText,
+} from "lucide-react";
+import { PageHeader } from "@/components/common/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminMeAPI, AdminKuberAPI, AdminFundAPI } from "@/lib/api";
+import { useAdminAuthStore } from "@/stores/authStore";
+import { formatINR } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+
+const STATUS_TONE: Record<string, string> = {
+  PENDING: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  FINALIZED: "bg-primary/10 text-primary",
+  PAID: "bg-buy/15 text-buy",
+  SETTLED: "bg-buy/15 text-buy",
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: "Super admin",
+  ADMIN: "Admin",
+  BROKER: "Broker",
+};
+
+export default function MyWalletPage() {
+  const role = useAdminAuthStore((s) => s.admin?.role) ?? "";
+  const isSA = role === "SUPER_ADMIN";
+  const qc = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "me", "wallet"],
+    queryFn: () => AdminMeAPI.wallet(),
+    refetchInterval: 15000,
+  });
+
+  const held = Number(data?.temporary_balance ?? 0);
+  const available = Number(data?.available_balance ?? 0);
+  const outstanding = Number(data?.settlement_outstanding ?? 0);
+  const history: any[] = data?.settlement_history || [];
+
+  const releaseAll = useMutation({
+    mutationFn: () => AdminMeAPI.releaseCommission(),
+    onSuccess: (res: any) => {
+      toast.success(`Moved ${formatINR(res?.released ?? held)} to main wallet`);
+      qc.invalidateQueries({ queryKey: ["admin", "me", "wallet"] });
+      qc.invalidateQueries({ queryKey: ["admin", "me", "ledger"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Release failed"),
+  });
+
+  return (
+    <div className="space-y-6 pb-24 md:pb-6">
+      <PageHeader
+        title="My Wallet"
+        description="Your balance, member funding and recent activity."
+      />
+
+      {/* ── Balance cards ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <BalanceCard
+          icon={<Wallet className="size-5" />}
+          label="Available balance"
+          value={formatINR(available)}
+          hint={isSA ? "Main wallet" : "Your float — dispensable to members"}
+          accent
+        />
+
+        {isSA && <KuberBalanceCard />}
+
+        <BalanceCard
+          icon={<Coins className="size-5" />}
+          label="Games earning (held)"
+          value={formatINR(held)}
+          hint={held > 0 ? "Move to your main wallet" : "Nothing held"}
+          warn={held > 0}
+          action={
+            held > 0 ? (
+              <Button
+                size="sm"
+                className="mt-3 w-full sm:w-auto"
+                loading={releaseAll.isPending}
+                onClick={() => releaseAll.mutate()}
+              >
+                <ArrowRightLeft className="size-4" /> Transfer to main
+              </Button>
+            ) : undefined
+          }
+          footer={
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2 text-[11px]">
+              <div>
+                <div className="uppercase tracking-wide text-muted-foreground">Earned</div>
+                <div className="font-bold tabular-nums">{formatINR(data?.temporary_total_earned ?? 0)}</div>
+              </div>
+              <div>
+                <div className="uppercase tracking-wide text-muted-foreground">Released</div>
+                <div className="font-bold tabular-nums text-buy">{formatINR(data?.temporary_total_released ?? 0)}</div>
+              </div>
+            </div>
+          }
+        />
+
+        <BalanceCard
+          icon={<PiggyBank className="size-5" />}
+          label="Settlement outstanding"
+          value={formatINR(outstanding)}
+          hint="Unrecovered dues (record only)"
+          danger={outstanding > 0}
+        />
+      </div>
+
+      {/* ── Kuber controls (SUPER_ADMIN only) ─────────────────────── */}
+      {isSA && <KuberControls />}
+
+      {/* ── Fund my members ───────────────────────────────────────── */}
+      <FundMembersSection role={role} />
+
+      {/* ── Recent ledger ─────────────────────────────────────────── */}
+      <LedgerSection />
+
+      {/* ── P&L-share settlements ─────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>P&amp;L-share settlements</CardTitle>
+          <CardDescription>Your weekly trading P&amp;L-share settlement history.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>
+          ) : history.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">No settlements yet.</div>
+          ) : (
+            <>
+              {/* Mobile: stacked cards */}
+              <div className="space-y-2 md:hidden">
+                {history.map((h, i) => (
+                  <div key={i} className="rounded-xl border border-border/60 bg-card p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {fmtRange(h.period_start, h.period_end)}
+                      </span>
+                      <StatusPill status={h.status} />
+                    </div>
+                    <div className="mt-2 flex items-end justify-between border-t border-border/50 pt-2">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Net house P&amp;L</div>
+                        <div className="font-tabular text-sm tabular-nums">{formatINR(h.net_house_pnl)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Your share</div>
+                        <div className="font-tabular text-base font-bold tabular-nums text-buy">{formatINR(h.share)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Period</th>
+                      <th className="py-2 pr-3 font-medium">Status</th>
+                      <th className="py-2 pr-3 text-right font-medium">Net house P&amp;L</th>
+                      <th className="py-2 text-right font-medium">Your share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => (
+                      <tr key={i} className="border-b border-border/50 last:border-0">
+                        <td className="py-2 pr-3 text-muted-foreground">{fmtRange(h.period_start, h.period_end)}</td>
+                        <td className="py-2 pr-3"><StatusPill status={h.status} /></td>
+                        <td className="py-2 pr-3 text-right font-tabular tabular-nums">{formatINR(h.net_house_pnl)}</td>
+                        <td className="py-2 text-right font-tabular font-bold tabular-nums text-buy">{formatINR(h.share)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ── Kuber balance card (reads house-summary; SA only) ──────────── */
+function KuberBalanceCard() {
+  const { data } = useQuery({
+    queryKey: ["admin", "me", "house-summary"],
+    queryFn: () => AdminMeAPI.houseSummary(),
+    refetchInterval: 15000,
+  });
+  return (
+    <BalanceCard
+      icon={<Vault className="size-5" />}
+      label="Kuber pool"
+      value={formatINR(data?.kuber_balance ?? 0)}
+      hint="Distributable house pool (₹100 cr cap)"
+      accent
+    />
+  );
+}
+
+/* ── Kuber controls — top-up + main↔kuber transfer (SA only) ────── */
+function KuberControls() {
+  const qc = useQueryClient();
+  const [amount, setAmount] = useState("");
+
+  const { data } = useQuery({
+    queryKey: ["admin", "me", "house-summary"],
+    queryFn: () => AdminMeAPI.houseSummary(),
+    refetchInterval: 15000,
+  });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "me", "house-summary"] });
+    qc.invalidateQueries({ queryKey: ["admin", "me", "wallet"] });
+  };
+
+  const bootstrap = useMutation({
+    mutationFn: () => AdminKuberAPI.bootstrap(),
+    onSuccess: () => { toast.success("Kuber pool topped up to ₹100 cr"); refresh(); },
+    onError: (e: any) => toast.error(e?.message || "Failed"),
+  });
+  const transfer = useMutation({
+    mutationFn: (dir: "to_kuber" | "to_main") => AdminKuberAPI.transfer(dir, Number(amount)),
+    onSuccess: () => { toast.success("Transfer complete"); setAmount(""); refresh(); },
+    onError: (e: any) => toast.error(e?.message || "Transfer failed"),
+  });
+
+  const amt = Number(amount);
+  const valid = Number.isFinite(amt) && amt > 0;
+
+  return (
+    <Card className="overflow-hidden border-primary/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Vault className="size-4 text-primary" /> Kuber pool
+        </CardTitle>
+        <CardDescription>Move funds between your main wallet and the distributable house pool.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Kuber balance</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums text-primary">{formatINR(data?.kuber_balance ?? 0)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Main wallet</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums">{formatINR(data?.house_wallet_balance ?? 0)}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className="text-xs text-muted-foreground">Transfer amount</label>
+            <Input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" inputMode="decimal" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={!valid || transfer.isPending} onClick={() => transfer.mutate("to_kuber")}>
+              <ArrowLeftRight className="size-4" /> Main → Kuber
+            </Button>
+            <Button variant="outline" size="sm" disabled={!valid || transfer.isPending} onClick={() => transfer.mutate("to_main")}>
+              <ArrowLeftRight className="size-4" /> Kuber → Main
+            </Button>
+            <Button size="sm" loading={bootstrap.isPending} onClick={() => bootstrap.mutate()}>
+              <RefreshCw className="size-4" /> Top up to ₹100 cr
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Fund my members ────────────────────────────────────────────── */
+function FundMembersSection({ role }: { role: string }) {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState("");
+
+  const { data: members, isLoading } = useQuery({
+    queryKey: ["admin", "me", "members"],
+    queryFn: () => AdminMeAPI.members(),
+    refetchInterval: 20000,
+  });
+
+  const list: any[] = useMemo(() => {
+    const rows = members || [];
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (m) =>
+        String(m.user_code || "").toLowerCase().includes(q) ||
+        String(m.full_name || "").toLowerCase().includes(q),
+    );
+  }, [members, query]);
+
+  const targetLabel =
+    role === "SUPER_ADMIN" ? "admins" : role === "ADMIN" ? "brokers" : "sub-brokers";
+
+  const onFunded = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "me", "members"] });
+    qc.invalidateQueries({ queryKey: ["admin", "me", "wallet"] });
+    qc.invalidateQueries({ queryKey: ["admin", "me", "house-summary"] });
+    qc.invalidateQueries({ queryKey: ["admin", "me", "ledger"] });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="size-4" /> Fund my members
+          </CardTitle>
+          <CardDescription>Add funds to your {targetLabel} from your available balance.</CardDescription>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search code or name"
+            className="pl-8"
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : (members || []).length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            No {targetLabel} under you yet.
+          </div>
+        ) : list.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No members match “{query}”.</div>
+        ) : (
+          <div className="space-y-2">
+            {list.map((m) => (
+              <MemberRow key={m.id} member={m} onFunded={onFunded} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MemberRow({ member, onFunded }: { member: any; onFunded: () => void }) {
+  const [amount, setAmount] = useState("");
+
+  const fund = useMutation({
+    mutationFn: () => AdminFundAPI.addToMember(member.id, Number(amount)),
+    onSuccess: () => {
+      toast.success(`Funded ${member.user_code || member.full_name} · ${formatINR(Number(amount))}`);
+      setAmount("");
+      onFunded();
+    },
+    onError: (e: any) => toast.error(e?.message || "Funding failed"),
+  });
+
+  const amt = Number(amount);
+  const valid = Number.isFinite(amt) && amt > 0;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card p-3 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{member.full_name || member.user_code}</span>
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            {ROLE_LABEL[member.role] || member.role}
+          </span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <span className="font-mono">{member.user_code}</span>
+          <span>
+            Bal <span className="font-bold tabular-nums text-foreground">{formatINR(member.available_balance)}</span>
+          </span>
+          {Number(member.temporary_balance) > 0 && (
+            <span>
+              Held <span className="font-bold tabular-nums text-amber-600 dark:text-amber-400">{formatINR(member.temporary_balance)}</span>
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 md:w-72">
+        <Input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount"
+          inputMode="decimal"
+          className="h-9 flex-1"
+        />
+        <Button size="sm" disabled={!valid || fund.isPending} loading={fund.isPending} onClick={() => fund.mutate()}>
+          <Send className="size-4" /> Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Recent ledger ──────────────────────────────────────────────── */
+function LedgerSection() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "me", "ledger"],
+    queryFn: () => AdminMeAPI.ledger(50),
+    refetchInterval: 20000,
+  });
+
+  const rows: any[] = data || [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ReceiptText className="size-4" /> Recent ledger
+        </CardTitle>
+        <CardDescription>Funding received, opening fund, transfers and releases.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No activity yet.</div>
+        ) : (
+          <>
+            {/* Mobile: stacked cards */}
+            <div className="space-y-2 md:hidden">
+              {rows.map((r) => (
+                <div key={r.id} className="rounded-xl border border-border/60 bg-card p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                      {prettyType(r.type)}
+                    </span>
+                    <span className={cn("font-bold tabular-nums", Number(r.amount) >= 0 ? "text-buy" : "text-sell")}>
+                      {signed(r.amount)}
+                    </span>
+                  </div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">{r.narration || "—"}</div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">{fmtDateTime(r.created_at)}</div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Type</th>
+                    <th className="py-2 pr-3 font-medium">Narration</th>
+                    <th className="py-2 pr-3 text-right font-medium">Amount</th>
+                    <th className="py-2 text-right font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-b border-border/50 last:border-0">
+                      <td className="py-2 pr-3">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          {prettyType(r.type)}
+                        </span>
+                      </td>
+                      <td className="max-w-[320px] truncate py-2 pr-3 text-muted-foreground">{r.narration || "—"}</td>
+                      <td className={cn("py-2 pr-3 text-right font-bold tabular-nums", Number(r.amount) >= 0 ? "text-buy" : "text-sell")}>
+                        {signed(r.amount)}
+                      </td>
+                      <td className="py-2 text-right text-xs text-muted-foreground">{fmtDateTime(r.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── helpers ────────────────────────────────────────────────────── */
+function signed(v: number | string) {
+  const n = Number(v);
+  const s = formatINR(Math.abs(n));
+  return n < 0 ? `- ${s}` : `+ ${s}`;
+}
+
+function prettyType(t?: string) {
+  if (!t) return "—";
+  return String(t).replace(/_/g, " ");
+}
+
+function fmtDateTime(x?: string) {
+  if (!x) return "—";
+  const d = new Date(x);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtRange(a?: string, b?: string) {
+  if (!a) return "—";
+  const d = (x: string) => new Date(x).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  return b ? `${d(a)} – ${d(b)}` : d(a);
+}
+
+function StatusPill({ status }: { status: string }) {
+  const cls = STATUS_TONE[String(status).toUpperCase()] || "bg-muted text-muted-foreground";
+  return <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", cls)}>{status}</span>;
+}
+
+function BalanceCard({
+  icon, label, value, hint, accent, warn, danger, action, footer,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint: string;
+  accent?: boolean;
+  warn?: boolean;
+  danger?: boolean;
+  action?: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
+  return (
+    <Card className={cn("overflow-hidden", accent && "border-primary/30", warn && "border-amber-500/40", danger && "border-sell/40")}>
+      <CardContent className="relative p-5">
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute -right-8 -top-8 size-28 rounded-full blur-2xl",
+            accent ? "bg-primary/10" : warn ? "bg-amber-500/10" : danger ? "bg-sell/10" : "bg-muted",
+          )}
+        />
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "grid size-9 place-items-center rounded-lg",
+            accent ? "bg-primary/10 text-primary"
+              : warn ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+              : danger ? "bg-sell/15 text-sell"
+              : "bg-muted text-muted-foreground",
+          )}>
+            {icon}
+          </span>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+        </div>
+        <div className={cn("mt-3 text-2xl font-bold tabular-nums sm:text-3xl", accent && "text-primary", danger && "text-sell")}>{value}</div>
+        <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+        {action}
+        {footer}
+      </CardContent>
+    </Card>
+  );
+}

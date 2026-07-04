@@ -1,0 +1,317 @@
+"""Nifty + BTC Up/Down — bet placement and window settlement.
+
+Both games share this module (parameterised by `game_key` + price resolver).
+Model A payout: winner receives full stake × win_multiplier from the house.
+TIE (open == close) counts as a loss. Double-credit is impossible thanks to
+the `UpDownWindowSettlement` unique index (insert-then-credit).
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import timedelta
+from decimal import Decimal
+
+from beanie import PydanticObjectId
+from pymongo.errors import DuplicateKeyError
+
+from app.core.exceptions import (
+    GameDisabledError,
+    GameLimitExceededError,
+    GameWindowClosedError,
+)
+from app.core.redis_client import publish
+from app.models.games.bets import (
+    GameBetStatus,
+    GameResult,
+    UpDownBet,
+    UpDownPrediction,
+    UpDownWindowSettlement,
+)
+from app.models.games.settings import GameSettings
+from app.services.games import price_resolver, wallet_service
+from app.services.games.common import (
+    ist_datetime_for_day,
+    window_open_close_ist,
+    window_number_for,
+)
+from app.services.games.payout_math import (
+    compute_updown_win_payout,
+    settle_updown_from_prices,
+    updown_bet_won,
+)
+from app.utils.decimal_utils import quantize_money, to_decimal, to_decimal128
+from app.utils.time_utils import now_ist, now_utc
+
+logger = logging.getLogger(__name__)
+
+# Seconds after a window's close before we resolve it (lets the authoritative
+# candle finalise).
+_RESOLVE_GRACE_SEC = 8
+
+
+def _resolver_for(game_key: str):
+    return (
+        price_resolver.resolve_btc_window
+        if game_key == "btcUpDown"
+        else price_resolver.resolve_nifty_window
+    )
+
+
+async def _distribute_win(user_id, stake, payout, game_key: str, cfg) -> None:
+    """4-level %-of-win-profit split (hierarchy HELD + referrer games wallet),
+    funded from the house. profit = payout − stake."""
+    try:
+        from app.models.user import User
+        from app.services.games import hierarchy, referral
+
+        user = await User.get(user_id)
+        if user is None:
+            return
+        profit = to_decimal(payout) - to_decimal(stake)
+        if profit <= 0:
+            return
+        await hierarchy.distribute_profit_split(user, profit, game_key, cfg)
+        await referral.credit_referral_on_win(user, profit, cfg, game_key=game_key)
+    except Exception:  # noqa: BLE001 — never break settlement on commission
+        logger.exception("updown_distribute_win_failed user=%s game=%s", user_id, game_key)
+
+
+async def place_bet(
+    user_id: PydanticObjectId,
+    *,
+    game_key: str,
+    prediction: str,
+    amount,
+    entry_price,
+    window_number: int,
+) -> UpDownBet:
+    settings = await GameSettings.load_singleton()
+    if not settings.games_enabled or settings.maintenance_mode:
+        raise GameDisabledError("Games are currently unavailable")
+    cfg = settings.games.get(game_key)
+    if cfg is None or not cfg.enabled:
+        raise GameDisabledError()
+
+    amt = quantize_money(to_decimal(amount))
+    tp = to_decimal(cfg.ticket_price)
+    if tp <= 0:
+        raise GameLimitExceededError("Invalid ticket price")
+    tickets = int((amt / tp).to_integral_value())
+    if tickets < cfg.min_tickets or tickets > cfg.max_tickets:
+        raise GameLimitExceededError(
+            f"Tickets must be between {cfg.min_tickets} and {cfg.max_tickets}"
+        )
+    if amt <= 0:
+        raise GameLimitExceededError("Amount must be positive")
+
+    # Window must be currently open.
+    now = now_ist()
+    current = window_number_for(now, cfg.start_time, cfg.round_duration)
+    if current <= 0:
+        raise GameWindowClosedError()
+    # Accept a bet only for the live window (client passes it; server is truth).
+    day = now.strftime("%Y-%m-%d")
+    open_dt, close_dt = window_open_close_ist(now, cfg.start_time, cfg.round_duration, current)
+    if not (open_dt <= now < close_dt):
+        raise GameWindowClosedError()
+
+    pred = UpDownPrediction(prediction.upper())
+
+    # Debit stake from games wallet (atomic, non-negative) then house collects.
+    await wallet_service.atomic_games_wallet_debit(
+        user_id, amt, game_key=game_key,
+        description=f"Bet · {game_key} · Window #{current} · {pred.value}",
+        meta={"kind": "BET", "window": current, "prediction": pred.value},
+    )
+    await wallet_service.house_settle(
+        amt, game_key=game_key, narration=f"Games stake in · {game_key} W#{current}"
+    )
+
+    bet = UpDownBet(
+        user_id=user_id, game_key=game_key, prediction=pred,
+        amount=to_decimal128(amt), entry_price=to_decimal128(to_decimal(entry_price)),
+        window_number=current, settlement_day=day, status=GameBetStatus.PENDING,
+    )
+    await bet.insert()
+    try:
+        await publish(f"user:{user_id}:games", {"type": "bet_placed", "payload": {"game": game_key, "window": current}})
+    except Exception:
+        pass
+    return bet
+
+
+# ── Result model: NEXT-window outcome ──────────────────────────────────
+# A bet placed in window W is a prediction about the NEXT 15-min window:
+#   • reference price = the CLOSE of window W (locked when W ends)
+#   • outcome price   = the CLOSE of window W+1
+#   • UP wins if close(W+1) > close(W); DOWN if <; TIE (loss) if ==.
+# This removes the "bet 1 min before close on the obvious direction" exploit —
+# at bet time the move you're predicting (W→W+1) hasn't happened yet.
+# The GameResult for window W stores open_price = close(W), close_price =
+# close(W+1) so the "Last N results" strip reads the outcome directly.
+async def _get_or_declare_result(game_key: str, cfg, resolver, day: str, window: int, now):
+    """Return (result, outcome_price) for window `window`, declaring the
+    GameResult if the NEXT window has closed. None when not settleable yet
+    (next window still open, or price unavailable)."""
+    existing = await GameResult.find_one(
+        GameResult.game_key == game_key,
+        GameResult.day == day,
+        GameResult.window_number == window,
+    )
+    if existing is not None:
+        return existing.result, to_decimal(existing.close_price)
+
+    day_dt = ist_datetime_for_day(day)
+    open_w, close_w = window_open_close_ist(day_dt, cfg.start_time, cfg.round_duration, window)
+    open_n, close_n = window_open_close_ist(day_dt, cfg.start_time, cfg.round_duration, window + 1)
+    # Settle only AFTER the next window (W+1) has fully closed.
+    if now < close_n + timedelta(seconds=_RESOLVE_GRACE_SEC):
+        return None
+    ref = await resolver(open_w, close_w)      # (open, close, source) of W
+    fin = await resolver(open_n, close_n)      # (open, close, source) of W+1
+    if ref is None or fin is None:
+        return None  # price unavailable — retry next tick
+    ref_price = ref[1]      # close of window W (the reference)
+    final_price = fin[1]    # close of window W+1 (the outcome)
+    result = settle_updown_from_prices(ref_price, final_price)
+    try:
+        await GameResult(
+            game_key=game_key, day=day, window_number=window,
+            open_price=to_decimal128(ref_price), close_price=to_decimal128(final_price),
+            result=result, price_source=fin[2],
+        ).insert()
+    except DuplicateKeyError:
+        existing = await GameResult.find_one(
+            GameResult.game_key == game_key,
+            GameResult.day == day,
+            GameResult.window_number == window,
+        )
+        if existing is not None:
+            return existing.result, to_decimal(existing.close_price)
+    return result, final_price
+
+
+async def declare_recent_results(game_key: str, count: int = 8) -> int:
+    """Declare a GameResult for the last `count` settleable windows even when
+    NO ONE bet on them, so the "Last N results" strip shows a continuous
+    UP/DOWN history. A window W is settleable once window W+1 has closed, so
+    the most-recent settleable window is `current-2`. Idempotent."""
+    settings = await GameSettings.load_singleton()
+    cfg = settings.games.get(game_key)
+    if cfg is None or not cfg.enabled:
+        return 0
+
+    now = now_ist()
+    current = window_number_for(now, cfg.start_time, cfg.round_duration)
+    if current <= 2:
+        return 0
+    day = now.strftime("%Y-%m-%d")
+    resolver = _resolver_for(game_key)
+    declared = 0
+    # W is settleable only after W+1 closed → newest settleable is current-2.
+    for window in range(current - 2, max(0, current - 2 - count), -1):
+        r = await _get_or_declare_result(game_key, cfg, resolver, day, window, now)
+        if r is not None:
+            declared += 1
+    return declared
+
+
+async def declare_and_settle(game_key: str) -> int:
+    """Resolve every closed window that still has PENDING bets and settle
+    them. Returns the number of bets settled this pass."""
+    # First make sure every recently-closed window has a published result,
+    # so windows nobody bet on still appear in the results history.
+    try:
+        await declare_recent_results(game_key)
+    except Exception:  # noqa: BLE001 — never block bet settlement on this
+        logger.exception("declare_recent_results_failed game=%s", game_key)
+
+    settings = await GameSettings.load_singleton()
+    cfg = settings.games.get(game_key)
+    if cfg is None or not cfg.enabled:
+        return 0
+
+    pending = await UpDownBet.find(
+        UpDownBet.game_key == game_key,
+        UpDownBet.status == GameBetStatus.PENDING,
+    ).to_list()
+    if not pending:
+        return 0
+
+    # Group by (day, window).
+    groups: dict[tuple[str, int], list[UpDownBet]] = {}
+    for b in pending:
+        groups.setdefault((b.settlement_day, b.window_number), []).append(b)
+
+    now = now_ist()
+    settled = 0
+    resolver = _resolver_for(game_key)
+
+    for (day, window), bets in groups.items():
+        # Result comes from the NEXT window (W+1) closing vs window W's close.
+        # `_get_or_declare_result` returns None until W+1 has closed, and
+        # locks to the PUBLISHED GameResult so a later settlement pass (e.g. a
+        # user's 2nd bet in the same window) reuses the SAME result — the
+        # resolver's live-price fallback can't flip UP↔DOWN and pay both sides.
+        r = await _get_or_declare_result(game_key, cfg, resolver, day, window, now)
+        if r is None:
+            continue  # next window not closed yet / price unavailable
+        result, close_price = r
+
+        mult = cfg.win_multiplier
+        for bet in bets:
+            won = updown_bet_won(bet.prediction.value, result)
+            if won:
+                new_status = GameBetStatus.WON
+                payout = compute_updown_win_payout(to_decimal(bet.amount), mult)
+            else:
+                new_status = GameBetStatus.TIE if result == "TIE" else GameBetStatus.LOST
+                payout = Decimal("0")
+
+            # Per-BET atomic claim (PENDING → result). Replaces the old
+            # per-(user, window) UpDownWindowSettlement guard, which wrongly
+            # blocked a user's SECOND bet in the same window — e.g. hedging
+            # UP *and* DOWN — leaving it stuck PENDING forever (only one
+            # UpDownWindowSettlement row is allowed per user+window, so the
+            # 2nd insert hit DuplicateKeyError → `continue`). Keying the guard
+            # on the bet id lets every bet settle while still preventing a
+            # concurrent tick / worker from double-crediting the same bet.
+            claimed = await UpDownBet.get_motor_collection().find_one_and_update(
+                {"_id": bet.id, "status": GameBetStatus.PENDING.value},
+                {"$set": {
+                    "status": new_status.value,
+                    "payout": to_decimal128(payout),
+                    "result_price": to_decimal128(close_price),
+                    "updated_at": now_utc(),
+                }},
+            )
+            if claimed is None:
+                continue  # already settled by a concurrent tick / worker
+
+            if won:
+                await wallet_service.atomic_games_wallet_credit(
+                    bet.user_id, payout, game_key=game_key,
+                    description=f"Win · {game_key} · Window #{window} · {result}",
+                    meta={"kind": "WIN", "window": window, "result": result},
+                    is_win=True,
+                )
+                await wallet_service.house_settle(
+                    -payout, game_key=game_key,
+                    narration=f"Games payout · {game_key} W#{window}",
+                )
+                # Hierarchy commission (win-brokerage model) + referral — from house.
+                await _distribute_win(bet.user_id, to_decimal(bet.amount), payout, game_key, cfg)
+            settled += 1
+            try:
+                await publish(
+                    f"user:{bet.user_id}:games",
+                    {"type": "bet_result", "payload": {
+                        "game": game_key, "window": window, "result": result,
+                        "won": won, "payout": str(payout),
+                    }},
+                )
+            except Exception:
+                pass
+
+    return settled
