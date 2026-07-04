@@ -31,6 +31,19 @@ from app.utils.time_utils import now_utc
 logger = logging.getLogger(__name__)
 
 
+def _require_segment_kind(kind: str, op: str) -> None:
+    """PERMANENT SAFETY GUARD — a segment-wallet money op (margin / P&L) may
+    only ever touch one of the 4 trading segment wallets (NSE_BSE / MCX /
+    CRYPTO / FOREX), never MAIN / GAMES / a malformed kind. Defence-in-depth
+    behind `wallet_router`: even a direct caller can't move one segment's
+    money into another wallet by mistake."""
+    if kind not in wallet_kinds.SEGMENT_KINDS:
+        logger.critical("segment_wallet_bad_kind op=%s kind=%s", op, kind)
+        raise ValueError(
+            f"segment_wallet.{op}: refusing a money op on non-segment wallet kind {kind!r}"
+        )
+
+
 async def get_or_create(user_id: str | PydanticObjectId, kind: str) -> SegmentWallet:
     uid = PydanticObjectId(str(user_id))
     w = await SegmentWallet.find_one(SegmentWallet.user_id == uid, SegmentWallet.kind == kind)
@@ -58,6 +71,7 @@ async def _publish(user_id, kind: str, *, reason: str, amount: Decimal, balance_
 
 # ── Margin (no ledger — internal lock, mirrors wallet_service.block_margin) ──
 async def block_margin(user_id: str | PydanticObjectId, kind: str, amount: Decimal | float) -> None:
+    _require_segment_kind(kind, "block_margin")
     amt = quantize_money(to_decimal(amount))
     if amt <= ZERO:
         return
@@ -86,6 +100,7 @@ async def block_margin(user_id: str | PydanticObjectId, kind: str, amount: Decim
 
 
 async def release_margin(user_id: str | PydanticObjectId, kind: str, amount: Decimal | float) -> None:
+    _require_segment_kind(kind, "release_margin")
     amt = quantize_money(to_decimal(amount))
     if amt <= ZERO:
         return
@@ -114,6 +129,7 @@ async def adjust(
     reference_type: str | None = None, reference_id: str | None = None,
     actor_id: str | PydanticObjectId | None = None, allow_negative: bool = False,
 ) -> WalletTransaction:
+    _require_segment_kind(kind, "adjust")
     amt = quantize_money(to_decimal(amount))
     coll = SegmentWallet.get_motor_collection()
     before = after = ZERO
