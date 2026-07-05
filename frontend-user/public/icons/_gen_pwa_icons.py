@@ -3,7 +3,7 @@ emerald + white-sprout mark.
 
     py frontend-user/public/icons/_gen_pwa_icons.py
 
-Mirrors the visual the APK uses (see marginplant_apk/assets/images/
+Mirrors the visual the APK uses (see stockex_apk/assets/images/
 _gen_icon.py) so the install-prompt tile, splash, and the Android
 home-screen all read as the same brand.
 """

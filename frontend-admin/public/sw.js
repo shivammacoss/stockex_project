@@ -1,4 +1,4 @@
-/* MarginPlant Admin — minimal notification-only service worker.
+/* StockEx Admin — minimal notification-only service worker.
  *
  * Why this file exists: Android Chrome installed PWAs refuse to show
  * `new Notification(...)` in the system tray. They require a service

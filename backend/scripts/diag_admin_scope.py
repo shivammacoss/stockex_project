@@ -3,7 +3,7 @@ but the admin's own dashboard / accounts say 122?
 
 Run on the server from the backend folder:
 
-    cd ~/marginplant/backend
+    cd ~/stockex/backend
     source .venv/bin/activate
     python -m scripts.diag_admin_scope ADM84967256
 

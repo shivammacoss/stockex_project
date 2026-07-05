@@ -1,4 +1,4 @@
-/* MarginPlant marketing UI primitives.
+/* StockEx marketing UI primitives.
  *
  * Thin, presentational building blocks that read straight from the locked
  * `--mp-*` design tokens (registered in tailwind.config as the `mp` colour

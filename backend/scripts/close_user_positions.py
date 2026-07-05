@@ -9,7 +9,7 @@ that — it would orphan margin/PnL/history. ALWAYS use this script.
 
 Dry-run by default (lists what WOULD close). Pass --apply to actually close.
 
-    cd /root/marginplant/backend && source .venv/bin/activate
+    cd /root/stockex/backend && source .venv/bin/activate
     python -m scripts.close_user_positions CL33333046           # preview
     python -m scripts.close_user_positions CL33333046 --apply    # close
 """

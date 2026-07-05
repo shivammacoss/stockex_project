@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────
-#  MarginPlant — local MongoDB → Atlas warm-standby backup
+#  StockEx — local MongoDB → Atlas warm-standby backup
 #
 #  WHAT IT DOES
 #    Streams a full mongodump of the LOCAL (primary, fast) MongoDB straight
@@ -33,10 +33,10 @@
 # ─────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-ENV_FILE="${ENV_FILE:-/root/marginplant/backend/.env}"
-LOG_FILE="${LOG_FILE:-/var/log/marginplant-backup.log}"
-HEARTBEAT_FILE="${HEARTBEAT_FILE:-/var/run/marginplant-backup.last-success}"
-LOCK_FILE="${LOCK_FILE:-/var/run/marginplant-backup.lock}"
+ENV_FILE="${ENV_FILE:-/root/stockex/backend/.env}"
+LOG_FILE="${LOG_FILE:-/var/log/stockex-backup.log}"
+HEARTBEAT_FILE="${HEARTBEAT_FILE:-/var/run/stockex-backup.last-success}"
+LOCK_FILE="${LOCK_FILE:-/var/run/stockex-backup.lock}"
 
 log() { echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] $*" | tee -a "$LOG_FILE" >&2; }
 

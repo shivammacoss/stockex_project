@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────
-#  marginplant-remove-branded-domain.sh
+#  stockex-remove-branded-domain.sh
 #
-#  Tear-down counterpart to marginplant-add-branded-domain.sh.
+#  Tear-down counterpart to stockex-add-branded-domain.sh.
 #  Removes the nginx config + symlink for <DOMAIN> and reloads nginx.
 #  Does NOT delete the Let's Encrypt cert (`certbot delete`) so a
 #  re-add later doesn't have to wait out the LE rate limit. Operators
@@ -11,7 +11,7 @@
 #
 #  Idempotent: missing files are silently ignored.
 #
-#  Usage:  marginplant-remove-branded-domain.sh <DOMAIN>
+#  Usage:  stockex-remove-branded-domain.sh <DOMAIN>
 # ─────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -28,7 +28,7 @@ if ! [[ "$DOMAIN" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{2,251}[A-Za-z0-9]$ ]]; then
 fi
 
 DOMAIN="${DOMAIN,,}"
-CONF_NAME="marginplant-branded-${DOMAIN}.conf"
+CONF_NAME="stockex-branded-${DOMAIN}.conf"
 CONF_PATH="/etc/nginx/sites-available/${CONF_NAME}"
 SYMLINK_PATH="/etc/nginx/sites-enabled/${CONF_NAME}"
 

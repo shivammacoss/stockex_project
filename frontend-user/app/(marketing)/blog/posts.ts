@@ -1,4 +1,4 @@
-/* Blog post content for the MarginPlant broker site. Shared by the blog
+/* Blog post content for the StockEx broker site. Shared by the blog
  * index and the [slug] post pages. */
 
 export type BlogPost = {

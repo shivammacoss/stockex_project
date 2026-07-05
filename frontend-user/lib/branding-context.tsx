@@ -16,7 +16,7 @@
  *   2. POST-LOGIN REDIRECT (gated, never fires for legacy users) —
  *      A user whose `signup_origin` is BRANDED_REFERRAL or
  *      CUSTOM_DOMAIN AND whose admin has a READY custom_domain gets
- *      redirected from `marginplant.com/dashboard` to
+ *      redirected from `stockex.com/dashboard` to
  *      `https://<admin.custom_domain>/dashboard#wl=<session>`.
  *      Existing 10k users have `signup_origin = null` → this path is
  *      physically unreachable for them.
@@ -66,8 +66,8 @@ const Ctx = createContext<BrandingContextValue>({
 
 const PLATFORM_HOSTS = new Set<string>(
   [
-    "marginplant.com",
-    "www.marginplant.com",
+    "stockex.com",
+    "www.stockex.com",
     "localhost",
     "127.0.0.1",
   ].map((h) => h.toLowerCase()),
@@ -81,7 +81,7 @@ function isPlatformHost(host: string): boolean {
   // NOTE: do NOT auto-include `window.location.hostname` here. Doing so
   // makes every tenant custom domain (e.g. stockcafe.live) self-classify
   // as platform, which silently skips the /branding/by-domain fetch and
-  // falls the page back to the default "MarginPlant Broker" wordmark —
+  // falls the page back to the default "StockEx Broker" wordmark —
   // exactly the bug where admins set a logo + brand name but their own
   // branded host kept rendering the platform default.
   return /\.(vercel|netlify|fly)\.(app|dev)$/.test(h);
@@ -114,7 +114,7 @@ async function fetchBrandingByDomain(domain: string): Promise<Branding | null> {
 }
 
 /** Fetch the platform-default branding (super admin's logo +
- *  brand_name).  Used on the platform host (marginplant.com) where
+ *  brand_name).  Used on the platform host (stockex.com) where
  *  there's no tenant referral or custom domain to resolve against —
  *  without this fall-back the auth pages would render the generic
  *  built-in glyph even though the super admin has uploaded a logo. */
@@ -147,7 +147,7 @@ async function fetchMyBranding(token: string): Promise<{
 // White-label flicker fix: a custom-domain visitor's brand is resolved by a
 // network round-trip (/branding/by-domain). When the API/server is slow that
 // fetch can take seconds, and until it lands the header renders the platform
-// default ("MarginPlant Broker" — the super admin's brand). Stashing the last
+// default ("StockEx Broker" — the super admin's brand). Stashing the last
 // resolved brand per host lets us repaint it INSTANTLY on the next load while
 // the live fetch refreshes in the background — the operator's "super admin ka
 // naam flash hota hai jab server slow hai" report.
@@ -298,7 +298,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
       // Repaint the last-known brand for this host IMMEDIATELY so a slow
       // /branding/by-domain round-trip never flashes the platform default
-      // ("MarginPlant Broker") first. The live fetch below refreshes it.
+      // ("StockEx Broker") first. The live fetch below refreshes it.
       if (onCustomDomain) {
         const cached = readCachedBranding(host);
         if (cached) {
@@ -334,7 +334,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
           brand = me?.branding ?? null;
         }
         // Anonymous platform-host visitor (e.g. login / register on
-        // marginplant.com) OR logged-in user whose admin has no
+        // stockex.com) OR logged-in user whose admin has no
         // branding — fall back to the super admin's branding so the
         // auth + dashboard screens render the platform owner's logo +
         // favicon instead of the generic glyph.

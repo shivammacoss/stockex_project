@@ -1,7 +1,7 @@
 /*
- * MarginPlant custom Datafeed for TradingView Advanced Charts.
+ * StockEx custom Datafeed for TradingView Advanced Charts.
  *
- * Implements the TradingView "JS Datafeed API" against MarginPlant's own
+ * Implements the TradingView "JS Datafeed API" against StockEx's own
  * backend instead of a UDF server — so NO new backend endpoints are needed.
  * Historical candles come from:
  *     GET /api/v1/user/instruments/{token}/history?interval=&days=
@@ -41,12 +41,12 @@
     return 300;
   }
 
-  function MarginPlantDatafeed() {
+  function StockExDatafeed() {
     this._subs = {};        // listenerGuid -> { onTick, lastBar, intervalSec }
     this._lastHistBar = null; // most recent bar from the last getBars (per chart)
   }
 
-  MarginPlantDatafeed.prototype.onReady = function (cb) {
+  StockExDatafeed.prototype.onReady = function (cb) {
     setTimeout(function () {
       cb({
         supported_resolutions: ["1", "5", "15", "30", "60", "1D"],
@@ -57,11 +57,11 @@
     }, 0);
   };
 
-  MarginPlantDatafeed.prototype.searchSymbols = function (_u, _e, _t, onResult) {
+  StockExDatafeed.prototype.searchSymbols = function (_u, _e, _t, onResult) {
     onResult([]); // symbol search is driven by the app, not the chart
   };
 
-  MarginPlantDatafeed.prototype.resolveSymbol = function (symbolName, onResolve) {
+  StockExDatafeed.prototype.resolveSymbol = function (symbolName, onResolve) {
     var c = cfg();
     var ps = Number(c.pricescale) || 100;
     var info = {
@@ -86,7 +86,7 @@
     setTimeout(function () { onResolve(info); }, 0);
   };
 
-  MarginPlantDatafeed.prototype.getBars = function (
+  StockExDatafeed.prototype.getBars = function (
     symbolInfo, resolution, periodParams, onResult, onError
   ) {
     var self = this;
@@ -135,7 +135,7 @@
       });
   };
 
-  MarginPlantDatafeed.prototype.subscribeBars = function (
+  StockExDatafeed.prototype.subscribeBars = function (
     symbolInfo, resolution, onTick, guid
   ) {
     this._subs[guid] = {
@@ -153,12 +153,12 @@
     };
   };
 
-  MarginPlantDatafeed.prototype.unsubscribeBars = function (guid) {
+  StockExDatafeed.prototype.unsubscribeBars = function (guid) {
     delete this._subs[guid];
   };
 
   // Called from the RN host on every WS tick (via window.__tick).
-  MarginPlantDatafeed.prototype._applyTick = function (price, ts) {
+  StockExDatafeed.prototype._applyTick = function (price, ts) {
     var p = Number(price);
     if (!isFinite(p) || p <= 0) return;
     var nowSec = Math.floor((ts || Date.now()) / 1000);
@@ -182,7 +182,7 @@
     }
   };
 
-  window.MarginPlantDatafeed = MarginPlantDatafeed;
+  window.StockExDatafeed = StockExDatafeed;
   window.__tick = function (price, ts) {
     if (window.__df) window.__df._applyTick(price, ts);
   };

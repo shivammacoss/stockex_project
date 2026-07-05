@@ -1,4 +1,4 @@
-// Map a MarginPlant instrument to a FREE TradingView public symbol
+// Map a StockEx instrument to a FREE TradingView public symbol
 // (OANDA / BINANCE / TVC) so the international (Infoway-fed) instruments —
 // forex, spot metals, energy, crypto — can render in the free tv.js Advanced
 // Chart widget with TradingView's own real data + full features.

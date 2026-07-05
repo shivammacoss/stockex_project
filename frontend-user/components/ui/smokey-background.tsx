@@ -47,7 +47,7 @@ type BlurSize = "none" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl";
 
 interface SmokeyBackgroundProps {
   backdropBlurAmount?: BlurSize;
-  /** Hex colour for the smoke glow (defaults to the MarginPlant green). */
+  /** Hex colour for the smoke glow (defaults to the StockEx green). */
   color?: string;
   className?: string;
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { MarketAccountBar } from "@/components/trading/MarketAccountBar";
 import { MobileInstrumentsBar } from "@/components/trading/MobileInstrumentsBar";
 import { TradeDetailSheet } from "@/components/trading/TradeDetailSheet";
 import { AccountsAPI } from "@/lib/api";
@@ -56,6 +57,11 @@ export default function MarketsPage() {
           "calc(100dvh - 7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
       }}
     >
+      {/* Trading-account selector — selected segment wallet + its balance
+          (bold, accent color) + switcher. Switching re-scopes the instrument
+          chips below (via the invalidated `accounts` query → `primaryKind`)
+          without leaving the Market page. */}
+      <MarketAccountBar />
       <MobileInstrumentsBar
         activeToken={tradeToken}
         walletKind={primaryKind}

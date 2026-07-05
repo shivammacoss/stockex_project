@@ -113,7 +113,7 @@ function extractExpiryLabel(symbol: string | null | undefined): string | null {
 
 // Compact pill that translates Position.close_reason into a human label
 // with a tone-matching color. Same legal set as
-// marginplant_ind/backend/app/models/position.py:close_reason.
+// stockex_ind/backend/app/models/position.py:close_reason.
 const CLOSE_REASON_META: Record<
   string,
   { label: string; cls: string }

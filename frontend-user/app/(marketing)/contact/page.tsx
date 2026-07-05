@@ -12,17 +12,17 @@ import {
 const CHANNELS = [
   {
     label: "Support",
-    email: "support@marginplant.com",
+    email: "support@stockex.com",
     note: "for account, payout, and platform issues. Have your account ID ready.",
   },
   {
     label: "Affiliates & partnerships",
-    email: "partners@marginplant.com",
+    email: "partners@stockex.com",
     note: "for referrals, partnerships, and volume deals.",
   },
   {
     label: "Press / general",
-    email: "hello@marginplant.com",
+    email: "hello@stockex.com",
     note: "for everything else.",
   },
 ];

@@ -1,4 +1,4 @@
-# Security hardening — MarginPlant backend
+# Security hardening — StockEx backend
 
 Practical, do-this-before-production checklist. Ordered by impact. The app
 already has solid defaults (bcrypt passwords, JWT + refresh rotation,
@@ -23,13 +23,13 @@ internet, and must require authentication.
    // mongosh — create an admin user, then an app user scoped to the DB
    use admin
    db.createUser({ user: "mpadmin", pwd: "<STRONG_RANDOM>", roles: ["root"] })
-   use marginplant
-   db.createUser({ user: "mpapp", pwd: "<STRONG_RANDOM>", roles: [{ role: "readWrite", db: "marginplant" }] })
+   use stockex
+   db.createUser({ user: "mpapp", pwd: "<STRONG_RANDOM>", roles: [{ role: "readWrite", db: "stockex" }] })
    ```
    Start `mongod` with `--auth` (or `security.authorization: enabled` in
    `mongod.conf`), then point the backend at it:
    ```
-   MONGODB_URL=mongodb://mpapp:<STRONG_RANDOM>@127.0.0.1:27017/marginplant?authSource=marginplant
+   MONGODB_URL=mongodb://mpapp:<STRONG_RANDOM>@127.0.0.1:27017/stockex?authSource=stockex
    ```
    (MongoDB Atlas already enforces auth + TLS — prefer it if you don't want to
    self-manage.)

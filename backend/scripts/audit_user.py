@@ -3,7 +3,7 @@ disagrees with the ledger / trades / positions.
 
 Run from the backend folder:
 
-    cd ~/marginplant/backend
+    cd ~/stockex/backend
     source .venv/bin/activate
     python -m scripts.audit_user CL15362105
 

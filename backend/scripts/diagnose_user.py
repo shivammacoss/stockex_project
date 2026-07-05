@@ -6,7 +6,7 @@ even RUN (it early-returns when available+used_margin+credit_limit <= 0).
 
 Run from the backend folder:
 
-    cd ~/marginplant/backend
+    cd ~/stockex/backend
     source .venv/bin/activate
     python -m scripts.diagnose_user CL45900793
 

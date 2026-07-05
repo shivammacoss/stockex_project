@@ -346,7 +346,7 @@ async def revoke_user_sessions(user: User) -> None:
 # reset loop (`demo_service.reset_global_demo`, scheduled in main.py) flattens
 # its trades and restores the ₹1L virtual balance every 24h. NOTE: this is a
 # SHARED account — concurrent demo visitors see each other's positions/balance.
-GLOBAL_DEMO_EMAIL = "demo@marginplant.app"
+GLOBAL_DEMO_EMAIL = "demo@stockex.app"
 GLOBAL_DEMO_MOBILE = "9000000000"
 
 

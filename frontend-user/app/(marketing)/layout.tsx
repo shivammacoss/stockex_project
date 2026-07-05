@@ -13,7 +13,7 @@ export default function MarketingLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // `mp-scope` activates the locked MarginPlant marketing palette (light
+  // `mp-scope` activates the locked StockEx marketing palette (light
   // default + dark sections) without touching the trading app's tokens.
   return (
     <div className="mp-scope flex min-h-screen flex-col overflow-x-hidden bg-mp-bg text-mp-text">

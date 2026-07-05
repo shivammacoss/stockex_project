@@ -184,7 +184,7 @@ export function HeroAnimation() {
             <Sprout className="size-12 text-primary-foreground drop-shadow" />
           </div>
           <span className="absolute -bottom-7 rounded-full border border-primary/30 bg-background/80 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider text-primary backdrop-blur">
-            MARGINPLANT CORE
+            STOCKEX CORE
           </span>
         </div>
       </div>

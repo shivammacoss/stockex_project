@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────
-#  MarginPlant backend — multi-worker systemd unit (gunicorn + uvicorn)
+#  StockEx backend — multi-worker systemd unit (gunicorn + uvicorn)
 #
 #  WHY gunicorn instead of a single `uvicorn` process:
 #    A single asyncio worker serialises EVERY request, WebSocket frame,
@@ -27,13 +27,13 @@
 #      The other workers serve HTTP/WebSocket traffic and read prices from
 #      the leader's `mdlive:{token}` Redis snapshot — that's the scaling win.
 #
-#  ⚠️  PATHS BELOW ASSUME the repo lives at /opt/marginplant (matches
+#  ⚠️  PATHS BELOW ASSUME the repo lives at /opt/stockex (matches
 #      scripts/deploy.sh). BEFORE applying, confirm your CURRENT unit's
-#      paths with:   systemctl cat marginplant-backend
+#      paths with:   systemctl cat stockex-backend
 #      and edit WorkingDirectory + the gunicorn path to match your venv.
 # ─────────────────────────────────────────────────────────────────────
 [Unit]
-Description=MarginPlant FastAPI backend (gunicorn/uvicorn, multi-worker)
+Description=StockEx FastAPI backend (gunicorn/uvicorn, multi-worker)
 After=network.target
 Wants=network-online.target
 
@@ -41,15 +41,15 @@ Wants=network-online.target
 Type=notify
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/opt/marginplant/backend
+WorkingDirectory=/opt/stockex/backend
 
 # 8 vCPU box → 4 workers leaves headroom for the Next.js PM2 apps + nginx.
 # gunicorn reads WEB_CONCURRENCY automatically when --workers is omitted.
 Environment=WEB_CONCURRENCY=4
 # Load the application secrets/config.
-EnvironmentFile=/opt/marginplant/backend/.env
+EnvironmentFile=/opt/stockex/backend/.env
 
-ExecStart=/opt/marginplant/backend/.venv/bin/gunicorn app.main:app \
+ExecStart=/opt/stockex/backend/.venv/bin/gunicorn app.main:app \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 127.0.0.1:8000 \
     --timeout 120 \

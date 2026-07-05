@@ -44,7 +44,7 @@ const config: Config = {
         info: { DEFAULT: "hsl(var(--info))", foreground: "hsl(var(--info-foreground))" },
         atm: { DEFAULT: "hsl(var(--atm))", foreground: "hsl(var(--atm-foreground))" },
 
-        // ── MarginPlant marketing palette (LOCKED design system) ──────────
+        // ── StockEx marketing palette (LOCKED design system) ──────────
         // Scoped to the marketing pages via `.mp-scope` (light default) and
         // flipped to the dark palette inside `.mp-dark` sections. Stored as
         // space-separated RGB channels so Tailwind's `/<alpha>` modifier

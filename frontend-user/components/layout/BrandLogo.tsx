@@ -19,7 +19,7 @@ interface BrandLogoProps {
 //   name. The logo image is given the same size budget as the default
 //   icon so layout doesn't shift.
 // - When no branding is loaded, we fall back to the default
-//   "🌱 MarginPlant Broker" wordmark — keeping the existing UX byte-
+//   "🌱 StockEx Broker" wordmark — keeping the existing UX byte-
 //   identical for the bulk of traffic that isn't on a branded link.
 export function BrandLogo({ href = "/dashboard", size = "md", iconOnly = false, className }: BrandLogoProps) {
   const { branding } = useBranding();

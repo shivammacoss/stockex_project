@@ -1,4 +1,4 @@
-/* MarginPlant PWA service worker — offline-shell v2.
+/* StockEx PWA service worker — offline-shell v2.
  *
  * Why we have one:
  *   • A live trading app must NEVER serve stale prices/orders, so
@@ -32,7 +32,7 @@
  * regression ships. NEVER reuse an old version string.
  */
 
-const VERSION = "marginplant-pwa-v6";
+const VERSION = "stockex-pwa-v6";
 // How long a navigation waits for the network before it paints the last
 // cached shell instead. Short enough to feel instant on weak networks,
 // long enough that a healthy connection almost always wins the race and

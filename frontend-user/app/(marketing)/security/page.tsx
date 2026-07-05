@@ -71,7 +71,7 @@ const REG_POINTS = [
 ];
 
 const RESPONSIBLE_DISCLOSURE = [
-  "Email security@marginplant.com with a clear write-up and steps to reproduce.",
+  "Email security@stockex.com with a clear write-up and steps to reproduce.",
   "Encrypt sensitive details with our PGP key (linked from the email autoresponder).",
   "We acknowledge within 48 hours and triage within 7 days.",
   "Eligible reports earn a bounty — paid in INR via UPI or NEFT, your choice.",
@@ -210,8 +210,8 @@ export default function SecurityPage() {
               anyone else. We pay for it, we credit you, and we never sue
               researchers acting in good faith.
             </p>
-            <Link href="mailto:security@marginplant.com" className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90">
-              security@marginplant.com <ArrowRight className="size-4" />
+            <Link href="mailto:security@stockex.com" className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90">
+              security@stockex.com <ArrowRight className="size-4" />
             </Link>
           </div>
           <ol className="space-y-3">

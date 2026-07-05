@@ -29,7 +29,7 @@ export default function AuditLogsPage() {
 function shortDevice(ua: string | null | undefined): string {
   if (!ua) return "—";
   const s = ua;
-  if (/MarginPlant[-\s]?Mobile|marginplant.+Capacitor|marginplant.+Cordova/i.test(s)) {
+  if (/StockEx[-\s]?Mobile|stockex.+Capacitor|stockex.+Cordova/i.test(s)) {
     if (/iPhone|iPad|iOS/i.test(s)) return "iOS app";
     if (/Android/i.test(s)) return "Android app";
     return "Mobile app";

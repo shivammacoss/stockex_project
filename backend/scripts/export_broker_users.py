@@ -7,7 +7,7 @@ SOFT-DELETED (status=CLOSED) users, whose real email/mobile were moved to the
 admin delete flow (see api/v1/admin/users.py).
 
 Usage (on the server, from the backend dir, with the venv active):
-    cd /root/marginplant/backend
+    cd /root/stockex/backend
     source .venv/bin/activate
     python scripts/export_broker_users.py BRK40576343
 

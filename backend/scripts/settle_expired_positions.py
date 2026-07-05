@@ -19,7 +19,7 @@ settlement service, so the wallet / history stay consistent.
 Dry-run by default (lists what WOULD settle + the price + P&L). Pass
 --apply to actually settle.
 
-    cd /root/marginplant/backend && source .venv/bin/activate
+    cd /root/stockex/backend && source .venv/bin/activate
     python -m scripts.settle_expired_positions            # preview
     python -m scripts.settle_expired_positions --apply    # settle for real
 

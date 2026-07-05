@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────
-#  MarginPlant — DISASTER RECOVERY: Atlas → local MongoDB
+#  StockEx — DISASTER RECOVERY: Atlas → local MongoDB
 #
 #  Run this on a FRESH VPS (or after a wipe) to pull the latest Atlas
 #  warm-standby copy back into the local MongoDB the app talks to. It is the
@@ -21,7 +21,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-ENV_FILE="${ENV_FILE:-/root/marginplant/backend/.env}"
+ENV_FILE="${ENV_FILE:-/root/stockex/backend/.env}"
 
 get_env() {
   grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- \

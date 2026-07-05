@@ -179,9 +179,9 @@ async def find_platform_super_admin() -> User | None:
     render their branding (logo + brand_name + favicon) when the
     visitor isn't on a specific tenant's domain or referral link.
 
-    Without this, the platform host (marginplant.com) had no
+    Without this, the platform host (stockex.com) had no
     branding source at all — BrandingProvider stayed null and the
-    auth screens fell back to the hard-coded MarginPlant glyph.
+    auth screens fell back to the hard-coded StockEx glyph.
     Picking the OLDEST active SUPER_ADMIN matches the bootstrap
     seed's single-super-admin assumption while still being safe in
     multi-super-admin deployments (the founding row wins).

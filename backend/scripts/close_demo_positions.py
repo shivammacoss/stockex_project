@@ -10,7 +10,7 @@ use this script (or the admin UI), never a raw status update.
 Dry-run by default (lists what WOULD close, changes nothing). Pass --apply
 to actually close. Run from the backend folder:
 
-    cd /root/marginplant/backend
+    cd /root/stockex/backend
     source .venv/bin/activate
     python -m scripts.close_demo_positions            # dry run (preview)
     python -m scripts.close_demo_positions --apply    # really close

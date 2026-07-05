@@ -19,7 +19,7 @@ const inter = Inter({
 });
 
 // Marketing-site display + numeric faces. Space Grotesk is the tight,
-// geometric heading face from the MarginPlant design system (the brief's
+// geometric heading face from the StockEx design system (the brief's
 // "Clash Display" alternative, but Google-hosted so it ships via next/font
 // with zero runtime CDN hit). IBM Plex Mono carries prices, payouts, and
 // stats with a tabular/mono feel. Both are scoped to the marketing pages

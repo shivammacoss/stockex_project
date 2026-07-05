@@ -209,7 +209,7 @@ class Settings(BaseSettings):
     # leave blank in dev — push send is a no-op until both are set.
     VAPID_PUBLIC_KEY: str = ""
     VAPID_PRIVATE_KEY: SecretStr = Field(default=SecretStr(""))
-    VAPID_SUBJECT: str = "mailto:admin@marginplant.com"
+    VAPID_SUBJECT: str = "mailto:admin@stockex.com"
 
     # ── Seed ─────────────────────────────────────────────────────────
     SEED_SUPER_ADMIN_EMAIL: str = "admin@setupfx.com"

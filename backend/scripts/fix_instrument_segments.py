@@ -23,9 +23,9 @@ A row that carries ANY positions or orders is NEVER deleted — at worst it
 is reclassified. Deletion is reserved for rows with zero trading history.
 
 Usage (on the server, backend dir, venv active):
-    cd /root/marginplant/backend && source .venv/bin/activate
-    PYTHONPATH=/root/marginplant/backend python scripts/fix_instrument_segments.py          # DRY-RUN
-    PYTHONPATH=/root/marginplant/backend python scripts/fix_instrument_segments.py --apply   # execute
+    cd /root/stockex/backend && source .venv/bin/activate
+    PYTHONPATH=/root/stockex/backend python scripts/fix_instrument_segments.py          # DRY-RUN
+    PYTHONPATH=/root/stockex/backend python scripts/fix_instrument_segments.py --apply   # execute
 
 Run the DRY-RUN first and review the plan. Take a Mongo backup before --apply.
 Recommended to run AFTER market close (segment drives margin/market-hours).

@@ -137,27 +137,27 @@ sudo apt update
 sudo apt install -y certbot python3-certbot-nginx
 
 # 2. Deploy helper scripts to /usr/local/bin/ (run from the repo root)
-sudo install -m 0755 deploy/scripts/marginplant-add-branded-domain.sh \
-  /usr/local/bin/marginplant-add-branded-domain
-sudo install -m 0755 deploy/scripts/marginplant-remove-branded-domain.sh \
-  /usr/local/bin/marginplant-remove-branded-domain
+sudo install -m 0755 deploy/scripts/stockex-add-branded-domain.sh \
+  /usr/local/bin/stockex-add-branded-domain
+sudo install -m 0755 deploy/scripts/stockex-remove-branded-domain.sh \
+  /usr/local/bin/stockex-remove-branded-domain
 
 # 3. Allow the backend's OS user to run the helpers + certbot + nginx
 #    passwordless. Replace the file content (NOT append) every redeploy
 #    so the rules stay tight.
-sudo tee /etc/sudoers.d/marginplant-branding > /dev/null <<'EOF'
-root ALL=(root) NOPASSWD: /usr/local/bin/marginplant-add-branded-domain
-root ALL=(root) NOPASSWD: /usr/local/bin/marginplant-remove-branded-domain
+sudo tee /etc/sudoers.d/stockex-branding > /dev/null <<'EOF'
+root ALL=(root) NOPASSWD: /usr/local/bin/stockex-add-branded-domain
+root ALL=(root) NOPASSWD: /usr/local/bin/stockex-remove-branded-domain
 root ALL=(root) NOPASSWD: /usr/bin/certbot
 root ALL=(root) NOPASSWD: /usr/sbin/nginx
 EOF
-sudo chmod 0440 /etc/sudoers.d/marginplant-branding
+sudo chmod 0440 /etc/sudoers.d/stockex-branding
 
 # 4. Verify sudoers parses (CRITICAL — broken sudoers locks you out)
 sudo visudo -c
 
 # 5. Smoke test the helper from the backend's user shell:
-sudo -n /usr/local/bin/marginplant-add-branded-domain --help 2>/dev/null \
+sudo -n /usr/local/bin/stockex-add-branded-domain --help 2>/dev/null \
   || echo "(script ignores --help; expected non-zero exit, that's fine)"
 ```
 
@@ -179,7 +179,7 @@ The admin UI exposes a "Disconnect" action (or the admin can clear
 `custom_domain` on their profile). To free nginx capacity:
 
 ```bash
-sudo /usr/local/bin/marginplant-remove-branded-domain mybroker.com
+sudo /usr/local/bin/stockex-remove-branded-domain mybroker.com
 # Optional — drop the cert too:
 sudo certbot delete --cert-name mybroker.com
 ```
@@ -190,5 +190,5 @@ sudo certbot delete --cert-name mybroker.com
 |---|---|---|
 | `helper_missing` in admin UI | Scripts not deployed to /usr/local/bin | Re-run step 2 above |
 | `sudo: a password is required` | Sudoers rule wrong / not chmod 0440 | Re-run step 3 + `visudo -c` |
-| `Could not automatically find a matching server block` | Helper script not run before certbot | Should not happen — worker now uses helper. If seen, check `/etc/nginx/sites-enabled/marginplant-branded-<domain>.conf` exists |
-| Cert obtained but admin UI shows FAILED | API/worker can't reach itself / status update path broken | Check Celery worker logs: `pm2 logs marginplant-celery-worker` |
+| `Could not automatically find a matching server block` | Helper script not run before certbot | Should not happen — worker now uses helper. If seen, check `/etc/nginx/sites-enabled/stockex-branded-<domain>.conf` exists |
+| Cert obtained but admin UI shows FAILED | API/worker can't reach itself / status update path broken | Check Celery worker logs: `pm2 logs stockex-celery-worker` |

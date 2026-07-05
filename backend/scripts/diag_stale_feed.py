@@ -12,7 +12,7 @@ mismatch) instead of guessing.
 
 Read-only. Makes NO changes.
 
-    cd /root/marginplant/backend && source .venv/bin/activate
+    cd /root/stockex/backend && source .venv/bin/activate
     python -m scripts.diag_stale_feed
 """
 

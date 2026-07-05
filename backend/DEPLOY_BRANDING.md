@@ -10,7 +10,7 @@ auto-SSL custom domains feature to production.
 * Feature is gated by `BRANDING_ENABLED=false` (default) — code is
   inert until the flag is flipped.
 * APK + existing web payloads are byte-identical (verified against
-  `marginplant_apk/src/features/auth/api/auth.api.ts`).
+  `stockex_apk/src/features/auth/api/auth.api.ts`).
 
 ## 1. Backend deploy (any of the 4 phases)
 
@@ -82,13 +82,13 @@ pip install dnspython==2.6.1
 deactivate
 
 # 3. Allow the backend OS user to run certbot + nginx without password.
-#    Replace `marginplant` with the actual UNIX user running uvicorn /
+#    Replace `stockex` with the actual UNIX user running uvicorn /
 #    celery (run `id -un` while su'd as that user).
-sudo tee /etc/sudoers.d/marginplant-branding > /dev/null <<'EOF'
-marginplant ALL=(root) NOPASSWD: /usr/bin/certbot, /usr/sbin/nginx
+sudo tee /etc/sudoers.d/stockex-branding > /dev/null <<'EOF'
+stockex ALL=(root) NOPASSWD: /usr/bin/certbot, /usr/sbin/nginx
 EOF
-sudo chmod 0440 /etc/sudoers.d/marginplant-branding
-sudo visudo -c    # must print "/etc/sudoers.d/marginplant-branding: parsed OK"
+sudo chmod 0440 /etc/sudoers.d/stockex-branding
+sudo visudo -c    # must print "/etc/sudoers.d/stockex-branding: parsed OK"
 
 # 4. Confirm the existing nginx config has a catch-all server block
 #    (server_name _;) that proxies to the FastAPI upstream. Certbot
@@ -112,10 +112,10 @@ sudo certbot certificates       # lists current certs and expiry
 Pick one admin (preferably an internal test account, not a real
 revenue-generating sub-admin) and walk through the full flow:
 
-1. Admin logs into `https://marginplant.com/admin`.
+1. Admin logs into `https://stockex.com/admin`.
 2. Navigates to `Settings → Branding`.
 3. Uploads a logo, types brand name, hits Save.
-4. Opens `https://marginplant.com/register?ref=<their user_code>` in
+4. Opens `https://stockex.com/register?ref=<their user_code>` in
    incognito. Should see admin's logo + brand name, registers a fake
    user. Verify in Mongo: `db.users.findOne({email: "fake@..."})` →
    `assigned_admin_id` matches admin, `signup_origin: "BRANDED_REFERRAL"`.
@@ -130,7 +130,7 @@ revenue-generating sub-admin) and walk through the full flow:
 9. Login with the fake user from step 4 → after login, browser should
    auto-redirect to `https://branding-test.<your-tld>/dashboard`
    (signup_origin gate fires).
-10. Existing 10k users (sample 5) — login on `marginplant.com/login`
+10. Existing 10k users (sample 5) — login on `stockex.com/login`
     works as before, no redirect, dashboard loads.
 
 If step 10 ever fails for any existing user → set
