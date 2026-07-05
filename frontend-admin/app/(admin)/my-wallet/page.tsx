@@ -16,11 +16,15 @@ import {
   ArrowRightLeft,
   Send,
   ReceiptText,
+  ChevronRight,
+  ArrowDownToLine,
+  ArrowUpFromLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AdminMeAPI, AdminKuberAPI, AdminFundAPI } from "@/lib/api";
 import { useAdminAuthStore } from "@/stores/authStore";
 import { formatINR } from "@/lib/utils";
@@ -365,6 +369,7 @@ function FundMembersSection({ role }: { role: string }) {
 
 function MemberRow({ member, onFunded }: { member: any; onFunded: () => void }) {
   const [amount, setAmount] = useState("");
+  const [open, setOpen] = useState(false);
 
   const fund = useMutation({
     mutationFn: () => AdminFundAPI.addToMember(member.id, Number(amount)),
@@ -376,42 +381,195 @@ function MemberRow({ member, onFunded }: { member: any; onFunded: () => void }) 
     onError: (e: any) => toast.error(e?.message || "Funding failed"),
   });
 
+  const given = Number(member.given_by_parent ?? 0);
+  const deployed = Number(member.deployed_total ?? 0);
+  const balance = Number(member.available_balance ?? 0);
+  const held = Number(member.temporary_balance ?? 0);
+  const usedPct = given > 0 ? Math.min(100, Math.round((deployed / given) * 100)) : 0;
+
   const amt = Number(amount);
   const valid = Number.isFinite(amt) && amt > 0;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card p-3 md:flex-row md:items-center md:justify-between">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{member.full_name || member.user_code}</span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-            {ROLE_LABEL[member.role] || member.role}
-          </span>
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="font-mono">{member.user_code}</span>
-          <span>
-            Bal <span className="font-bold tabular-nums text-foreground">{formatINR(member.available_balance)}</span>
-          </span>
-          {Number(member.temporary_balance) > 0 && (
-            <span>
-              Held <span className="font-bold tabular-nums text-amber-600 dark:text-amber-400">{formatINR(member.temporary_balance)}</span>
-            </span>
-          )}
+    <>
+      <div className="rounded-xl border border-border/60 bg-card p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Clickable identity + fund-usage summary → opens full breakdown */}
+          <button type="button" onClick={() => setOpen(true)} className="group min-w-0 flex-1 text-left">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium group-hover:underline">{member.full_name || member.user_code}</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                {ROLE_LABEL[member.role] || member.role}
+              </span>
+              <span className="font-mono text-xs text-muted-foreground">{member.user_code}</span>
+              <ChevronRight className="size-3.5 text-muted-foreground transition group-hover:translate-x-0.5" />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              <Stat label="Given by you" value={formatINR(given)} />
+              <Stat label="Deployed" value={formatINR(deployed)} tone="sell" />
+              <Stat label="Balance" value={formatINR(balance)} tone="buy" />
+              {held > 0 && <Stat label="Held" value={formatINR(held)} tone="amber" />}
+            </div>
+            {given > 0 && (
+              <div className="mt-2 max-w-xs">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${usedPct}%` }} />
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">{usedPct}% deployed · tap for full breakdown</div>
+              </div>
+            )}
+          </button>
+          {/* Fund control */}
+          <div className="flex items-center gap-2 md:w-72">
+            <Input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="Amount"
+              inputMode="decimal"
+              className="h-9 flex-1"
+            />
+            <Button size="sm" disabled={!valid || fund.isPending} loading={fund.isPending} onClick={() => fund.mutate()}>
+              <Send className="size-4" /> Add
+            </Button>
+          </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 md:w-72">
-        <Input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Amount"
-          inputMode="decimal"
-          className="h-9 flex-1"
-        />
-        <Button size="sm" disabled={!valid || fund.isPending} loading={fund.isPending} onClick={() => fund.mutate()}>
-          <Send className="size-4" /> Add
-        </Button>
+      <MemberDetailDialog memberId={member.id} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "buy" | "sell" | "amber" }) {
+  const c =
+    tone === "buy" ? "text-buy"
+      : tone === "sell" ? "text-sell"
+      : tone === "amber" ? "text-amber-600 dark:text-amber-400"
+      : "text-foreground";
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={cn("font-bold tabular-nums", c)}>{value}</span>
+    </span>
+  );
+}
+
+/* ── Member fund-usage breakdown (click a member → how they used the money) ── */
+function MemberDetailDialog({
+  memberId, open, onOpenChange,
+}: {
+  memberId: string;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "me", "member-detail", memberId],
+    queryFn: () => AdminMeAPI.memberFundDetail(memberId),
+    enabled: open,
+  });
+
+  const m = data?.member;
+  const s: any = data?.summary || {};
+  const ledger: any[] = data?.ledger || [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            {m?.full_name || m?.user_code || "Member"}
+            {m?.role && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                {ROLE_LABEL[m.role] || m.role}
+              </span>
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            {m?.user_code ? `${m.user_code} — ` : ""}how they used the funds you gave them.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          <div className="space-y-4">
+            {/* Headline: given → deployed → balance */}
+            <div className="grid grid-cols-3 gap-2">
+              <BigStat label="Given by you" value={formatINR(s.given_by_parent ?? 0)} icon={<ArrowDownToLine className="size-3.5" />} tone="primary" />
+              <BigStat label="Deployed" value={formatINR(s.deployed_total ?? 0)} icon={<ArrowUpFromLine className="size-3.5" />} tone="sell" />
+              <BigStat label="Balance left" value={formatINR(s.current_balance ?? 0)} icon={<Wallet className="size-3.5" />} tone="buy" />
+            </div>
+
+            {/* Detailed breakdown (only rows with a value) */}
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+              <MiniStat label="To users (deposits)" value={formatINR(s.deployed_to_users ?? 0)} />
+              {Number(s.funded_to_downline) > 0 && <MiniStat label="To brokers below" value={formatINR(s.funded_to_downline)} />}
+              {Number(s.returned_from_users) > 0 && <MiniStat label="Returned by users" value={formatINR(s.returned_from_users)} />}
+              {Number(s.pulled_back) > 0 && <MiniStat label="Pulled back by you" value={formatINR(s.pulled_back)} />}
+              {Number(s.games_earned) > 0 && <MiniStat label="Games commission" value={formatINR(s.games_earned)} />}
+              {Number(s.held) > 0 && <MiniStat label="Games held" value={formatINR(s.held)} />}
+            </div>
+
+            {/* Full ledger */}
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Full activity</div>
+              {ledger.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">No fund activity yet.</div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto rounded-lg border border-border/60">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-card">
+                      <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <th className="px-3 py-2 font-medium">Type</th>
+                        <th className="px-3 py-2 font-medium">Narration</th>
+                        <th className="px-3 py-2 text-right font-medium">Amount</th>
+                        <th className="px-3 py-2 text-right font-medium">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ledger.map((r) => (
+                        <tr key={r.id} className="border-b border-border/40 last:border-0">
+                          <td className="px-3 py-2">
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                              {prettyType(r.type)}
+                            </span>
+                          </td>
+                          <td className="max-w-[220px] truncate px-3 py-2 text-muted-foreground">{r.narration || "—"}</td>
+                          <td className={cn("px-3 py-2 text-right font-bold tabular-nums", Number(r.amount) >= 0 ? "text-buy" : "text-sell")}>
+                            {signed(r.amount)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs text-muted-foreground">{fmtDateTime(r.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BigStat({ label, value, icon, tone }: { label: string; value: string; icon: React.ReactNode; tone: "primary" | "buy" | "sell" }) {
+  const c = tone === "buy" ? "text-buy" : tone === "sell" ? "text-sell" : "text-primary";
+  return (
+    <div className="rounded-lg border border-border/60 bg-card p-3">
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+        {icon}
+        {label}
       </div>
+      <div className={cn("mt-1 text-base font-bold tabular-nums sm:text-lg", c)}>{value}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/30 px-2.5 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-bold tabular-nums">{value}</div>
     </div>
   );
 }

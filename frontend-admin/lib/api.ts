@@ -255,6 +255,10 @@ export const AdminMeAPI = {
   // Direct fundable downline with balances; optional user_code/full_name search.
   members: (q?: string) =>
     unwrap<any[]>(api.get("/admin/me/members", { params: q ? { q } : undefined })),
+  // Full fund lifecycle of ONE direct member (given / deployed / returned +
+  // raw ledger) — powers the "how did they use the money" detail dialog.
+  memberFundDetail: (memberId: string, limit = 100) =>
+    unwrap<any>(api.get(`/admin/me/members/${memberId}/fund-detail`, { params: { limit } })),
   // SUPER_ADMIN games revenue analytics (per_game / per_admin / totals).
   gamesBreakdown: () => unwrap<any>(api.get("/admin/me/games-breakdown")),
 };

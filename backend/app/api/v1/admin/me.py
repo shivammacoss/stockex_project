@@ -12,6 +12,9 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from decimal import Decimal
+
 from beanie import PydanticObjectId
 from bson import Decimal128
 
@@ -24,7 +27,7 @@ from app.models.wallet import Wallet
 from app.schemas.common import APIResponse
 from app.services import wallet_service
 from app.services.games import wallet_service as games_wallet_service
-from app.utils.decimal_utils import to_decimal
+from app.utils.decimal_utils import ZERO, to_decimal
 from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/me", tags=["admin-me"])
@@ -229,6 +232,69 @@ _LEDGER_TYPES = [
 ]
 
 
+# ── Per-member fund lifecycle (how a member used what its parent gave) ──
+# The transaction types that describe an admin-tier member's money story:
+# what the parent/SA GAVE them, what they PUSHED DOWN to users/brokers, what
+# came back, and games commission earned. Signed as stored in the ledger.
+_FUND_FLOW_TYPES = [
+    TransactionType.ADMIN_DEPOSIT.value,          # + received from parent / SA (incl. opening fund)
+    TransactionType.ADMIN_WITHDRAW.value,         # − pulled back by parent / SA
+    TransactionType.ADMIN_TRANSFER.value,         # ∓ funded a child (−) / pulled from a child (+)
+    TransactionType.ADMIN_FLOAT_DISPENSE.value,   # − dispensed to a downline USER
+    TransactionType.ADMIN_FLOAT_REPLENISH.value,  # + replenished from a user withdrawal
+    TransactionType.GAMES_HIERARCHY.value,        # + games commission earned
+]
+
+
+async def _fund_aggregates(ids: list) -> dict:
+    """Per-user summed (signed) transaction amounts over the fund-flow types.
+
+    Returns ``{user_id_str: {transaction_type: Decimal}}`` in a single grouped
+    aggregation over the immutable ``wallet_transactions`` collection.
+    """
+    out: dict = defaultdict(dict)
+    if not ids:
+        return out
+    coll = WalletTransaction.get_motor_collection()
+    pipeline = [
+        {"$match": {"user_id": {"$in": ids}, "transaction_type": {"$in": _FUND_FLOW_TYPES}}},
+        {"$group": {"_id": {"u": "$user_id", "t": "$transaction_type"},
+                    "total": {"$sum": {"$toDecimal": "$amount"}}}},
+    ]
+    async for row in coll.aggregate(pipeline):
+        out[str(row["_id"]["u"])][row["_id"]["t"]] = to_decimal(row["total"])
+    return out
+
+
+def _fund_summary(a: dict, balance: Decimal, held: Decimal) -> dict:
+    """Derive the human 'what did they do with the money' view from raw sums."""
+    def g(t: str) -> Decimal:
+        return a.get(t, ZERO)
+
+    given_by_parent = g(TransactionType.ADMIN_DEPOSIT.value)             # + received (incl. opening)
+    pulled_back = -g(TransactionType.ADMIN_WITHDRAW.value)              # stored − → show +
+    transfer_net = g(TransactionType.ADMIN_TRANSFER.value)             # signed
+    deployed_users = -g(TransactionType.ADMIN_FLOAT_DISPENSE.value)    # stored − → show +
+    returned_users = g(TransactionType.ADMIN_FLOAT_REPLENISH.value)    # +
+    games_earned = g(TransactionType.GAMES_HIERARCHY.value)            # +
+    funded_downline = -transfer_net if transfer_net < ZERO else ZERO   # money funded to a child
+    pulled_downline = transfer_net if transfer_net > ZERO else ZERO    # money pulled from a child
+    deployed_total = deployed_users + funded_downline                 # everything pushed downstream
+
+    return {
+        "given_by_parent": _f(given_by_parent),
+        "pulled_back": _f(pulled_back),
+        "deployed_to_users": _f(deployed_users),
+        "returned_from_users": _f(returned_users),
+        "funded_to_downline": _f(funded_downline),
+        "pulled_from_downline": _f(pulled_downline),
+        "games_earned": _f(games_earned),
+        "deployed_total": _f(deployed_total),
+        "current_balance": _f(balance),
+        "held": _f(held),
+    }
+
+
 @router.get("/ledger", response_model=APIResponse[list])
 async def my_ledger(admin: CurrentAdmin, limit: int = Query(50, ge=1, le=200)):
     """The acting user's own fund / commission ledger.
@@ -305,21 +371,88 @@ async def my_members(admin: CurrentAdmin, q: str | None = Query(None)):
     if ids:
         for w in await Wallet.find({"user_id": {"$in": ids}}).to_list():
             wallets[str(w.user_id)] = w
+    agg = await _fund_aggregates(ids)
 
     out: list[dict] = []
     for m in members:
         w = wallets.get(str(m.id))
+        bal = to_decimal(w.available_balance) if w else ZERO
+        held = to_decimal(w.temporary_balance) if w else ZERO
+        s = _fund_summary(agg.get(str(m.id), {}), bal, held)
         out.append(
             {
                 "id": str(m.id),
                 "user_code": m.user_code,
                 "full_name": m.full_name,
                 "role": m.role.value if hasattr(m.role, "value") else str(m.role),
-                "available_balance": _f(w.available_balance) if w else 0.0,
-                "temporary_balance": _f(w.temporary_balance) if w else 0.0,
+                "available_balance": _f(bal),
+                "temporary_balance": _f(held),
+                # Compact fund-usage summary (full breakdown via /members/{id}/fund-detail).
+                "given_by_parent": s["given_by_parent"],   # total the parent/SA gave them
+                "deployed_total": s["deployed_total"],      # total they pushed to users/brokers
             }
         )
     return APIResponse(data=out)
+
+
+@router.get("/members/{member_id}/fund-detail", response_model=APIResponse[dict])
+async def my_member_fund_detail(
+    member_id: str, admin: CurrentAdmin, limit: int = Query(100, ge=1, le=300)
+):
+    """Full fund lifecycle of ONE direct member — how much the parent/SA gave
+    them, how they deployed it to users/brokers, what came back, games
+    commission earned, plus the raw ledger. Read-only.
+
+    Authorization: the member must be a DIRECT fundable downline of the acting
+    user (same rule as ``/members``) — no peeking outside your own subtree.
+    """
+    member = await User.get(PydanticObjectId(str(member_id)))
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    directs = {str(m.id) for m in await _direct_members(admin)}
+    if str(member.id) not in directs:
+        raise HTTPException(status_code=403, detail="Not your direct member")
+
+    w = await wallet_service.get_or_create(member.id)
+    agg = await _fund_aggregates([member.id])
+    summary = _fund_summary(
+        agg.get(str(member.id), {}),
+        to_decimal(w.available_balance),
+        to_decimal(w.temporary_balance),
+    )
+
+    rows = (
+        await WalletTransaction.find(
+            WalletTransaction.user_id == member.id,
+            {"transaction_type": {"$in": _FUND_FLOW_TYPES}},
+        )
+        .sort("-created_at")
+        .limit(limit)
+        .to_list()
+    )
+    ledger = [
+        {
+            "id": str(r.id),
+            "type": r.transaction_type.value if hasattr(r.transaction_type, "value") else str(r.transaction_type),
+            "amount": _f(r.amount),  # signed as stored
+            "narration": r.narration,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+    return APIResponse(
+        data={
+            "member": {
+                "id": str(member.id),
+                "user_code": member.user_code,
+                "full_name": member.full_name,
+                "role": member.role.value if hasattr(member.role, "value") else str(member.role),
+            },
+            "summary": summary,
+            "ledger": ledger,
+        }
+    )
 
 
 # ── Games revenue analytics (SUPER_ADMIN) ────────────────────────────
