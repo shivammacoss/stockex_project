@@ -9,7 +9,6 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
-  AlertTriangle,
   ArrowRight,
   Ticket,
   Coins,
@@ -104,7 +103,9 @@ export default function HousePage() {
               {formatINR(data?.house_wallet_balance ?? 0)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Your (super-admin) main wallet — the counterparty for all games.
+              Live cash in your super-admin main wallet right now — it pays every game win and
+              receives every stake. It also moves when you fund admins/brokers, so it won&apos;t
+              equal the lifetime &ldquo;Games net&rdquo; on the right.
             </div>
           </CardContent>
         </Card>
@@ -129,8 +130,8 @@ export default function HousePage() {
         </Card>
       </div>
 
-      {/* Pending releases + dues */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Pending hierarchy releases (games commission held for admins/brokers) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card className={cn("overflow-hidden", pending > 0 && "border-amber-500/40")}>
           <CardContent className="p-5">
             <div className="flex items-center gap-2">
@@ -144,28 +145,6 @@ export default function HousePage() {
             <Button asChild size="sm" variant="outline" className="mt-3">
               <Link href="/games/earnings">Review &amp; release <ArrowRight className="size-4" /></Link>
             </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground"><AlertTriangle className="size-5" /></span>
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">Platform settlement outstanding</div>
-            </div>
-            <div className="mt-3 text-2xl font-bold tabular-nums">{formatINR(data?.platform_settlement_outstanding ?? 0)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">Total unrecovered user dues (record only — never cut from any admin wallet).</div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground"><Landmark className="size-5" /></span>
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">House settlement outstanding</div>
-            </div>
-            <div className="mt-3 text-2xl font-bold tabular-nums">{formatINR(data?.house_settlement_outstanding ?? 0)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">House shortfall if a payout exceeded the house balance.</div>
           </CardContent>
         </Card>
       </div>
