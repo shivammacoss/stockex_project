@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowDownToLine,
+  ArrowLeftRight,
   ArrowUpToLine,
   Building2,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   Clock,
   Copy,
   CreditCard,
+  Gift,
   Loader2,
   Mail,
   MessageCircle,
@@ -41,6 +43,8 @@ import {
 import { UpiQR, buildUpiUri } from "@/components/common/UpiQR";
 import { WdRulesBanner } from "@/components/common/WdRulesBanner";
 import { AddFundsWizard } from "@/components/wallet/AddFundsWizard";
+import { useGamesWallet } from "@/components/games/useGames";
+import { TransferDialog } from "@/components/games/TransferDialog";
 import { cn, formatINR, pnlColor } from "@/lib/utils";
 import {
   buildMailtoUrl,
@@ -373,6 +377,15 @@ export default function WalletPage() {
           hint="awaiting admin approval"
         />
       </section>
+
+      {/* ── Games & Referral earnings → Main wallet ──────────────
+          Referral rewards + game winnings land in the separate GAMES
+          wallet, not the withdrawable main wallet. Surface that balance
+          here with a one-tap transfer that reuses the exact games→main
+          flow (GamesAPI.withdraw via TransferDialog direction="out"),
+          so mobile users can move winnings across without hunting for
+          the Games section. */}
+      <GamesEarningsCard />
 
       {/* ── Unified Transactions section ─────────────────────────
           Operator request: drop the 4-box layout (Transaction history,
@@ -760,6 +773,68 @@ export default function WalletPage() {
 // ─────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────
+
+/**
+ * Games & Referral earnings → Main wallet.
+ *
+ * A user's REFERRAL rewards and GAMES winnings accrue in a separate
+ * GAMES wallet that is NOT directly withdrawable — to cash out, they
+ * first move the balance into the main wallet. That flow already exists
+ * inside the Games section ("Send to main"), but it was unreachable from
+ * the Wallet page and invisible on mobile. This card mirrors the games
+ * balance (same `useGamesWallet` hook the games screens use) and reuses
+ * the exact same transfer component (`TransferDialog` direction="out" →
+ * `GamesAPI.withdraw` → POST /user/games/wallet/withdraw), which on
+ * success invalidates both the games-wallet and main wallet-summary
+ * queries so both balances refresh in lock-step.
+ */
+function GamesEarningsCard() {
+  const { data: gamesWallet } = useGamesWallet();
+  const [transferOpen, setTransferOpen] = useState(false);
+  const balance = Number(gamesWallet?.balance ?? 0);
+  const hasBalance = balance > 0;
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-atm/15 text-atm ring-1 ring-inset ring-atm/25">
+          <Gift className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold">Games &amp; Referral earnings</h2>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Your referral &amp; game winnings live here. Move them to your Main wallet to withdraw.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Available to transfer
+          </div>
+          <div className="mt-0.5 font-tabular text-2xl font-bold tabular-nums">
+            {formatINR(balance)}
+          </div>
+        </div>
+        {hasBalance ? (
+          <Button onClick={() => setTransferOpen(true)} className="h-11 rounded-xl">
+            <ArrowLeftRight className="size-4" /> Transfer to Main wallet
+          </Button>
+        ) : (
+          <div className="text-[11px] text-muted-foreground sm:text-right">
+            No games or referral earnings yet.
+            <br className="hidden sm:block" /> Play a game or refer a friend to start.
+          </div>
+        )}
+      </div>
+
+      {/* Reuses the exact games→main flow (admin-approved, idempotent,
+          invalidates wallet-summary + games-wallet on success). */}
+      <TransferDialog open={transferOpen} onOpenChange={setTransferOpen} direction="out" />
+    </section>
+  );
+}
 
 /**
  * Unified transactions feed for the wallet page.

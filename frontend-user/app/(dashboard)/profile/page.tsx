@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CreditCard,
   FileText,
+  Gift,
   HelpCircle,
   IdCard,
   KeyRound,
@@ -144,6 +145,19 @@ export default function ProfilePage() {
   return (
     <div className="space-y-4 pb-2">
       <ProfileHeader me={me} />
+
+      {/* Earn — surfaced near the top because the mobile bottom nav and
+          the rest of this screen had NO path to /referral, leaving the
+          "Refer & Earn" page unreachable on phones. */}
+      <ListGroup title="Earn">
+        <ListRowLink
+          icon={Gift}
+          tone="buy"
+          label="Refer & Earn"
+          sub="Share your code, earn rewards"
+          href="/referral"
+        />
+      </ListGroup>
 
       <ListGroup title="Account">
         <ListRow

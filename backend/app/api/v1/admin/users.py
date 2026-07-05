@@ -552,6 +552,20 @@ async def create_user(
     )
     initial_bal = payload.initial_balance or (100_000 if payload.is_demo else 0)
     if initial_bal:
+        # A LIVE opening balance draws from the owning-admin's float — exactly
+        # like a deposit / Add Fund (settlement is the ONLY user-funding that
+        # stays a pure record and never touches an admin wallet). Demo money is
+        # a virtual credit (not real), so it never debits a float. No-op when
+        # ADMIN_FLOAT_ENABLED is off or the owning admin is the SUPER_ADMIN
+        # (SA is unlimited). Insufficient float raises → the opening balance is
+        # blocked (the user is still created; fund the admin, then Add Fund).
+        if not payload.is_demo:
+            from app.services import admin_fund_service
+
+            await admin_fund_service.debit_admin_float_for_user(
+                user.id, initial_bal, reference_type="OPENING_BALANCE", actor_id=admin.id,
+                narration=f"Opening balance for {user.user_code} — float debit",
+            )
         await wallet_service.adjust(
             user.id,
             initial_bal,
