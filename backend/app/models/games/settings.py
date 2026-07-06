@@ -133,6 +133,11 @@ class GameConfig(BaseModel):
     broker_profit_pct: float = 0.0
     sub_broker_profit_pct: float = 0.0
     referrer_profit_pct: float = 0.0
+    # Referrer (the CLIENT who shared the code) is paid ONCE per game per
+    # referred friend — on the friend's FIRST win in this game — when True
+    # (default). False → pay the referrer on EVERY win. Hierarchy (SB/B/Admin)
+    # ALWAYS pays on every win regardless. Super-admin editable per game.
+    referrer_first_win_only: bool = True
 
     # Legacy embedded blocks (kept for backward-compat; unused by v2 flow).
     hierarchy: HierarchyShare = Field(default_factory=HierarchyShare)

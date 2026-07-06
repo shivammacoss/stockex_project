@@ -22,11 +22,17 @@ async def credit_referral_on_win(user: User, win_amount, cfg: GameConfig, *, gam
     """4-level %-of-WINNING model (ACTIVE) — referrer leg.
 
     The CLIENT who referred the player (`player.referred_by`) earns
-    `referrer_profit_pct%` of the gross `win_amount` — the FULL winning amount
-    (payout/prize), NOT payout − stake — funded from the house and credited to
-    the referrer's GAMES wallet on EVERY win. NO first-win gate, NO top-ranks
-    gate, NO earnings-threshold gate (those belonged to the OLD model).
-    Best-effort: wrapped so it can never break settlement."""
+    `referrer_profit_pct%` of the gross `win_amount` (the FULL winning amount —
+    payout/prize, NOT payout − stake), funded from the house → the referrer's
+    GAMES wallet.
+
+    ONE-TIME by default: `cfg.referrer_first_win_only=True` (super-admin
+    editable per game) pays the referrer only on the referred friend's FIRST
+    win in THIS game — gated via `User.game_referral.first_win_by_game[game_key]`
+    — so up to once per game per friend. Set it False to pay on EVERY win.
+    The HIERARCHY leg (SubBroker/Broker/Admin in `distribute_profit_split`) is
+    UNAFFECTED and always pays on every win. Best-effort: wrapped so it can
+    never break settlement."""
     try:
         from app.services import referral_service
 
@@ -36,6 +42,15 @@ async def credit_referral_on_win(user: User, win_amount, cfg: GameConfig, *, gam
         pct = float(cfg.referrer_profit_pct or 0)
         if pct <= 0:
             return
+
+        # One-time-per-game gate (default ON). Once the referrer has been paid
+        # for this friend's first win in this game, further wins pay only the
+        # hierarchy, not the referrer.
+        first_win_only = bool(getattr(cfg, "referrer_first_win_only", True))
+        stats = getattr(user, "game_referral", None)
+        if first_win_only and bool(stats and stats.first_win_by_game.get(game_key)):
+            return
+
         reward = quantize_money(to_decimal(win_amount) * to_decimal(pct) / to_decimal(100))
         if reward <= ZERO:
             return
@@ -50,6 +65,18 @@ async def credit_referral_on_win(user: User, win_amount, cfg: GameConfig, *, gam
             description=f"Referral reward — {user.user_code}'s {game_key} win",
             meta={"kind": "REFERRAL", "referred_user": str(user.id)},
         )
+
+        # Mark the first-win gate so the referrer isn't paid again for this
+        # game (only when first-win-only is on).
+        if first_win_only:
+            from app.models.user import GameReferralStats
+
+            if stats is None:
+                user.game_referral = GameReferralStats(first_win_by_game={game_key: True})
+            else:
+                stats.first_win_by_game[game_key] = True
+                user.game_referral = stats
+            await user.save()
 
         # Rollup on the Referral doc + referrer stats (Refer&Earn page).
         await referral_service.record_referral_earning(

@@ -28,7 +28,7 @@ type GroupKey = "core" | "commission";
 
 // The levers we surface for editing per game (the rest stay at their defaults
 // and can be added later). Numbers are edited as strings then coerced on save.
-const GAME_FIELDS: { key: string; label: string; group: GroupKey }[] = [
+const GAME_FIELDS: { key: string; label: string; group: GroupKey; type?: "bool" }[] = [
   { key: "win_multiplier", label: "Win multiplier", group: "core" },
   { key: "ticket_price", label: "Ticket price (₹)", group: "core" },
   { key: "min_tickets", label: "Min tickets", group: "core" },
@@ -46,6 +46,7 @@ const GAME_FIELDS: { key: string; label: string; group: GroupKey }[] = [
   { key: "broker_profit_pct", label: "Broker %  (of winning amount)", group: "commission" },
   { key: "sub_broker_profit_pct", label: "Sub-broker %  (of winning amount)", group: "commission" },
   { key: "referrer_profit_pct", label: "Referrer %  (client who shared the code)", group: "commission" },
+  { key: "referrer_first_win_only", label: "Referrer paid once per game?", group: "commission", type: "bool" },
 ];
 
 // Presentation-only grouping metadata: heading, help line and icon per section.
@@ -76,11 +77,11 @@ function GameCard({ gameKey, cfg }: { gameKey: string; cfg: any }) {
   const save = useMutation({
     mutationFn: () => {
       const body: any = {};
-      for (const { key } of GAME_FIELDS) {
+      for (const { key, type } of GAME_FIELDS) {
         const raw = form[key];
         if (raw === "" || raw == null) continue;
-        // Time fields stay strings; everything else numeric.
-        body[key] = key.endsWith("_time") ? raw : Number(raw);
+        // Bool → true/false; time fields stay strings; everything else numeric.
+        body[key] = type === "bool" ? raw === "true" : key.endsWith("_time") ? raw : Number(raw);
       }
       return AdminGamesAPI.updateGame(gameKey, body);
     },
@@ -142,13 +143,24 @@ function GameCard({ gameKey, cfg }: { gameKey: string; cfg: any }) {
                 <p className="text-[11px] text-muted-foreground">{hint}</p>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {fields.map(({ key, label }) => (
+                {fields.map(({ key, label, type }) => (
                   <div key={key} className="space-y-1">
                     <Label className="text-xs text-muted-foreground">{label}</Label>
-                    <Input
-                      value={form[key] ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    />
+                    {type === "bool" ? (
+                      <select
+                        value={form[key] === "false" ? "false" : "true"}
+                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="true">Once per game (first win)</option>
+                        <option value="false">Every win</option>
+                      </select>
+                    ) : (
+                      <Input
+                        value={form[key] ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
