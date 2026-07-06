@@ -169,19 +169,19 @@ async def declare_and_settle(game_key: str) -> int:
                 )
                 await wallet_service.house_settle(-prize, game_key=game_key, narration=f"Games payout · {game_key}")
                 b.status = GameBetStatus.WON
-                # 4-level %-of-win-profit split (hierarchy HELD + referrer
-                # games wallet), funded from the house. One ticket per bid, so
-                # profit = prize − this bid's stake (b.amount = cfg.ticket_price).
+                # 4-level %-of-WINNING split (hierarchy HELD + referrer games
+                # wallet), funded from the house. Base = gross winning (the full
+                # prize the winner receives from the bank).
                 try:
                     from app.models.user import User
                     from app.services.games import hierarchy, referral
 
                     u = await User.get(b.user_id)
                     if u is not None:
-                        profit = prize - to_decimal(b.amount)
-                        if profit > 0:
-                            await hierarchy.distribute_profit_split(u, profit, game_key, cfg)
-                            await referral.credit_referral_on_win(u, profit, cfg, game_key=game_key)
+                        win_amount = prize
+                        if win_amount > 0:
+                            await hierarchy.distribute_profit_split(u, win_amount, game_key, cfg)
+                            await referral.credit_referral_on_win(u, win_amount, cfg, game_key=game_key)
                 except Exception:  # noqa: BLE001
                     logger.exception("jackpot_distribute_failed bid=%s", b.id)
             else:

@@ -33,15 +33,18 @@ const GAME_FIELDS: { key: string; label: string; group: GroupKey }[] = [
   { key: "ticket_price", label: "Ticket price (₹)", group: "core" },
   { key: "min_tickets", label: "Min tickets", group: "core" },
   { key: "max_tickets", label: "Max tickets", group: "core" },
-  { key: "fixed_profit", label: "Fixed profit (₹, number games)", group: "core" },
+  { key: "fixed_profit", label: "Winning amount (₹, number games)", group: "core" },
   { key: "top_winners", label: "Top winners (jackpot)", group: "core" },
-  { key: "bidding_start_time", label: "Bidding start (HH:MM:SS)", group: "core" },
-  { key: "bidding_end_time", label: "Bidding end (HH:MM:SS)", group: "core" },
+  // Up/Down uses start/end_time; Number/Bracket/Jackpot use bidding_* + result.
+  { key: "start_time", label: "Betting start — up/down (HH:MM:SS)", group: "core" },
+  { key: "end_time", label: "Betting end — up/down (HH:MM:SS)", group: "core" },
+  { key: "bidding_start_time", label: "Bidding start — number/bracket/jackpot", group: "core" },
+  { key: "bidding_end_time", label: "Bidding end — number/bracket/jackpot", group: "core" },
   { key: "result_time", label: "Result time (HH:MM:SS)", group: "core" },
-  // ── Commission & referral — flat % of each win's profit ─────────────
-  { key: "admin_profit_pct", label: "Admin %  (of win profit)", group: "commission" },
-  { key: "broker_profit_pct", label: "Broker %  (of win profit)", group: "commission" },
-  { key: "sub_broker_profit_pct", label: "Sub-broker %  (of win profit)", group: "commission" },
+  // ── Commission & referral — flat % of the gross WINNING amount ───────
+  { key: "admin_profit_pct", label: "Admin %  (of winning amount)", group: "commission" },
+  { key: "broker_profit_pct", label: "Broker %  (of winning amount)", group: "commission" },
+  { key: "sub_broker_profit_pct", label: "Sub-broker %  (of winning amount)", group: "commission" },
   { key: "referrer_profit_pct", label: "Referrer %  (client who shared the code)", group: "commission" },
 ];
 
@@ -55,8 +58,8 @@ const FIELD_GROUPS: { key: GroupKey; title: string; hint: string; icon: typeof G
   },
   {
     key: "commission",
-    title: "Commission & referral — % of win profit",
-    hint: "On every win: profit = win − stake. Each level gets its % of the profit. e.g. ₹300 ticket → ₹550 win → ₹250 profit → Admin gets [Admin%] of ₹250, Broker gets [Broker%] of ₹250, etc.",
+    title: "Commission & referral — % of winning amount",
+    hint: "On every win, each level gets its % of the FULL winning amount (payout/prize — NOT win − stake), funded from the house. e.g. ₹600 ticket → ₹1000 win → Sub-broker gets [Sub-broker%] of ₹1000, Admin gets [Admin%] of ₹1000, referral [Referrer%] of ₹1000.",
     icon: GitBranch,
   },
 ];

@@ -147,18 +147,18 @@ async def declare_and_settle() -> int:
             await wallet_service.house_settle(-payout, game_key=GAME_KEY, narration="Games payout · bracket")
             trade.status = GameBetStatus.WON
             trade.payout = to_decimal128(payout)
-            # 4-level %-of-win-profit split (hierarchy HELD + referrer games
-            # wallet), funded from the house. profit = payout − stake.
+            # 4-level %-of-WINNING split (hierarchy HELD + referrer games
+            # wallet), funded from the house. Base = gross winning (full payout).
             try:
                 from app.models.user import User
                 from app.services.games import hierarchy, referral
 
                 u = await User.get(trade.user_id)
                 if u is not None:
-                    profit = to_decimal(payout) - to_decimal(trade.amount)
-                    if profit > 0:
-                        await hierarchy.distribute_profit_split(u, profit, GAME_KEY, cfg)
-                        await referral.credit_referral_on_win(u, profit, cfg, game_key=GAME_KEY)
+                    win_amount = to_decimal(payout)
+                    if win_amount > 0:
+                        await hierarchy.distribute_profit_split(u, win_amount, GAME_KEY, cfg)
+                        await referral.credit_referral_on_win(u, win_amount, cfg, game_key=GAME_KEY)
             except Exception:  # noqa: BLE001
                 logger.exception("bracket_distribute_win_failed trade=%s", trade.id)
         else:

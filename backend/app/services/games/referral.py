@@ -18,14 +18,15 @@ from app.utils.decimal_utils import ZERO, quantize_money, to_decimal
 logger = logging.getLogger(__name__)
 
 
-async def credit_referral_on_win(user: User, profit, cfg: GameConfig, *, game_key: str) -> None:
-    """4-level %-of-win-profit model (ACTIVE) — referrer leg.
+async def credit_referral_on_win(user: User, win_amount, cfg: GameConfig, *, game_key: str) -> None:
+    """4-level %-of-WINNING model (ACTIVE) — referrer leg.
 
     The CLIENT who referred the player (`player.referred_by`) earns
-    `referrer_profit_pct%` of the win `profit`, funded from the house and
-    credited to the referrer's GAMES wallet — on EVERY win. NO first-win gate,
-    NO top-ranks gate, NO earnings-threshold gate (those belonged to the OLD
-    model). Best-effort: wrapped so it can never break settlement."""
+    `referrer_profit_pct%` of the gross `win_amount` — the FULL winning amount
+    (payout/prize), NOT payout − stake — funded from the house and credited to
+    the referrer's GAMES wallet on EVERY win. NO first-win gate, NO top-ranks
+    gate, NO earnings-threshold gate (those belonged to the OLD model).
+    Best-effort: wrapped so it can never break settlement."""
     try:
         from app.services import referral_service
 
@@ -35,7 +36,7 @@ async def credit_referral_on_win(user: User, profit, cfg: GameConfig, *, game_ke
         pct = float(cfg.referrer_profit_pct or 0)
         if pct <= 0:
             return
-        reward = quantize_money(to_decimal(profit) * to_decimal(pct) / to_decimal(100))
+        reward = quantize_money(to_decimal(win_amount) * to_decimal(pct) / to_decimal(100))
         if reward <= ZERO:
             return
 

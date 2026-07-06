@@ -160,18 +160,19 @@ async def distribute_win_brokerage(
 
 
 async def distribute_profit_split(
-    user: User, profit, game_key: str, cfg: GameConfig
+    user: User, win_amount, game_key: str, cfg: GameConfig
 ) -> None:
-    """4-level %-of-win-profit model (ACTIVE) — hierarchy leg.
+    """4-level %-of-WINNING model (ACTIVE) — hierarchy leg.
 
-    Each surviving role earns a FLAT % of the win `profit` (payout − stake),
+    Each surviving role earns a FLAT % of the gross `win_amount` — the FULL
+    winning amount (payout/prize the user receives), NOT payout − stake —
     funded from the house and credited to the recipient's HELD (temporary)
     wallet. Reuses the same cascade as `distribute_win_brokerage` (a missing
     role's share bubbles up, honoring `sub_broker_share_to_broker`) and the
     same eligibility gate (`receives_hierarchy_brokerage=False` → the share
     stays in the house). The referrer leg is handled separately in
     `referral.credit_referral_on_win`."""
-    P = quantize_money(to_decimal(profit))
+    P = quantize_money(to_decimal(win_amount))
     if P <= ZERO or getattr(user, "is_demo", False):
         return
     chain = await _resolve_chain(user)

@@ -212,66 +212,65 @@ def _jackpot_prizes() -> dict[str, float]:
 # Per-game defaults (spec §2.3). Only the fields that differ from GameConfig
 # defaults are listed; the rest fall back to the GameConfig field defaults.
 _DEFAULTS: dict[str, dict[str, Any]] = {
+    # Incentive (sub_broker/broker/admin_profit_pct) + referrer_profit_pct are a
+    # FLAT % of the gross WINNING amount (the full payout/prize), funded from the
+    # house. Betting is open only in [start/bidding window], results at result_time.
     "niftyUpDown": {
-        "win_multiplier": 1.95, "round_duration": 900, "brokerage_percent": 5.0,
-        "start_time": "09:15:00", "end_time": "15:45:00", "ticket_price": 300.0,
-        "profit_sub_broker_percent": 10.0, "profit_broker_percent": 20.0, "profit_admin_percent": 30.0,
-        "referral_win_percent": 10.0,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        # ticket 600 · winning = 600 × 1.66667 = 1000
+        "win_multiplier": 1.66667, "round_duration": 900, "brokerage_percent": 5.0,
+        "start_time": "09:15:00", "end_time": "15:00:00", "ticket_price": 600.0,
+        # incentive on WINNING → SB 5% / B 1% / A 1% · referral 5%
+        "sub_broker_profit_pct": 5.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 5.0,
     },
     "btcUpDown": {
-        "win_multiplier": 1.95, "round_duration": 900, "brokerage_percent": 5.0,
-        "start_time": "00:00:01", "end_time": "23:45:00", "ticket_price": 300.0,
+        # ticket 600 · winning = 600 × 1.66667 = 1000 · betting 00:00–22:29:59
+        "win_multiplier": 1.66667, "round_duration": 900, "brokerage_percent": 5.0,
+        "start_time": "00:00:00", "end_time": "22:30:00", "ticket_price": 600.0,
         "allowed_expiry_times": [60, 120, 300, 600, 900], "default_expiry_time": 60,
-        "profit_sub_broker_percent": 5.0, "profit_broker_percent": 1.0, "profit_admin_percent": 1.0,
-        "referral_win_percent": 10.0,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        "sub_broker_profit_pct": 5.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 5.0,
     },
     "niftyNumber": {
-        "win_multiplier": 9.0, "fixed_profit": 4000.0, "ticket_price": 300.0,
+        # ticket 675 · winning = 10000 gross per ticket (675 × 14.81482 ≈ 10000)
+        "win_multiplier": 14.81482, "fixed_profit": 10000.0, "ticket_price": 675.0,
         "bets_per_day": 10, "max_tickets_per_number": 2, "all_decimals": False,
-        "bidding_start_time": "09:15:00", "bidding_end_time": "15:24:00",
-        "result_time": "15:45:00", "max_bid_time": "15:40:00",
-        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
-        "referral_win_percent": 10.0,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        "bidding_start_time": "09:15:00", "bidding_end_time": "15:15:00",
+        "result_time": "15:45:00", "max_bid_time": "15:14:00",
+        # incentive on WINNING → SB 8% / B 1% / A 1% · referral 10%
+        "sub_broker_profit_pct": 8.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 10.0,
     },
     "btcNumber": {
-        "win_multiplier": 9.0, "fixed_profit": 4000.0, "ticket_price": 300.0,
+        # ticket 675 · winning = 10000 gross per ticket · betting 00:00–21:00, result 23:00
+        "win_multiplier": 14.81482, "fixed_profit": 10000.0, "ticket_price": 675.0,
         "bets_per_day": 10, "max_tickets_per_number": 2, "all_decimals": True,
-        "bidding_start_time": "00:00:01", "bidding_end_time": "23:24:00",
-        "result_time": "23:30:00", "max_bid_time": "23:25:00",
-        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
-        "referral_win_percent": 10.0,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        "bidding_start_time": "00:00:00", "bidding_end_time": "21:00:00",
+        "result_time": "23:00:00", "max_bid_time": "20:59:00",
+        "sub_broker_profit_pct": 8.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 10.0,
     },
     "niftyBracket": {
-        "ticket_price": 1000.0, "win_multiplier": 1.9, "bracket_gap": 20.0,
+        # ticket 1100 · winning = 1100 × 1.818189 ≈ 2000 · window 09:15–15:29:59, result 15:30
+        "ticket_price": 1100.0, "win_multiplier": 1.818189, "bracket_gap": 20.0,
         "bracket_gap_type": "point", "bracket_anchor_to_spot": True,
         "bracket_session_close_rule": "directionVsEntry", "expiry_minutes": 5,
-        "bidding_start_time": "09:15:29", "bidding_end_time": "15:29:00",
-        "result_time": "15:31:00", "brokerage_percent": 5.0,
-        "profit_sub_broker_percent": 10.0, "profit_broker_percent": 20.0, "profit_admin_percent": 30.0,
-        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 1.0,
-        "referral_win_percent": 2.0,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        "bidding_start_time": "09:15:00", "bidding_end_time": "15:29:59",
+        "result_time": "15:30:00", "brokerage_percent": 5.0,
+        # incentive on WINNING → SB 2.5% / B 0.5% / A 0.5% · referral 2.5%
+        "sub_broker_profit_pct": 2.5, "broker_profit_pct": 0.5, "admin_profit_pct": 0.5, "referrer_profit_pct": 2.5,
     },
     "niftyJackpot": {
-        "top_winners": 20, "ticket_price": 300.0, "bids_per_day": 100,
-        "max_tickets_per_request": 1, "bidding_start_time": "00:00:00",
-        "bidding_end_time": "23:59:00", "result_time": "15:45:00",
+        # ticket 1100 · one ticket at once · winning from bank · top 20 winners
+        "top_winners": 20, "ticket_price": 1100.0, "bids_per_day": 100,
+        "max_tickets_per_request": 1, "bidding_start_time": "09:15:00",
+        "bidding_end_time": "15:00:00", "result_time": "15:45:00", "max_bid_time": "14:59:00",
         "prize_percentages": _jackpot_prizes(),
-        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
-        "referral_win_percent": 5.0, "referral_top_ranks_only": True, "referral_top_ranks_count": 3,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        # incentive on WINNING (prize) → SB 8% / B 1% / A 1% · referral 5% (flat)
+        "sub_broker_profit_pct": 8.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 5.0,
     },
     "btcJackpot": {
-        "top_winners": 20, "ticket_price": 500.0, "bids_per_day": 200,
+        # ticket 1100 · betting 00:00–21:00, result 23:00 · top 20 winners
+        "top_winners": 20, "ticket_price": 1100.0, "bids_per_day": 200,
         "max_tickets_per_request": 1, "bidding_start_time": "00:00:00",
-        "bidding_end_time": "23:29:00", "result_time": "23:30:00",
+        "bidding_end_time": "21:00:00", "result_time": "23:00:00", "max_bid_time": "20:59:00",
         "prize_percentages": _jackpot_prizes(),
-        "gross_prize_sub_broker_percent": 2.0, "gross_prize_broker_percent": 1.0, "gross_prize_admin_percent": 0.5,
-        "referral_win_percent": 5.0, "referral_top_ranks_only": True, "referral_top_ranks_count": 3,
-        "admin_profit_pct": 3.0, "broker_profit_pct": 2.0, "sub_broker_profit_pct": 1.0, "referrer_profit_pct": 1.0,
+        "sub_broker_profit_pct": 8.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 5.0,
     },
 }

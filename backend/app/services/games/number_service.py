@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 _RESULT_GRACE_SEC = 20
 
 
-async def _distribute_win(user_id, profit, game_key: str, cfg) -> None:
-    """4-level %-of-win-profit split (hierarchy HELD + referrer games wallet),
-    funded from the house. profit = payout − stake (per winning bet)."""
+async def _distribute_win(user_id, win_amount, game_key: str, cfg) -> None:
+    """4-level %-of-WINNING split (hierarchy HELD + referrer games wallet),
+    funded from the house. Base = gross winning amount (the full payout)."""
     try:
         from app.models.user import User
         from app.services.games import hierarchy, referral
@@ -42,10 +42,10 @@ async def _distribute_win(user_id, profit, game_key: str, cfg) -> None:
         user = await User.get(user_id)
         if user is None:
             return
-        if to_decimal(profit) <= 0:
+        if to_decimal(win_amount) <= 0:
             return
-        await hierarchy.distribute_profit_split(user, profit, game_key, cfg)
-        await referral.credit_referral_on_win(user, profit, cfg, game_key=game_key)
+        await hierarchy.distribute_profit_split(user, win_amount, game_key, cfg)
+        await referral.credit_referral_on_win(user, win_amount, cfg, game_key=game_key)
     except Exception:  # noqa: BLE001
         logger.exception("number_distribute_win_failed user=%s game=%s", user_id, game_key)
 
@@ -177,10 +177,8 @@ async def declare_and_settle(game_key: str) -> int:
                 await wallet_service.house_settle(-payout, game_key=game_key, narration=f"Games payout · {game_key} number")
                 bet.status = GameBetStatus.WON
                 bet.payout = to_decimal128(payout)
-                # 4-level %-of-win-profit split. profit = payout − this bet's
-                # total stake (bet.amount = ticket_price × quantity).
-                profit = to_decimal(payout) - to_decimal(bet.amount)
-                await _distribute_win(bet.user_id, profit, game_key, cfg)
+                # 4-level %-of-WINNING split — base = gross winning (full payout).
+                await _distribute_win(bet.user_id, to_decimal(payout), game_key, cfg)
             else:
                 bet.status = GameBetStatus.LOST
                 bet.payout = to_decimal128(Decimal("0"))

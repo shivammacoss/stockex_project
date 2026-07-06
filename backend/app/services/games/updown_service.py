@@ -32,6 +32,7 @@ from app.models.games.settings import GameSettings
 from app.services.games import price_resolver, wallet_service
 from app.services.games.common import (
     ist_datetime_for_day,
+    parse_hms,
     window_open_close_ist,
     window_number_for,
 )
@@ -59,8 +60,8 @@ def _resolver_for(game_key: str):
 
 
 async def _distribute_win(user_id, stake, payout, game_key: str, cfg) -> None:
-    """4-level %-of-win-profit split (hierarchy HELD + referrer games wallet),
-    funded from the house. profit = payout − stake."""
+    """4-level %-of-WINNING split (hierarchy HELD + referrer games wallet),
+    funded from the house. Base = gross winning amount (the full payout)."""
     try:
         from app.models.user import User
         from app.services.games import hierarchy, referral
@@ -68,11 +69,11 @@ async def _distribute_win(user_id, stake, payout, game_key: str, cfg) -> None:
         user = await User.get(user_id)
         if user is None:
             return
-        profit = to_decimal(payout) - to_decimal(stake)
-        if profit <= 0:
+        win_amount = to_decimal(payout)  # gross winning (NOT payout − stake)
+        if win_amount <= 0:
             return
-        await hierarchy.distribute_profit_split(user, profit, game_key, cfg)
-        await referral.credit_referral_on_win(user, profit, cfg, game_key=game_key)
+        await hierarchy.distribute_profit_split(user, win_amount, game_key, cfg)
+        await referral.credit_referral_on_win(user, win_amount, cfg, game_key=game_key)
     except Exception:  # noqa: BLE001 — never break settlement on commission
         logger.exception("updown_distribute_win_failed user=%s game=%s", user_id, game_key)
 
@@ -107,6 +108,13 @@ async def place_bet(
 
     # Window must be currently open.
     now = now_ist()
+    # Hard betting window per config — betting is only open in
+    # [start_time, end_time) (spec: Nifty 09:15→15:00, BTC 00:00→22:30).
+    tod = now.time()
+    if (cfg.start_time and tod < parse_hms(cfg.start_time)) or (
+        cfg.end_time and tod >= parse_hms(cfg.end_time)
+    ):
+        raise GameWindowClosedError()
     current = window_number_for(now, cfg.start_time, cfg.round_duration)
     if current <= 0:
         raise GameWindowClosedError()
