@@ -20,8 +20,8 @@ export default function GamePage() {
 
   return (
     <div className="space-y-4">
-      <Link href="/games" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> All games
+      <Link href="/games" className="inline-flex items-center gap-1 text-sm font-bold text-foreground hover:opacity-80">
+        <ArrowLeft className="size-4" strokeWidth={2.5} /> All games
       </Link>
       {meta.mechanic === "updown" && <GameScreen id={id} />}
       {meta.mechanic === "number" && <NumberScreen id={id} />}
