@@ -25,7 +25,13 @@ BINANCE_KLINES = "https://api.binance.com/api/v3/klines"
 
 
 # ── NIFTY ────────────────────────────────────────────────────────────
+_NIFTY_LAST_KEY = "games:nifty:last"
+_NIFTY_LAST_TTL = 259200  # 3 days — survives a weekend gap
+
+
 async def nifty_ltp() -> Decimal | None:
+    """LIVE NIFTY LTP (None when no live price). Used by SETTLEMENT — must
+    never return a stale price, or a game could settle at a wrong number."""
     from app.services import market_data_service
 
     v = market_data_service.get_ltp_instant(str(NIFTY_TOKEN))
@@ -38,6 +44,48 @@ async def nifty_ltp() -> Decimal | None:
             return ltp
     except Exception:
         logger.debug("nifty_ltp_quote_failed", exc_info=True)
+    return None
+
+
+async def nifty_ltp_display() -> Decimal | None:
+    """DISPLAY NIFTY price for the games UI — ALWAYS returns a number once one
+    has ever been seen. On a live tick it refreshes a persistent last-known
+    cache; when the feed is down / market closed / this is a cold non-leader
+    worker, it returns that last-known price so the price never blanks to
+    "Waiting for feed". NOT for settlement (see `nifty_ltp`)."""
+    from app.core.redis_client import cache_get, cache_set
+
+    live = await nifty_ltp()
+    if live and live > 0:
+        try:
+            await cache_set(_NIFTY_LAST_KEY, str(live), ttl_sec=_NIFTY_LAST_TTL)
+        except Exception:
+            logger.debug("nifty_ltp_cache_set_failed", exc_info=True)
+        return live
+
+    # Fallback 1 — our own persistent last-known (refreshed on every live tick).
+    try:
+        last = await cache_get(_NIFTY_LAST_KEY)
+        if last:
+            lv = to_decimal(last)
+            if lv > 0:
+                return lv
+    except Exception:
+        logger.debug("nifty_ltp_last_cache_failed", exc_info=True)
+
+    # Fallback 2 — the market-data service's own persistent last-quote
+    # (`mdlast:{token}`), which holds the last session's close even when the
+    # live feed serves ltp=0 (market closed / feed down). This is what keeps a
+    # price on screen all day.
+    try:
+        md = await cache_get(f"mdlast:{NIFTY_TOKEN}")
+        if isinstance(md, dict):
+            lv = to_decimal(md.get("ltp") or 0)
+            if lv > 0:
+                await cache_set(_NIFTY_LAST_KEY, str(lv), ttl_sec=_NIFTY_LAST_TTL)
+                return lv
+    except Exception:
+        logger.debug("nifty_ltp_mdlast_failed", exc_info=True)
     return None
 
 

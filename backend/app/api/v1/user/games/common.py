@@ -102,7 +102,9 @@ async def live_price(_: CurrentUser):
     """Live NIFTY + BTC price for the games UI (cheap; client polls ~3s)."""
     from app.services.games import price_resolver
 
-    nifty = await price_resolver.nifty_ltp()
+    # Display resolvers keep the last-known price on screen even after market
+    # close / feed drop — the UI should never blank to "Waiting for feed".
+    nifty = await price_resolver.nifty_ltp_display()
     btc = await price_resolver.btc_ltp()
     return APIResponse(
         data={
