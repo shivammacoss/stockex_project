@@ -43,7 +43,11 @@ async def today(game_id: str, user: CurrentUser):
         data={
             "bids": [
                 {"id": str(b.id), "predicted": str(b.predicted_price), "status": b.status.value,
-                 "rank": b.rank, "prize": str(b.prize)}
+                 "rank": b.rank, "prize": str(b.prize),
+                 # amount staked + the exact millisecond-precise placement time
+                 # so the user sees WHEN they bet + HOW MUCH (ties break by this).
+                 "amount": str(b.amount), "tickets": b.ticket_count,
+                 "created_at": b.created_at.isoformat() if b.created_at else None}
                 for b in rows
             ],
             "totalPool": str(bank.total_stake) if bank else "0",

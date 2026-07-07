@@ -214,9 +214,33 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
               Closest {cfg?.top_winners ?? 20} predictions to the locked price share the pool.
             </p>
             {(today?.bids || []).length > 0 && (
-              <div className="border-t border-border pt-3 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Your bids today:</span>{" "}
-                {today.bids.map((b: any) => Number(b.predicted).toLocaleString("en-IN")).join(", ")}
+              <div className="border-t border-border pt-3">
+                <div className="mb-2 text-xs font-bold text-foreground">
+                  Your bids today ({today.bids.length})
+                </div>
+                <div className="space-y-1.5">
+                  {today.bids.map((b: any) => (
+                    <div key={b.id} className="rounded-lg border border-border/60 bg-card p-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-bold tabular-nums">
+                          {Number(b.predicted).toLocaleString("en-IN")}
+                        </span>
+                        <span className="font-bold tabular-nums text-atm">{formatINR(b.amount)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                        {/* millisecond-precise placement time (ties break by this) */}
+                        <span className="tabular-nums">⏱ {fmtBidTime(b.created_at)}</span>
+                        {b.rank ? (
+                          <span className="font-semibold text-foreground">
+                            Rank #{b.rank}{Number(b.prize) > 0 ? ` · +${formatINR(b.prize)}` : ""}
+                          </span>
+                        ) : (
+                          <span>Pending result</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
@@ -224,4 +248,18 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
       </div>
     </div>
   );
+}
+
+// Millisecond-precise placement time in IST, e.g. "13:46:18.053" — the exact
+// instant the bid landed (jackpot ties break by this, so ms matters).
+function fmtBidTime(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const hms = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false, timeZone: "Asia/Kolkata",
+  });
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${hms}.${ms}`;
 }
