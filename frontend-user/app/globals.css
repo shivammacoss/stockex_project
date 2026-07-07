@@ -28,27 +28,27 @@
     --border: 220 13% 91%;               /* #e2e8f0 soft edge */
     --input: 220 13% 91%;
 
-    /* Brand indigo — #4338CA (indigo-700) */
-    --ring: 243 75% 50%;
-    --primary: 243 75% 50%;               /* #4338CA — deep indigo */
-    --primary-foreground: 0 0% 100%;      /* white on blue */
+    /* Brand GREEN — #15803D (green-700) on gray neutrals */
+    --ring: 142 72% 33%;
+    --primary: 142 72% 33%;               /* #15803D — deep green */
+    --primary-foreground: 0 0% 100%;      /* white on green */
 
-    --secondary: 243 30% 96%;             /* faint indigo chip bg */
-    --secondary-foreground: 243 75% 50%;
+    --secondary: 142 30% 95%;             /* faint green chip bg */
+    --secondary-foreground: 142 72% 27%;
     --destructive: 0 72% 51%;             /* red-600 */
     --destructive-foreground: 0 0% 100%;
-    --accent: 243 30% 96%;
-    --accent-foreground: 243 75% 50%;
+    --accent: 142 30% 95%;
+    --accent-foreground: 142 72% 27%;
 
-    /* Trading-domain semantic colors — Zerodha-tuned */
-    --buy: 142 65% 38%;                   /* #25a25a */
+    /* Trading-domain semantic colors — vivid GREEN buy / red sell */
+    --buy: 142 72% 40%;                   /* #16a34a — vivid green */
     --sell: 354 70% 54%;                  /* #e04f5f */
-    --profit: 142 65% 38%;
+    --profit: 142 72% 40%;
     --loss: 354 70% 54%;
     --buy-foreground: 0 0% 100%;
     --sell-foreground: 0 0% 100%;
 
-    --info: 243 75% 50%;
+    --info: 142 72% 33%;                  /* green info to match brand */
     --info-foreground: 0 0% 100%;
 
     --atm: 38 92% 50%;
@@ -73,25 +73,25 @@
     --border: 224 20% 18%;
     --input: 224 20% 18%;
 
-    --ring: 243 75% 65%;
-    --primary: 243 75% 65%;               /* lighter indigo for dark */
+    --ring: 142 64% 48%;
+    --primary: 142 64% 48%;               /* #22c55e — green for dark */
     --primary-foreground: 224 71% 4%;
 
-    --secondary: 224 30% 18%;
-    --secondary-foreground: 243 75% 80%;
+    --secondary: 142 20% 20%;
+    --secondary-foreground: 142 64% 80%;
     --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 100%;
-    --accent: 224 30% 18%;
-    --accent-foreground: 243 75% 80%;
+    --accent: 142 20% 20%;
+    --accent-foreground: 142 64% 80%;
 
-    --buy: 142 60% 50%;
+    --buy: 142 64% 52%;                   /* vivid green (dark) */
     --sell: 354 78% 62%;
-    --profit: 142 60% 50%;
+    --profit: 142 64% 52%;
     --loss: 354 78% 62%;
     --buy-foreground: 224 71% 4%;
     --sell-foreground: 0 0% 100%;
 
-    --info: 243 75% 65%;
+    --info: 142 64% 48%;
     --info-foreground: 224 71% 4%;
 
     --atm: 38 92% 60%;
@@ -106,6 +106,10 @@
   html, body { @apply h-full; }
   body {
     @apply bg-background text-foreground antialiased;
+    /* Bolder everywhere (user request) — lift the whole app's base weight so
+       nothing renders thin. Utility overrides below raise the weight floor of
+       explicit `font-normal/medium` classes too. */
+    font-weight: 600;
     /* Inter is now the primary font (loaded via next/font in layout.tsx).
        Light contextual alts (`cv11`) give Inter a more open `1`/`l` for
        financial UIs; `ss01` opens the storey of `a`/`g` so they don't
@@ -124,9 +128,16 @@
      Match the ChatGPT / Linear cadence: tight tracking on large
      display sizes, neutral-to-positive tracking on labels. */
   h1, h2, h3, h4 {
-    @apply font-bold tracking-tight text-foreground;
+    @apply font-extrabold tracking-tight text-foreground;
     text-wrap: balance;
   }
+
+  /* ── Bold floor (user request) ──────────────────────────────────────
+     Raise the weight of the thin utility classes so the whole user app
+     reads bold. font-semibold/bold are left alone (already heavy). */
+  .font-thin, .font-extralight, .font-light { font-weight: 500 !important; }
+  .font-normal { font-weight: 500 !important; }
+  .font-medium { font-weight: 600 !important; }
 }
 
 /* ── Utilities ───────────────────────────────────────────────────── */
@@ -160,10 +171,10 @@
     letter-spacing: 0.01em;
   }
   .typo-body {
-    @apply text-sm font-normal leading-normal text-foreground;
+    @apply text-sm font-medium leading-normal text-foreground;
   }
   .typo-caption {
-    @apply text-xs font-medium text-muted-foreground;
+    @apply text-xs font-semibold text-muted-foreground;
   }
   .typo-label {
     @apply text-[10px] font-semibold uppercase text-muted-foreground;

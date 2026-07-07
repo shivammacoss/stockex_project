@@ -170,6 +170,15 @@ class Settings(BaseSettings):
     INFOWAY_DEFAULT_STOCKS: str = "AAPL,MSFT,GOOGL,AMZN,TSLA,NVDA,META,NFLX"
     INFOWAY_DEFAULT_INDICES: str = "SPX500,NAS100,US30,UK100,DE40,JPN225,HK50"
 
+    # Binance — free, keyless public crypto price feed. Replaces the Infoway
+    # `crypto` channel: ticks flow into the SAME shared tick cache and the SAME
+    # `infoway:tick:*` Redis channel that market-data / user-WS / the games BTC
+    # resolver already read, so no consumer changes. Forex / metals / energy
+    # stay on Infoway (idle unless INFOWAY_API_KEY is set — key removed = off).
+    BINANCE_ENABLED: bool = True
+    BINANCE_WS_BASE: str = "wss://stream.binance.com:9443"
+    BINANCE_SYMBOLS: str = "BTCUSDT,ETHUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,BNBUSDT"
+
     # ── Email / SMS ──────────────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

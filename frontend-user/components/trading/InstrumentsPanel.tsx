@@ -89,10 +89,13 @@ const BUCKETS: Bucket[] = [
 // Mirrors WALLET_BUCKETS in MobileInstrumentsBar so desktop + mobile filter
 // identically.
 const WALLET_BUCKETS: Record<string, string[]> = {
-  NSE_BSE: ["favorites", "all", "nse_eq", "nse_fut", "nse_opt", "bse_eq", "bse_fut", "bse_opt", "indices", "stocks"],
-  MCX: ["favorites", "all", "mcx_fut", "mcx_opt", "commodities"],
-  CRYPTO: ["favorites", "all", "crypto"],
-  FOREX: ["favorites", "all", "forex"],
+  // Only the wallet's OWN segment chips (+ Favorites). Dropped the generic
+  // "all" and the cross-asset "indices"/"stocks" tabs — a NSE/BSE wallet should
+  // not surface international Infoway indices/stocks, and "All" mixed segments.
+  NSE_BSE: ["favorites", "nse_eq", "nse_fut", "nse_opt", "bse_eq", "bse_fut", "bse_opt"],
+  MCX: ["favorites", "mcx_fut", "mcx_opt", "commodities"],
+  CRYPTO: ["favorites", "crypto"],
+  FOREX: ["favorites", "forex"],
 };
 
 // First browse bucket to land on for each wallet (so opening a wallet shows

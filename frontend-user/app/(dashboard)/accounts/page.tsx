@@ -133,10 +133,11 @@ export default function AccountsPage() {
                       className="col-span-1"
                       onClick={() => {
                         if (!isPrimary) setPrimary.mutate(kind);
-                        // Open the trading terminal scoped to THIS wallet — the
-                        // instruments panel filters to its segments and the
-                        // chart defaults to a matching market.
-                        router.push(`/terminal?wallet=${encodeURIComponent(kind)}`);
+                        // Open the MARKET (watchlist) page scoped to THIS wallet
+                        // — the instrument chips filter to its segments. From
+                        // there tapping a row opens the trade card. (Was
+                        // /terminal — user wants Trade → market page, not chart.)
+                        router.push(`/marketwatch?wallet=${encodeURIComponent(kind)}`);
                       }}
                     >
                       <LineChart className="size-4" /> Trade

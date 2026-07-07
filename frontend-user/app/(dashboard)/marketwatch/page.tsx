@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { MarketAccountBar } from "@/components/trading/MarketAccountBar";
 import { MobileInstrumentsBar } from "@/components/trading/MobileInstrumentsBar";
@@ -35,7 +36,15 @@ export default function MarketsPage() {
     queryFn: () => AccountsAPI.list(),
     staleTime: 5000,
   });
-  const primaryKind = accounts?.primary_wallet_kind ?? "NSE_BSE";
+  // A `?wallet=` param (Accounts → Trade) wins so the segment the user tapped
+  // shows immediately; otherwise fall back to their primary wallet.
+  const searchParams = useSearchParams();
+  const walletParam = searchParams.get("wallet");
+  const VALID_KINDS = ["NSE_BSE", "MCX", "CRYPTO", "FOREX"];
+  const primaryKind =
+    walletParam && VALID_KINDS.includes(walletParam)
+      ? walletParam
+      : accounts?.primary_wallet_kind ?? "NSE_BSE";
 
   return (
     // Full-bleed on mobile: negative margins cancel the dashboard layout's

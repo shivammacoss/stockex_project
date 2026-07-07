@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatCoins as formatINR } from "@/lib/games/coins";
@@ -14,20 +14,28 @@ import { isBiddingOpen } from "@/lib/games/window";
 import { useGameConfig, useGamesPrice, useGamesWallet } from "@/components/games/useGames";
 import { GameHowTo, GameStatePill, StatChip, LiveDot, LivePrice } from "@/components/games/bits";
 
-const QUICK_ADD = [500, 1000, 5000];
+// Quick ticket-count picks.
+const QUICK_TICKETS = [1, 2, 5, 10];
 
 export function BracketScreen({ id }: { id: GameUiId }) {
   const cfg = useGameConfig(id);
   const { data: wallet } = useGamesWallet();
   const { data: price } = useGamesPrice(1000);
   const qc = useQueryClient();
+  // Direction is stored internally as BUY (up) / SELL (down) — the API contract
+  // is unchanged — but shown to the user as UP / DOWN to remove confusion.
   const [side, setSide] = useState<"BUY" | "SELL" | null>(null);
-  const [amount, setAmount] = useState("");
+  const [tickets, setTickets] = useState(1);
 
   const live = price?.nifty ? Number(price.nifty) : 0;
   const gap = Number(cfg?.bracket_gap ?? 20);
   const open = cfg ? isBiddingOpen(cfg.bidding_start_time, cfg.bidding_end_time) : false;
   const balance = Number(wallet?.balance ?? 0);
+
+  // Fixed ticket price (no free-form amount). Amount = tickets × ticket price.
+  const ticketPrice = Number(cfg?.ticket_price ?? 1100);
+  const amount = tickets * ticketPrice;
+  const maxTickets = ticketPrice > 0 ? Math.max(1, Math.floor(balance / ticketPrice)) : 1;
 
   const { data: active } = useQuery({
     queryKey: ["games", "bets", "bracket-active"],
@@ -37,14 +45,14 @@ export function BracketScreen({ id }: { id: GameUiId }) {
 
   const place = useMutation({
     mutationFn: async () => {
-      if (!side) throw new Error("Pick BUY or SELL");
-      if (!(Number(amount) > 0)) throw new Error("Enter an amount");
-      if (Number(amount) > balance) throw new Error("Insufficient games balance");
-      return GamesAPI.bracketTrade({ prediction: side, amount: Number(amount), entryPrice: live });
+      if (!side) throw new Error("Pick UP or DOWN");
+      if (!(tickets > 0)) throw new Error("Select at least 1 ticket");
+      if (amount > balance) throw new Error("Insufficient games balance");
+      return GamesAPI.bracketTrade({ prediction: side, amount, entryPrice: live });
     },
     onSuccess: () => {
       toast.success("Bracket placed");
-      setAmount(""); setSide(null);
+      setTickets(1); setSide(null);
       qc.invalidateQueries({ queryKey: ["games", "bets", "bracket-active"] });
       qc.invalidateQueries({ queryKey: ["games", "wallet"] });
     },
@@ -55,11 +63,11 @@ export function BracketScreen({ id }: { id: GameUiId }) {
   return (
     <div className="space-y-4">
       <GameHowTo
-        costText="Bet any amount"
-        payoutLabel={bracketMult > 0 ? `Win = ${bracketMult}× your bet` : "Win = fixed bracket payout"}
+        costText={`${formatINR(ticketPrice)} / ticket`}
+        payoutLabel={bracketMult > 0 ? `Win = ${bracketMult}× your stake` : "Win = fixed bracket payout"}
         steps={[
-          "Pick BUY (up) or SELL (down)",
-          "Enter your bet amount",
+          "Pick UP or DOWN",
+          "Choose how many tickets",
           `Win if NIFTY moves your way past the ${gap}-pt bracket by session close`,
         ]}
       />
@@ -77,8 +85,8 @@ export function BracketScreen({ id }: { id: GameUiId }) {
               {open ? <GameStatePill state="open" label="Open" /> : <GameStatePill state="closed" label="Closed" />}
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <StatChip label={`Sell below (−${gap})`} value={live ? (live - gap).toFixed(2) : "—"} tone="text-sell" />
-              <StatChip label={`Buy above (+${gap})`} value={live ? (live + gap).toFixed(2) : "—"} tone="text-buy" />
+              <StatChip label={`Down below (−${gap})`} value={live ? (live - gap).toFixed(2) : "—"} tone="text-sell" />
+              <StatChip label={`Up above (+${gap})`} value={live ? (live + gap).toFixed(2) : "—"} tone="text-buy" />
             </div>
           </CardContent>
         </Card>
@@ -90,7 +98,9 @@ export function BracketScreen({ id }: { id: GameUiId }) {
             {(active || []).map((t: any) => (
               <div key={t.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-sm last:border-0">
                 <span className="flex items-center gap-2">
-                  <span className={cn("font-semibold", t.prediction === "BUY" ? "text-buy" : "text-sell")}>{t.prediction}</span>
+                  <span className={cn("font-semibold", t.prediction === "BUY" ? "text-buy" : "text-sell")}>
+                    {t.prediction === "BUY" ? "UP" : "DOWN"}
+                  </span>
                   <span className="tabular-nums text-muted-foreground">@ {Number(t.entry_price).toFixed(2)}</span>
                 </span>
                 <span className="flex items-center gap-3">
@@ -106,37 +116,64 @@ export function BracketScreen({ id }: { id: GameUiId }) {
       <Card className="h-fit md:sticky md:top-4">
         <CardHeader className="pb-3"><CardTitle>Place bracket</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          {/* Direction — UP / DOWN */}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setSide("BUY")}
               className={cn("rounded-xl border-2 py-3 font-bold transition-all", side === "BUY" ? "border-buy bg-buy/10 text-buy" : "border-border hover:border-buy/40")}>
-              BUY
+              UP
             </button>
             <button type="button" onClick={() => setSide("SELL")}
               className={cn("rounded-xl border-2 py-3 font-bold transition-all", side === "SELL" ? "border-sell bg-sell/10 text-sell" : "border-border hover:border-sell/40")}>
-              SELL
+              DOWN
             </button>
           </div>
+
+          {/* Ticket count (fixed price — no free-form amount) */}
           <div className="space-y-1.5">
-            <div className="flex justify-between text-xs text-muted-foreground"><span>Amount (₹)</span><span>Bal {formatINR(balance)}</span></div>
-            <Input type="number" inputMode="decimal" placeholder={String(cfg?.ticket_price ?? 1000)} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Tickets · {formatINR(ticketPrice)} each</span>
+              <span>Bal {formatINR(balance)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" aria-label="Fewer tickets"
+                onClick={() => setTickets((t) => Math.max(1, t - 1))}
+                className="grid size-11 shrink-0 place-items-center rounded-xl border border-border hover:border-primary/40 disabled:opacity-40"
+                disabled={tickets <= 1}>
+                <Minus className="size-4" />
+              </button>
+              <div className="flex-1 rounded-xl border border-border py-1.5 text-center">
+                <div className="text-2xl font-bold tabular-nums leading-none">{tickets}</div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">= {formatINR(amount)}</div>
+              </div>
+              <button type="button" aria-label="More tickets"
+                onClick={() => setTickets((t) => Math.min(maxTickets, t + 1))}
+                className="grid size-11 shrink-0 place-items-center rounded-xl border border-border hover:border-primary/40 disabled:opacity-40"
+                disabled={tickets >= maxTickets}>
+                <Plus className="size-4" />
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {QUICK_ADD.map((q) => (
+              {QUICK_TICKETS.map((n) => (
                 <button
-                  key={q}
+                  key={n}
                   type="button"
-                  onClick={() => setAmount((a) => String((Number(a) || 0) + q))}
-                  className="rounded-md border border-border bg-muted/30 px-2.5 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  onClick={() => setTickets(Math.min(maxTickets, n))}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors",
+                    tickets === n ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted/30 text-muted-foreground hover:border-primary/40 hover:text-primary",
+                  )}
                 >
-                  +{q >= 1000 ? `${q / 1000}k` : q}
+                  {n} T
                 </button>
               ))}
             </div>
           </div>
-          <StatChip label="Win pays" value={formatINR(Number(amount || 0) * Number(cfg?.win_multiplier ?? 1.9))} tone="text-buy" />
-          <Button className="w-full" size="lg" loading={place.isPending} disabled={place.isPending || !open} onClick={() => place.mutate()}>
-            {open ? "Place bracket" : "Closed"}
+
+          <StatChip label="Win pays" value={formatINR(amount * Number(cfg?.win_multiplier ?? 1.818189))} tone="text-buy" />
+          <Button className="w-full" size="lg" loading={place.isPending} disabled={place.isPending || !open || !side} onClick={() => place.mutate()}>
+            {open ? (side ? "Place bracket" : "Pick UP or DOWN") : "Closed"}
           </Button>
-          <p className="text-center text-[11px] text-muted-foreground">Resolves in {cfg?.expiry_minutes ?? 5} min · {cfg?.win_multiplier ?? 1.9}×</p>
+          <p className="text-center text-[11px] text-muted-foreground">Resolves in {cfg?.expiry_minutes ?? 5} min · {cfg?.win_multiplier ?? 1.818189}×</p>
         </CardContent>
       </Card>
     </div>

@@ -30,9 +30,9 @@ const WALLET_TONE = [
   "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  "bg-teal-500/15 text-teal-600 dark:text-teal-400",
   "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
-  "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  "bg-zinc-500/15 text-zinc-600 dark:text-zinc-300",
 ];
 
 export default function DashboardPage() {
@@ -141,7 +141,7 @@ export default function DashboardPage() {
         <Link
           href="/games"
           aria-label="Play games"
-          className="group relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 px-3 py-2 text-white shadow-lg shadow-indigo-600/30 transition-transform hover:-translate-y-0.5 active:scale-95"
+          className="group relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-green-500 to-teal-500 px-3 py-2 text-white shadow-lg shadow-emerald-600/30 transition-transform hover:-translate-y-0.5 active:scale-95"
         >
           <span aria-hidden className="pointer-events-none absolute -right-3 -top-4 size-14 rounded-full bg-white/15 blur-xl" />
           <div className="relative flex items-center gap-2">
@@ -173,7 +173,7 @@ export default function DashboardPage() {
           href="/option-chain"
           icon={Table2}
           label="Options"
-          tone={{ bg: "bg-violet-500/15", fg: "text-violet-600 dark:text-violet-400", border: "border-violet-500/30 hover:border-violet-500/60" }}
+          tone={{ bg: "bg-slate-500/15", fg: "text-slate-600 dark:text-slate-300", border: "border-slate-500/30 hover:border-slate-500/60" }}
         />
         <QuickAction
           href="/positions"

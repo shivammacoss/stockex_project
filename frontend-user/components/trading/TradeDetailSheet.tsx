@@ -853,13 +853,13 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
         onClose();
       }}
     >
-      <DialogContent className="flex max-h-[92vh] w-[calc(100%-1rem)] max-w-md flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[92vh] w-[calc(100%-1rem)] max-w-md flex-col gap-0 overflow-y-auto overscroll-contain p-0">
         <DialogTitle className="sr-only">
           Trade {instrument?.symbol ?? ""}
         </DialogTitle>
 
-        {/* ── Header ─────────────────────────────────────────────── */}
-        <div className="border-b border-border px-4 py-3">
+        {/* ── Header (sticky so price stays visible while the body scrolls) ── */}
+        <div className="sticky top-0 z-20 shrink-0 border-b border-border bg-background px-4 py-3">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
@@ -1226,8 +1226,9 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
           );
         })()}
 
-        {/* ── Big BUY / SELL ──────────────────────────────────────── */}
-        <div className="mt-4 grid grid-cols-2 gap-2 px-4 pb-4">
+        {/* ── Big BUY / SELL — sticky footer, ALWAYS reachable (even with
+            SL/TP fields open; the body above scrolls under it) ──────── */}
+        <div className="sticky bottom-0 z-20 mt-auto grid shrink-0 grid-cols-2 gap-2 border-t border-border bg-background px-4 pb-4 pt-3">
           {/* `loading` removed — submit is fire-and-forget now and the
               sheet closes immediately on tap, so no spinner state is
               ever visible. `disabled` keeps the 250 ms double-tap

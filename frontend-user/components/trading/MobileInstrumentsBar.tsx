@@ -35,7 +35,9 @@ interface Props {
 // Wallet kind → which chip buckets that trading wallet may browse. Favorites
 // is always allowed. Used only when the Market page passes `walletKind`.
 const WALLET_BUCKETS: Record<string, string[]> = {
-  NSE_BSE: ["favorites", "nse_eq", "nse_fut", "nse_opt", "bse_eq", "bse_fut", "bse_opt", "indices", "stocks"],
+  // Only the wallet's own segment chips (+ Favorites) — dropped cross-asset
+  // "indices"/"stocks" from NSE/BSE (mirrors InstrumentsPanel).
+  NSE_BSE: ["favorites", "nse_eq", "nse_fut", "nse_opt", "bse_eq", "bse_fut", "bse_opt"],
   MCX: ["favorites", "mcx_fut", "mcx_opt", "commodities"],
   CRYPTO: ["favorites", "crypto"],
   FOREX: ["favorites", "forex"],

@@ -380,6 +380,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
                 except Exception:
                     logger.exception("infoway_auto_start_failed")
 
+            # Binance (crypto) — free keyless public feed, leader-only. Replaces
+            # the Infoway crypto channel; its ticks land in the same shared
+            # cache + `infoway:tick:*` Redis channel every crypto consumer reads.
+            if settings.BINANCE_ENABLED:
+                try:
+                    from app.services.binance_service import binance
+
+                    await binance.start()
+                    logger.info("binance_auto_started")
+                except Exception:
+                    logger.exception("binance_auto_start_failed")
+
             # Zerodha live WS pool — leader-only. The instrument CATALOG warm
             # already ran on EVERY worker in `_zerodha_boot` (search needs it
             # cluster-wide); here we only open the live WS connections.
@@ -993,6 +1005,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         from app.services.infoway_service import infoway
 
         await infoway.stop()
+    except Exception:
+        pass
+
+    # Stop Binance crypto feed cleanly
+    try:
+        from app.services.binance_service import binance
+
+        await binance.stop()
     except Exception:
         pass
 
