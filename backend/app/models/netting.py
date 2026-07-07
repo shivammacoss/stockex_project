@@ -151,7 +151,7 @@ class WalletKindRiskSettings(TimestampMixin, RiskSettingsBase):
 
 # ── Netting Segment matrix ─────────────────────────────────────────
 SEGMENT_CODES = [
-    "NSE_EQ", "NSE_FUT", "NSE_OPT",
+    "NSE_EQ", "NSE_STK_FUT", "NSE_IDX_FUT", "NSE_STK_OPT", "NSE_IDX_OPT",
     "BSE_EQ", "BSE_FUT", "BSE_OPT",
     "MCX_FUT", "MCX_OPT",
     "FOREX", "STOCKS",

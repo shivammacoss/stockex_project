@@ -70,8 +70,8 @@ export function ScriptOverrides({ categoryId }: { categoryId: string }) {
   //    (the backend resolves the admin segment row → its instrument segments),
   //    which is what previously left those segments with NO typeahead at all.
   const { exchange: exchangeForSeg, mode: pickerMode } = (() => {
-    if (segName === "NSE_FUT") return { exchange: "NFO", mode: "fut" as const };
-    if (segName === "NSE_OPT") return { exchange: "NFO", mode: "opt" as const };
+    if (segName === "NSE_STK_FUT" || segName === "NSE_IDX_FUT") return { exchange: "NFO", mode: "fut" as const };
+    if (segName === "NSE_STK_OPT" || segName === "NSE_IDX_OPT") return { exchange: "NFO", mode: "opt" as const };
     if (segName === "BSE_FUT") return { exchange: "BFO", mode: "fut" as const };
     if (segName === "BSE_OPT") return { exchange: "BFO", mode: "opt" as const };
     if (segName === "MCX_FUT") return { exchange: "MCX", mode: "fut" as const };

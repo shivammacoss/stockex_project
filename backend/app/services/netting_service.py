@@ -139,8 +139,10 @@ async def _wipe_eff_cache_debounced() -> None:
 # ── Default segment seed metadata (matches bharat reference) ─────────
 SEGMENT_DEFAULTS: list[dict[str, Any]] = [
     {"name": "NSE_EQ", "displayName": "NSE EQ", "lotApplies": False, "qtyApplies": True, "optionApplies": False, "expiryHoldApplies": False, "futureApplies": False},
-    {"name": "NSE_FUT", "displayName": "NSE FUT", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": True, "futureApplies": True},
-    {"name": "NSE_OPT", "displayName": "NSE OPT", "lotApplies": True, "qtyApplies": False, "optionApplies": True, "expiryHoldApplies": True, "futureApplies": False},
+    {"name": "NSE_STK_FUT", "displayName": "Stock Future", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": True, "futureApplies": True},
+    {"name": "NSE_IDX_FUT", "displayName": "Index Future", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": True, "futureApplies": True},
+    {"name": "NSE_STK_OPT", "displayName": "Stock Option", "lotApplies": True, "qtyApplies": False, "optionApplies": True, "expiryHoldApplies": True, "futureApplies": False},
+    {"name": "NSE_IDX_OPT", "displayName": "Index Option", "lotApplies": True, "qtyApplies": False, "optionApplies": True, "expiryHoldApplies": True, "futureApplies": False},
     {"name": "BSE_EQ", "displayName": "BSE EQ", "lotApplies": False, "qtyApplies": True, "optionApplies": False, "expiryHoldApplies": False, "futureApplies": False},
     {"name": "BSE_FUT", "displayName": "BSE FUT", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": True, "futureApplies": True},
     {"name": "BSE_OPT", "displayName": "BSE OPT", "lotApplies": True, "qtyApplies": False, "optionApplies": True, "expiryHoldApplies": True, "futureApplies": False},
@@ -1824,12 +1826,13 @@ async def clear_all_user_overrides(
 # names (NSE_EQ, NSE_FUT, …). Multiple legacy types fold into one netting row.
 _SEGMENT_NAME_MAP: dict[str, str] = {
     "NSE_EQUITY": "NSE_EQ",
-    "NSE_FUTURE": "NSE_FUT",
-    "NSE_INDEX_FUTURE": "NSE_FUT",
-    "NSE_STOCK_OPTION_BUY": "NSE_OPT",
-    "NSE_STOCK_OPTION_SELL": "NSE_OPT",
-    "NSE_INDEX_OPTION_BUY": "NSE_OPT",
-    "NSE_INDEX_OPTION_SELL": "NSE_OPT",
+    # NSE F&O split into 4 granular settings rows (stock vs index).
+    "NSE_FUTURE": "NSE_STK_FUT",
+    "NSE_INDEX_FUTURE": "NSE_IDX_FUT",
+    "NSE_STOCK_OPTION_BUY": "NSE_STK_OPT",
+    "NSE_STOCK_OPTION_SELL": "NSE_STK_OPT",
+    "NSE_INDEX_OPTION_BUY": "NSE_IDX_OPT",
+    "NSE_INDEX_OPTION_SELL": "NSE_IDX_OPT",
     "BSE_EQUITY": "BSE_EQ",
     "BSE_FUTURE": "BSE_FUT",
     "BSE_INDEX_FUTURE": "BSE_FUT",
@@ -1861,14 +1864,17 @@ _SEGMENT_NAME_MAP: dict[str, str] = {
     # those legacy positions/orders without forcing a data migration.
     "BFO_FUT": "BSE_FUT",
     "BFO_OPT": "BSE_OPT",
-    "NFO_FUT": "NSE_FUT",
-    "NFO_OPT": "NSE_OPT",
+    # Legacy generic NFO/NSE codes can't self-distinguish stock vs index —
+    # default to the STOCK row; the instrument boot-remap rewrites them to the
+    # canonical NSE_FUTURE / NSE_INDEX_FUTURE forms over time.
+    "NFO_FUT": "NSE_STK_FUT",
+    "NFO_OPT": "NSE_STK_OPT",
     "MCX_FUT": "MCX_FUT",
     "MCX_OPT": "MCX_OPT",
     "BSE_FUT": "BSE_FUT",
     "BSE_OPT": "BSE_OPT",
-    "NSE_FUT": "NSE_FUT",
-    "NSE_OPT": "NSE_OPT",
+    "NSE_FUT": "NSE_STK_FUT",
+    "NSE_OPT": "NSE_STK_OPT",
     "NSE_EQ": "NSE_EQ",
     "BSE_EQ": "BSE_EQ",
     # Even-older mirror format (pre-2025) — used singular "OPTION" /
@@ -1880,8 +1886,8 @@ _SEGMENT_NAME_MAP: dict[str, str] = {
     # user-side panel regardless of what admin sets for the row.
     "MCX_OPTION": "MCX_OPT",
     "MCX_FUTURE": "MCX_FUT",
-    "NFO_OPTION": "NSE_OPT",
-    "NFO_FUTURE": "NSE_FUT",
+    "NFO_OPTION": "NSE_STK_OPT",
+    "NFO_FUTURE": "NSE_STK_FUT",
     "BFO_OPTION": "BSE_OPT",
     "BFO_FUTURE": "BSE_FUT",
 }

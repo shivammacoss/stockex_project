@@ -390,7 +390,9 @@ async def option_chain(
         sample = all_rows[0].get("ce") or all_rows[0].get("pe") or {}
         opt_exch = (sample.get("exchange") or "").upper()
         admin_row = {
-            "NFO": "NSE_OPT",
+            # Option chains here are index underlyings (NIFTY/BANKNIFTY/…),
+            # so NFO strike-far reads the Index Option settings row.
+            "NFO": "NSE_IDX_OPT",
             "BFO": "BSE_OPT",
             "MCX": "MCX_OPT",
         }.get(opt_exch)
