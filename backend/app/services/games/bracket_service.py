@@ -11,7 +11,7 @@ Model A payout (win_multiplier, default 1.9×). Loss = full stake.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import timedelta, timezone
 from decimal import Decimal
 
 from beanie import PydanticObjectId
@@ -25,7 +25,7 @@ from app.core.redis_client import publish
 from app.models.games.bets import BracketPrediction, BracketTrade, GameBetStatus
 from app.models.games.settings import GameSettings
 from app.services.games import price_resolver, wallet_service
-from app.services.games.common import parse_hms
+from app.services.games.common import ist_datetime_for_day, parse_hms
 from app.utils.decimal_utils import quantize_money, to_decimal, to_decimal128
 from app.utils.time_utils import now_ist, now_utc
 
@@ -73,7 +73,15 @@ async def place_bet(
         gap = to_decimal(cfg.bracket_gap)
     upper = quantize_money(centre + gap)
     lower = quantize_money(centre - gap)
-    expires_at = now_utc() + timedelta(minutes=cfg.expiry_minutes)
+    # All bracket bets resolve TOGETHER at the session close (result_time) —
+    # one fixed result time per day, NOT a per-trade 5-min timer. (User spec:
+    # "Nifty Bracket … result @ 15:30:00".)
+    result_t = parse_hms(cfg.result_time)
+    expires_at = (
+        ist_datetime_for_day(now.strftime("%Y-%m-%d"))
+        .replace(hour=result_t.hour, minute=result_t.minute, second=result_t.second, microsecond=0)
+        .astimezone(timezone.utc)
+    )
 
     await wallet_service.atomic_games_wallet_debit(
         user_id, amt, game_key=GAME_KEY,

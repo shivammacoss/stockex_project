@@ -215,7 +215,9 @@ export function BracketScreen({ id }: { id: GameUiId }) {
           <Button className="w-full" size="lg" loading={place.isPending} disabled={place.isPending || !open || !side} onClick={() => place.mutate()}>
             {open ? (side ? "Place bracket" : "Pick UP or DOWN") : "Closed"}
           </Button>
-          <p className="text-center text-[11px] text-muted-foreground">Resolves in {cfg?.expiry_minutes ?? 5} min · {cfg?.win_multiplier ?? 1.818189}×</p>
+          <p className="text-center text-[11px] text-muted-foreground">
+            Resolves at session close · {(cfg?.result_time ?? "15:30:00").slice(0, 5)} IST · {cfg?.win_multiplier ?? 1.818189}×
+          </p>
         </CardContent>
       </Card>
     </div>
