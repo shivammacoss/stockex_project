@@ -200,20 +200,36 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
 
 
 async def resolve_btc_price_at(dt: datetime) -> Decimal | None:
-    """BTC close at a specific IST minute (Binance 1m kline), live fallback."""
-    start_ms = int((dt.timestamp() - 120) * 1000)
-    end_ms = int((dt.timestamp() + 60) * 1000)
+    """BTC price AT the exact IST minute `dt` — the CLOSE of the 1-minute
+    Binance candle that ENDS at `dt` (i.e. the last trade just before `dt`).
+
+    This is the number Binance itself shows as the candle close at `dt`
+    (e.g. the 15m 22:45 candle closes at 23:00 with the same value), so the
+    game result matches Binance exactly. The old code took the candle that
+    OPENS at `dt` (closing at dt+1m), which read the price a minute LATE and
+    drifted ~10-40 pts on a fast tick. Live fallback for the current minute.
+    """
+    dt_ms = int(dt.timestamp() * 1000)
+    target_open = dt_ms - 60_000  # the 1m candle whose close time == dt
     try:
         async with httpx.AsyncClient(timeout=6.0) as client:
             r = await client.get(
                 BINANCE_KLINES,
                 params={"symbol": "BTCUSDT", "interval": "1m",
-                        "startTime": start_ms, "endTime": end_ms, "limit": 3},
+                        "startTime": dt_ms - 180_000, "endTime": dt_ms + 60_000, "limit": 5},
             )
             if r.status_code == 200:
                 data = r.json() or []
-                if data:
-                    cl = to_decimal(data[-1][4])
+                # Exact candle closing at dt (openTime == dt − 1 min).
+                for k in data:
+                    if int(k[0]) == target_open:
+                        cl = to_decimal(k[4])
+                        if cl > 0:
+                            return quantize_money(cl)
+                # Fallback — the most recent candle that closed at/before dt.
+                closed = [k for k in data if int(k[0]) <= target_open]
+                if closed:
+                    cl = to_decimal(closed[-1][4])
                     if cl > 0:
                         return quantize_money(cl)
     except Exception:
