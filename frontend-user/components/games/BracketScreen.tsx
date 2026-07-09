@@ -106,11 +106,14 @@ export function BracketScreen({ id }: { id: GameUiId }) {
             {(active || []).length === 0 && <div className="py-2 text-sm text-muted-foreground">No active trades.</div>}
             {(active || []).map((t: any) => (
               <div key={t.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-sm last:border-0">
-                <span className="flex items-center gap-2">
-                  <span className={cn("font-semibold", t.prediction === "BUY" ? "text-buy" : "text-sell")}>
-                    {t.prediction === "BUY" ? "UP" : "DOWN"}
+                <span className="flex min-w-0 flex-col">
+                  <span className="flex items-center gap-2">
+                    <span className={cn("font-semibold", t.prediction === "BUY" ? "text-buy" : "text-sell")}>
+                      {t.prediction === "BUY" ? "UP" : "DOWN"}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">@ {Number(t.entry_price).toFixed(2)}</span>
                   </span>
-                  <span className="tabular-nums text-muted-foreground">@ {Number(t.entry_price).toFixed(2)}</span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">{fmtBidTimeMs(t.created_at)}</span>
                 </span>
                 <span className="flex items-center gap-3">
                   <span className="tabular-nums">{formatINR(t.amount)}</span>
@@ -142,7 +145,7 @@ export function BracketScreen({ id }: { id: GameUiId }) {
                       )}
                     </span>
                     <span className="text-[11px] text-muted-foreground">
-                      {formatINR(t.amount)} · {fmtResultTime(t.created_at)}
+                      {formatINR(t.amount)} · {fmtBidTimeMs(t.created_at)}
                     </span>
                   </span>
                   <span className={cn("shrink-0 font-bold tabular-nums", won ? "text-buy" : "text-sell")}>
@@ -225,12 +228,14 @@ export function BracketScreen({ id }: { id: GameUiId }) {
   );
 }
 
-// Short IST time for a resolved trade, e.g. "13:46".
-function fmtResultTime(iso?: string | null) {
+// Placement time WITH milliseconds, IST — e.g. "13:46:18.052". Users wanted the
+// exact bet instant (ms) visible on each live bracket trade.
+function fmtBidTimeMs(iso?: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("en-GB", {
-    hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata",
+  const hms = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata",
   });
+  return `${hms}.${String(d.getMilliseconds()).padStart(3, "0")}`;
 }

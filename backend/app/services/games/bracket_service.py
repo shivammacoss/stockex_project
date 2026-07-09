@@ -73,6 +73,13 @@ async def place_bet(
         gap = to_decimal(cfg.bracket_gap)
     upper = quantize_money(centre + gap)
     lower = quantize_money(centre - gap)
+    # Entry is the BRACKET EDGE for the chosen side, not the raw spot: UP enters
+    # at the up-above band (centre + gap), DOWN at the down-below band
+    # (centre − gap). So two opposite bets placed at the SAME instant sit a full
+    # spread (2 × gap) apart instead of showing the identical price, and a win
+    # requires price to break PAST the bracket rather than merely tick the right
+    # way. directionVsEntry then coincides with breakPastBands.
+    side_entry = upper if pred == BracketPrediction.BUY else lower
     # All bracket bets resolve TOGETHER at the session close (result_time) —
     # one fixed result time per day, NOT a per-trade 5-min timer. (User spec:
     # "Nifty Bracket … result @ 15:30:00".)
@@ -92,7 +99,7 @@ async def place_bet(
 
     trade = BracketTrade(
         user_id=user_id, game_key=GAME_KEY, prediction=pred,
-        amount=to_decimal128(amt), entry_price=to_decimal128(to_decimal(entry_price)),
+        amount=to_decimal128(amt), entry_price=to_decimal128(side_entry),
         spot_at_order=to_decimal128(centre), upper_target=to_decimal128(upper),
         lower_target=to_decimal128(lower), expires_at=expires_at,
         bet_date=now.strftime("%Y-%m-%d"), status=GameBetStatus.PENDING,
