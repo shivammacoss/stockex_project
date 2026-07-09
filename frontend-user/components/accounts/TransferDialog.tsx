@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -33,6 +33,16 @@ export function TransferDialog({
   const [from, setFrom] = useState<WalletKind>(defaultFrom);
   const [to, setTo] = useState<WalletKind>(defaultTo);
   const [amount, setAmount] = useState("");
+
+  // The dialog stays mounted (only `open` toggles), so re-sync the picked
+  // wallets to the caller's defaults every time it opens — otherwise clicking
+  // "Move" on a specific wallet (e.g. MCX) would keep the previous selection.
+  useEffect(() => {
+    if (open) {
+      setFrom(defaultFrom);
+      setTo(defaultTo);
+    }
+  }, [open, defaultFrom, defaultTo]);
 
   const m = useMutation({
     mutationFn: () => AccountsAPI.transfer(from, to, Number(amount)),

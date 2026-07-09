@@ -19,6 +19,7 @@ export default function AccountsPage() {
   const qc = useQueryClient();
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferFrom, setTransferFrom] = useState<WalletKind>("MAIN");
+  const [transferTo, setTransferTo] = useState<WalletKind>("NSE_BSE");
   const [gamesTxIn, setGamesTxIn] = useState(false);
   const [gamesTxOut, setGamesTxOut] = useState(false);
 
@@ -53,8 +54,9 @@ export default function AccountsPage() {
     (k) => walletMap.get(k) || { kind: k, available_balance: "0", used_margin: "0", profit_blocked: false },
   );
 
-  const openTransfer = (from: WalletKind) => {
+  const openTransfer = (from: WalletKind, to?: WalletKind) => {
     setTransferFrom(from);
+    setTransferTo(to ?? (from === "MAIN" ? "NSE_BSE" : "MAIN"));
     setTransferOpen(true);
   };
 
@@ -150,7 +152,7 @@ export default function AccountsPage() {
                     >
                       <Star className="size-4" /> {isPrimary ? "Primary" : "Set primary"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => openTransfer(kind)}>
+                    <Button size="sm" variant="outline" onClick={() => openTransfer("MAIN", kind)}>
                       <ArrowLeftRight className="size-4" /> Move
                     </Button>
                   </div>
@@ -203,7 +205,7 @@ export default function AccountsPage() {
         <TrendingUp className="size-3.5" /> Your <b className="text-foreground">primary</b> wallet decides which market &amp; instruments you trade. Default: NSE / BSE.
       </p>
 
-      <TransferDialog open={transferOpen} onOpenChange={setTransferOpen} defaultFrom={transferFrom} defaultTo={transferFrom === "MAIN" ? "NSE_BSE" : "MAIN"} />
+      <TransferDialog open={transferOpen} onOpenChange={setTransferOpen} defaultFrom={transferFrom} defaultTo={transferTo} />
       <GamesTransferDialog open={gamesTxIn} onOpenChange={setGamesTxIn} direction="in" />
       <GamesTransferDialog open={gamesTxOut} onOpenChange={setGamesTxOut} direction="out" />
     </div>
