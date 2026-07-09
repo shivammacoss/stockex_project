@@ -164,11 +164,29 @@ export function NumberScreen({ id }: { id: GameUiId }) {
                   <span className="truncate text-xs uppercase tracking-wider text-muted-foreground">Reference spot · winning digits</span>
                 </div>
                 <WinningDigitsPrice
-                  value={liveNum}
+                  value={
+                    // Once the result is DECLARED, freeze this card on the exact
+                    // close price the winning number was derived from (the
+                    // server's frozen `closing_price`). Otherwise it keeps
+                    // drifting with the live feed and its highlighted decimals
+                    // (e.g. .80) no longer match the declared number (.90).
+                    declared && result?.closing_price ? Number(result.closing_price) : liveNum
+                  }
                   mode={meta.asset === "BTC" ? "btc" : "nifty"}
                   className="mt-1 text-3xl font-bold sm:text-4xl"
                 />
-                <div className="mt-1"><LiveDot live={!!live} label={live ? `Winning number = ${digitHint}` : "Waiting for feed"} /></div>
+                <div className="mt-1">
+                  <LiveDot
+                    live={declared ? false : !!live}
+                    label={
+                      declared
+                        ? `Result price · winning ${digitHint}`
+                        : live
+                          ? `Winning number = ${digitHint}`
+                          : "Waiting for feed"
+                    }
+                  />
+                </div>
               </div>
               {result?.declared ? (
                 <GameStatePill state="win" label={`Result: ${fmt(result.result_number)}`} />
