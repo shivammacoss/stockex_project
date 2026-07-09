@@ -182,6 +182,14 @@ async def update_segment(
         raise HTTPException(status_code=400, detail="patch must be an object")
 
     seg = await svc.get_segment(segment_id)
+    # Hierarchy clamp — a non-super-admin can only TIGHTEN vs the parent tier
+    # (all limits ≤ parent) and must charge brokerage ≥ parent. The super-admin
+    # sets the ceiling at admin-create; admins/brokers can't exceed it. SA is
+    # unbounded and can change any tier's settings anytime.
+    if admin.role != UserRole.SUPER_ADMIN:
+        parent_eff = await svc.resolve_parent_effective_segment(admin, seg.name)
+        if parent_eff:
+            patch, _clamp_notes = svc.clamp_child_patch(patch, parent_eff)
     if admin.role == UserRole.SUPER_ADMIN:
         over = await svc.upsert_super_admin_segment_override(admin.id, seg.name, patch)
         scope = "SUPER_ADMIN"

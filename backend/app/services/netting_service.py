@@ -54,6 +54,97 @@ NETTING_FIELDS = list(NettingFieldsRequired.model_fields.keys())
 RISK_FIELDS = list(RiskSettingsRequired.model_fields.keys())
 
 
+# ── Hierarchy clamp ─────────────────────────────────────────────────────
+# A NON-super-admin's segment override must stay within the PARENT tier's
+# effective bounds (super-admin sets the ceiling at admin-create; admin/broker
+# can only tighten it, and can only charge MORE brokerage):
+#   • Brokerage (commission*) → FLOOR: child value ≥ parent (can't undercut the
+#     parent's cut; may add margin). Only comparable when commissionType matches.
+#   • Margin (intraday/overnight/option/expiry) → mode-aware. In "times" mode
+#     the number IS the leverage multiplier → CEILING (child ≤ parent, "10x can't
+#     become 15x"). In fixed/percent mode it's the margin REQUIRED → FLOOR (child
+#     ≥ parent, else a lower margin silently hands out more leverage).
+#   • Everything else numeric (lots / qty / value / limits / spread / swap) →
+#     CEILING: child ≤ parent.
+# Super-admin is unbounded (no clamp).
+_BROKERAGE_FIELDS = {"commission", "optionBuyCommission", "optionSellCommission"}
+_MARGIN_FIELDS = {
+    "intradayMargin", "overnightMargin",
+    "optionBuyIntraday", "optionBuyOvernight",
+    "optionSellIntraday", "optionSellOvernight",
+    "expiryDayIntradayMargin", "expiryDayOptionBuyMargin", "expiryDayOptionSellMargin",
+}
+_CLAMP_SKIP = {
+    "marginCalcMode", "optionBuyMarginCalcMode", "optionSellMarginCalcMode",
+    "commissionType", "chargeOn", "spreadType", "swapType", "swapTime",
+    "isActive", "tradingEnabled", "allowOvernight", "expiryDayMarginAsPercent",
+    "name", "displayName",
+}
+
+
+def _is_num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def clamp_child_patch(patch: dict, parent: dict) -> tuple[dict, list[str]]:
+    """Clamp a non-super-admin's segment patch to the parent tier's effective
+    bounds. Returns ``(clamped_patch, notes)``; ``notes`` lists every field a
+    tier tried to push past its bound (for the audit / response)."""
+    out = dict(patch)
+    notes: list[str] = []
+    parent_ct = parent.get("commissionType")
+    child_ct = patch.get("commissionType") or parent_ct
+    mode = patch.get("marginCalcMode") or parent.get("marginCalcMode")
+
+    for k, v in list(patch.items()):
+        if k in _CLAMP_SKIP or not _is_num(v):
+            continue
+        pv = parent.get(k)
+        if not _is_num(pv):
+            continue
+
+        if k in _BROKERAGE_FIELDS:
+            if child_ct == parent_ct and v < pv:  # brokerage floor
+                out[k] = pv
+                notes.append(f"{k} raised to parent brokerage floor {pv}")
+        elif k in _MARGIN_FIELDS:
+            is_times = (mode == "times") or (mode is None and (v > 100 or pv > 100))
+            if is_times and v > pv:  # leverage ceiling
+                out[k] = pv
+                notes.append(f"{k} capped to parent leverage {pv}")
+            elif not is_times and v < pv:  # margin-required floor
+                out[k] = pv
+                notes.append(f"{k} raised to parent margin {pv}")
+        elif v > pv:  # generic ceiling
+            out[k] = pv
+            notes.append(f"{k} capped to parent limit {pv}")
+    return out, notes
+
+
+async def resolve_parent_effective_segment(actor, segment_name: str) -> dict:
+    """The parent tier's effective segment settings that BOUND `actor`'s save.
+    ADMIN → super-admin; BROKER → its immediate parent (parent broker, else
+    owning admin, else super-admin). Empty dict when no parent resolves."""
+    from app.models.user import UserRole
+    from app.services import settings_snapshot
+
+    parent_user = None
+    if actor.role == UserRole.ADMIN:
+        sa_id = await _resolve_super_admin_id()
+        parent_user = await User.get(sa_id) if sa_id else None
+    elif actor.role == UserRole.BROKER:
+        pid = getattr(actor, "assigned_broker_id", None) or getattr(actor, "assigned_admin_id", None)
+        parent_user = await User.get(pid) if pid else None
+        if parent_user is None:
+            sa_id = await _resolve_super_admin_id()
+            parent_user = await User.get(sa_id) if sa_id else None
+    if parent_user is None:
+        return {}
+    return await settings_snapshot._resolve_effective_segment(
+        source_user=parent_user, segment_name=segment_name
+    )
+
+
 # Cached super-admin id — looked up once per process. The resolver hits
 # this for every "user in super-admin's pool" lookup, so a Mongo round-
 # trip per call would be expensive. The id never changes for a given
