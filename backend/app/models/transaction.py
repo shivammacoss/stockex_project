@@ -64,6 +64,8 @@ class TransactionType(StrEnum):
     ADMIN_FLOAT_REPLENISH = "ADMIN_FLOAT_REPLENISH"  # owning-admin float credited back on user withdraw/debit
     PATTI_PNL = "PATTI_PNL"              # admin-hierarchy P&L cascade share
     PATTI_BROKERAGE = "PATTI_BROKERAGE"  # admin-hierarchy brokerage cascade share
+    # ── Per-admin daily platform charge (admin-configured per-user fee) ──
+    PLATFORM_CHARGE = "PLATFORM_CHARGE"  # daily per-user fee: user MAIN debited → owning admin credited
 
 
 class TransactionStatus(StrEnum):

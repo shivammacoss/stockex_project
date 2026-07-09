@@ -8,6 +8,7 @@ import {
   Building2,
   CalendarClock,
   Check,
+  Coins,
   Loader2,
   Mail,
   MapPin,
@@ -18,6 +19,7 @@ import {
   ShieldCheck,
   Sun,
   User,
+  UserX,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -77,6 +79,8 @@ export default function PlatformSettingsPage() {
         <ProfileCard />
         <NotificationsCard />
         <WeeklySettlementCard />
+        <PlatformChargeCard />
+        <ZeroBalanceAutocloseCard />
       </div>
 
       <BrokerSearchVisibilityCard />
@@ -630,6 +634,225 @@ function WeeklySettlementCard() {
           <li>· Profit credited / loss debited to each user's wallet.</li>
           <li>· Same side &amp; lots kept; entry price resets, P&amp;L back to 0.</li>
           <li>· "Run now" is idempotent — safe to test before Saturday.</li>
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Per-admin DAILY PLATFORM CHARGE (ADMIN / SUPER_ADMIN) ─────────────────
+ * Each admin sets a per-user daily fee for THEIR OWN users. Default OFF. When
+ * on, the leader sweep debits the amount from each active user's main wallet
+ * once/day and credits it to this admin. */
+function PlatformChargeCard() {
+  const admin = useAdminAuthStore((s) => s.admin);
+  const role = String(admin?.role || "");
+  const canSee = role === "SUPER_ADMIN" || role === "ADMIN";
+
+  const [enabled, setEnabled] = useState(false);
+  const [amount, setAmount] = useState("0");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    if (!canSee) return;
+    let alive = true;
+    SettingsAPI.platformMaintenance()
+      .then((d) => {
+        if (!alive) return;
+        setEnabled(Boolean(d.platform_charge_enabled));
+        setAmount(String(Number(d.platform_charge_amount || 0)));
+        setLoaded(true);
+      })
+      .catch(() => alive && setLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [canSee]);
+
+  if (!canSee) return null;
+
+  async function toggle(next: boolean) {
+    setToggling(true);
+    try {
+      await SettingsAPI.setPlatformMaintenance({ platform_charge_enabled: next });
+      setEnabled(next);
+      toast.success(next ? "Platform charge enabled" : "Platform charge disabled");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update");
+    } finally {
+      setToggling(false);
+    }
+  }
+
+  async function saveAmount() {
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setSaving(true);
+    try {
+      const d = await SettingsAPI.setPlatformMaintenance({ platform_charge_amount: amt });
+      setAmount(String(Number(d.platform_charge_amount || 0)));
+      toast.success("Charge amount saved");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Coins className="size-4 text-primary" /> Platform charge (per user / day)
+        </CardTitle>
+        <CardDescription>
+          A daily fee deducted from each of your users' main wallet and credited
+          to you. Off by default.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between rounded-md border border-border bg-card p-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold">Daily charge</div>
+            <div className="text-[11px] text-muted-foreground">
+              {enabled ? "On — charged every day per user" : "Off — no charge"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggle(!enabled)}
+            disabled={!loaded || toggling}
+            aria-pressed={enabled}
+            className={cn(
+              "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50",
+              enabled ? "bg-emerald-500" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "inline-block size-5 transform rounded-full bg-white shadow transition-transform",
+                enabled ? "translate-x-6" : "translate-x-1",
+              )}
+            />
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-medium text-muted-foreground">Amount per user / day (₹)</label>
+          <div className="flex gap-2">
+            <Input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+              inputMode="decimal"
+              placeholder="0.00"
+              className="h-9 font-tabular"
+              disabled={!loaded}
+            />
+            <Button type="button" onClick={saveAmount} disabled={saving || !loaded} className="h-9">
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              Save
+            </Button>
+          </div>
+        </div>
+
+        <ul className="space-y-1 text-[11px] text-muted-foreground">
+          <li>· Charged once per day, from each active user's main wallet.</li>
+          <li>· Users who can't cover it pay only what they have (never negative).</li>
+          <li>· Collected amount is credited to your main wallet.</li>
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Per-admin ZERO-BALANCE AUTO-CLOSE (ADMIN / SUPER_ADMIN) ───────────────
+ * When on, a user of this admin whose whole balance has been ₹0 for ≥7 days
+ * (and holds no open position) is soft-closed (status CLOSED, recoverable). */
+function ZeroBalanceAutocloseCard() {
+  const admin = useAdminAuthStore((s) => s.admin);
+  const role = String(admin?.role || "");
+  const canSee = role === "SUPER_ADMIN" || role === "ADMIN";
+
+  const [enabled, setEnabled] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    if (!canSee) return;
+    let alive = true;
+    SettingsAPI.platformMaintenance()
+      .then((d) => {
+        if (!alive) return;
+        setEnabled(Boolean(d.zero_balance_autoclose_enabled));
+        setLoaded(true);
+      })
+      .catch(() => alive && setLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [canSee]);
+
+  if (!canSee) return null;
+
+  async function toggle(next: boolean) {
+    setToggling(true);
+    try {
+      await SettingsAPI.setPlatformMaintenance({ zero_balance_autoclose_enabled: next });
+      setEnabled(next);
+      toast.success(next ? "Auto-close enabled" : "Auto-close disabled");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update");
+    } finally {
+      setToggling(false);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserX className="size-4 text-primary" /> Zero-balance auto-close
+        </CardTitle>
+        <CardDescription>
+          A user with ₹0 balance for 7 days is automatically closed (blocked,
+          recoverable — not deleted). Off by default.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between rounded-md border border-border bg-card p-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold">Auto-close after 7 days</div>
+            <div className="text-[11px] text-muted-foreground">
+              {enabled ? "On — empty accounts closed after 7 days" : "Off — accounts stay"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggle(!enabled)}
+            disabled={!loaded || toggling}
+            aria-pressed={enabled}
+            className={cn(
+              "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50",
+              enabled ? "bg-emerald-500" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "inline-block size-5 transform rounded-full bg-white shadow transition-transform",
+                enabled ? "translate-x-6" : "translate-x-1",
+              )}
+            />
+          </button>
+        </div>
+        <ul className="space-y-1 text-[11px] text-muted-foreground">
+          <li>· "₹0" = main + all segment wallets empty, no open position.</li>
+          <li>· 7-day clock resets the moment any money returns.</li>
+          <li>· Closed = login blocked; you can reactivate anytime (data kept).</li>
         </ul>
       </CardContent>
     </Card>

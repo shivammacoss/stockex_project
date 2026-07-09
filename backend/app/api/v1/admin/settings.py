@@ -7,6 +7,7 @@ from typing import Any
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.dependencies import CurrentAdmin
 from app.models._base import Exchange
@@ -176,6 +177,68 @@ async def set_admin_float_enabled(payload: UpdatePlatformSettingRequest, admin: 
         new_values={"enabled": enabled},
     )
     return APIResponse(data={"enabled": enabled})
+
+
+# ── Per-admin platform maintenance (daily charge + zero-balance autoclose) ──
+# These are PER-ADMIN settings stored on the admin's own User doc (not a global
+# PlatformSetting) — each admin configures them for THEIR OWN users. Any
+# admin-tier user sets their own; the daily leader-only sweep enforces them.
+class _PlatformMaintenanceReq(BaseModel):
+    platform_charge_enabled: bool | None = None
+    platform_charge_amount: float | None = None
+    zero_balance_autoclose_enabled: bool | None = None
+
+
+def _pm_settings_dict(u) -> dict:
+    from app.utils.decimal_utils import to_decimal
+
+    return {
+        "platform_charge_enabled": bool(getattr(u, "platform_charge_enabled", False)),
+        "platform_charge_amount": str(to_decimal(getattr(u, "platform_charge_amount", 0))),
+        "zero_balance_autoclose_enabled": bool(getattr(u, "zero_balance_autoclose_enabled", False)),
+    }
+
+
+@router.get("/settings/platform-maintenance", response_model=APIResponse[dict])
+async def get_platform_maintenance(admin: CurrentAdmin):
+    """This admin's own daily-platform-charge + zero-balance-autoclose config."""
+    _require_admin_or_super(admin)
+    return APIResponse(data=_pm_settings_dict(admin))
+
+
+@router.put("/settings/platform-maintenance", response_model=APIResponse[dict])
+async def set_platform_maintenance(payload: _PlatformMaintenanceReq, admin: CurrentAdmin):
+    """Update this admin's OWN platform-maintenance settings (partial — only the
+    provided fields change). The daily sweep debits `platform_charge_amount`
+    from each of this admin's active users' main wallet once/day (credited to
+    this admin) when charging is enabled, and soft-closes users empty ≥7 days
+    when autoclose is enabled."""
+    _require_admin_or_super(admin)
+    from app.models.user import User
+    from app.utils.decimal_utils import quantize_money, to_decimal, to_decimal128
+    from app.utils.time_utils import now_utc
+
+    sets: dict[str, Any] = {"updated_at": now_utc()}
+    if payload.platform_charge_enabled is not None:
+        sets["platform_charge_enabled"] = bool(payload.platform_charge_enabled)
+    if payload.platform_charge_amount is not None:
+        amt = quantize_money(to_decimal(payload.platform_charge_amount))
+        if amt < 0:
+            raise HTTPException(status_code=400, detail="Charge amount cannot be negative")
+        sets["platform_charge_amount"] = to_decimal128(amt)
+    if payload.zero_balance_autoclose_enabled is not None:
+        sets["zero_balance_autoclose_enabled"] = bool(payload.zero_balance_autoclose_enabled)
+
+    await User.get_motor_collection().update_one({"_id": admin.id}, {"$set": sets})
+    await log_event(
+        action=AuditAction.SETTING_CHANGE,
+        entity_type="User",
+        entity_id=str(admin.id),
+        actor_id=admin.id,
+        new_values={k: (str(v) if not isinstance(v, bool) else v) for k, v in sets.items() if k != "updated_at"},
+    )
+    fresh = await User.get(admin.id)
+    return APIResponse(data=_pm_settings_dict(fresh))
 
 
 # ── Broker-search visibility (which admins' brokers show at signup) ──

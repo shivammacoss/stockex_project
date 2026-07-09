@@ -432,6 +432,28 @@ class User(TimestampMixin):
     #   CUSTOM_DOMAIN    : signed up directly on admin's custom_domain host
     signup_origin: str | None = None
 
+    # ── Per-admin platform maintenance settings (ADMIN-tier users) ───────
+    # An ADMIN configures these for THEIR OWN downstream users (super-admin
+    # doesn't touch them). Both default OFF; the daily maintenance sweep is a
+    # no-op until an admin turns one on.
+    #   • platform_charge_*  — a DAILY per-user platform fee. When enabled, the
+    #     sweep debits `platform_charge_amount` from each of the admin's ACTIVE
+    #     users' MAIN wallet once per IST day and credits it to the admin.
+    #   • zero_balance_autoclose_enabled — when enabled, a user of this admin
+    #     whose whole balance has sat at ₹0 for ≥7 days is soft-closed
+    #     (status → CLOSED, recoverable — NOT hard-deleted).
+    platform_charge_enabled: bool = False
+    platform_charge_amount: Money = Field(default_factory=lambda: Decimal128("0"))
+    zero_balance_autoclose_enabled: bool = False
+
+    # ── Per-user maintenance tracking (CLIENT-tier users) ────────────────
+    # IST day-string ("YYYY-MM-DD") of the last daily platform charge, so the
+    # sweep never double-charges within a day and self-heals across restarts.
+    last_platform_charge_day: str | None = None
+    # First moment the sweep observed this user's total balance at ₹0; cleared
+    # the moment any balance returns. `now - zero_balance_since ≥ 7d` → close.
+    zero_balance_since: datetime | None = None
+
     class Settings:
         name = "users"
         use_state_management = True

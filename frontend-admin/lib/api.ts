@@ -966,6 +966,20 @@ export const SettingsAPI = {
   adminFloatEnabled: () => unwrap<{ enabled: boolean }>(api.get("/admin/settings/admin-float")),
   setAdminFloatEnabled: (enabled: boolean) =>
     unwrap<{ enabled: boolean }>(api.put("/admin/settings/admin-float/enabled", { setting_value: enabled })),
+  // Per-admin platform maintenance — each admin's own daily per-user charge +
+  // zero-balance 7-day auto-close config (stored on the admin's own record).
+  platformMaintenance: () =>
+    unwrap<{ platform_charge_enabled: boolean; platform_charge_amount: string; zero_balance_autoclose_enabled: boolean }>(
+      api.get("/admin/settings/platform-maintenance"),
+    ),
+  setPlatformMaintenance: (body: {
+    platform_charge_enabled?: boolean;
+    platform_charge_amount?: number;
+    zero_balance_autoclose_enabled?: boolean;
+  }) =>
+    unwrap<{ platform_charge_enabled: boolean; platform_charge_amount: string; zero_balance_autoclose_enabled: boolean }>(
+      api.put("/admin/settings/platform-maintenance", body),
+    ),
   // Signup broker-search visibility — admin ids HIDDEN from the search (super-admin only).
   brokerSearchHidden: () => unwrap<{ hidden_admin_ids: string[] }>(api.get("/admin/settings/broker-search")),
   setBrokerSearchHidden: (hidden_admin_ids: string[]) =>

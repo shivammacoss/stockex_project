@@ -657,6 +657,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     )
     setattr(app, "_pnl_sharing_scheduler_task", pnl_sharing_task)
 
+    # Per-admin platform maintenance (leader-only, 30 min): daily per-user
+    # platform charge + zero-balance 7-day auto-close. Both default OFF and are
+    # idempotent per IST day, so this is a no-op until an admin opts in.
+    from app.services.platform_maintenance_service import platform_maintenance_loop
+    platform_maint_task: _asyncio.Task = _asyncio.create_task(
+        _supervise(
+            "platform_maintenance",
+            _leader_only("platform_maintenance", platform_maintenance_loop, interval_sec=1800.0),
+        )
+    )
+    setattr(app, "_platform_maintenance_task", platform_maint_task)
+
     # Shared demo reset: the login page's "Try Demo" logs everyone into ONE
     # shared demo account (auth_service.GLOBAL_DEMO_EMAIL) instead of minting a
     # throwaway per click. That account accrues everyone's trades, so flatten
@@ -929,6 +941,20 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             ptask.cancel()
             try:
                 await ptask
+            except (asyncio.CancelledError, Exception):
+                pass
+    except Exception:
+        pass
+
+    # Stop platform maintenance loop cleanly
+    try:
+        from app.services.platform_maintenance_service import stop_platform_maintenance
+        stop_platform_maintenance()
+        pmtask = getattr(app, "_platform_maintenance_task", None)
+        if pmtask is not None:
+            pmtask.cancel()
+            try:
+                await pmtask
             except (asyncio.CancelledError, Exception):
                 pass
     except Exception:
