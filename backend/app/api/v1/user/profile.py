@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
 from app.core.dependencies import CurrentUser
+from app.models.audit_log import AuditAction
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.common import APIResponse
 from app.schemas.user import UpdateProfileRequest, UserMeOut
 from app.services import branding_service
+from app.services.audit_service import log_event
 
 router = APIRouter(prefix="/users", tags=["user-profile"])
 
 
 @router.get("/me", response_model=APIResponse[UserMeOut])
 async def get_me(user: CurrentUser):
-    return APIResponse(data=_user_to_me(user))
+    return APIResponse(data=await _me_out(user))
 
 
 @router.put("/me", response_model=APIResponse[UserMeOut])
@@ -32,7 +34,34 @@ async def update_me(payload: UpdateProfileRequest, user: CurrentUser):
         if not user.kyc.is_verified:
             user.kyc = payload.kyc
     await user.save()
-    return APIResponse(data=_user_to_me(user))
+    return APIResponse(data=await _me_out(user))
+
+
+@router.put("/me/broker", response_model=APIResponse[UserMeOut])
+async def change_my_broker(payload: dict, user: CurrentUser):
+    """Self-service broker switch — the user picks a new broker (from the same
+    signup search) and re-stamps their hierarchy. Affects FUTURE attribution
+    only; existing wallet/positions/settlements are untouched."""
+    from app.services import broker_search_service
+
+    broker = await broker_search_service.resolve_active_visible_broker(str(payload.get("broker_id") or ""))
+    if broker is None:
+        raise HTTPException(status_code=400, detail="Please choose a valid broker.")
+    user.assigned_broker_id = broker.id
+    user.assigned_admin_id = broker.assigned_admin_id
+    user.broker_ancestry = (broker.broker_ancestry or []) + [broker.id]
+    await user.save()
+    try:
+        await log_event(
+            action=AuditAction.UPDATE,
+            entity_type="User",
+            entity_id=user.id,
+            actor_id=user.id,
+            new_values={"assigned_broker_id": str(broker.id)},
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    return APIResponse(data=await _me_out(user))
 
 
 @router.get("/me/branding", response_model=APIResponse[dict])
@@ -69,6 +98,22 @@ async def get_my_branding(user: CurrentUser):
             "signup_origin": user.signup_origin,
         }
     )
+
+
+async def _me_out(user) -> UserMeOut:
+    """UserMeOut + the user's current broker (name/city) resolved from
+    `assigned_broker_id`."""
+    out = _user_to_me(user)
+    if user.assigned_broker_id:
+        b = await User.get(user.assigned_broker_id)
+        if b is not None:
+            out.assigned_broker_id = str(b.id)
+            out.broker = {
+                "user_code": b.user_code,
+                "full_name": b.full_name,
+                "city": getattr(b, "city", None),
+            }
+    return out
 
 
 def _user_to_me(user) -> UserMeOut:

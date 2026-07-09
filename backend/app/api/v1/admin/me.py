@@ -40,6 +40,39 @@ def _f(v) -> float:
         return 0.0
 
 
+# ── Self-service profile (admin-tier) — a BROKER sets their public `city`
+#    here so they appear in the signup broker-search. ────────────────────
+@router.get("/profile", response_model=APIResponse[dict])
+async def my_profile(admin: CurrentAdmin):
+    return APIResponse(
+        data={
+            "id": str(admin.id),
+            "user_code": admin.user_code,
+            "full_name": admin.full_name,
+            "city": getattr(admin, "city", None),
+            "role": admin.role.value if hasattr(admin.role, "value") else str(admin.role),
+        }
+    )
+
+
+@router.put("/profile", response_model=APIResponse[dict])
+async def update_my_profile(payload: dict, admin: CurrentAdmin):
+    """Update the logged-in admin-tier user's own profile. A BROKER sets their
+    public `city` (place) here → they become searchable at signup."""
+    user = await User.get(admin.id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    if "city" in payload:
+        city = str(payload.get("city") or "").strip()
+        user.city = city or None
+    if payload.get("full_name"):
+        user.full_name = str(payload["full_name"]).strip()
+    await user.save()
+    return APIResponse(
+        data={"id": str(user.id), "full_name": user.full_name, "city": user.city}
+    )
+
+
 @router.get("/wallet", response_model=APIResponse[dict])
 async def my_wallet(admin: CurrentAdmin):
     """The logged-in admin/broker/sub-broker's own wallet + settlement history."""

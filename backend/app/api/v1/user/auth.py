@@ -80,32 +80,22 @@ def _signup_host(request: Request) -> str:
     dependencies=[rate_limit("auth")],
 )
 async def register(payload: RegisterRequest, request: Request):
-    # White-label attribution. Resolves the requesting host (custom
-    # domain) and/or `referral_code` (admin's user_code) to an admin
-    # owner. When BRANDING_ENABLED is False or neither matches, this
-    # returns ``(None, "PLATFORM")`` — exactly the pre-rollout default,
-    # so existing self-register flows are byte-identical.
-    # Prefer Origin/Referer (the tenant's custom domain) over Host (the
-    # shared API host) so custom-domain signups attribute to the domain
-    # owner instead of falling through to the super-admin pool.
-    request_host = _signup_host(request)
-    # User-to-user referral wins over admin attribution: if `referral_code`
-    # matches an ordinary user's `user_code`, the new user is REFERRED by them
-    # and INHERITS that referrer's admin/broker so the hierarchy stays intact.
-    # Otherwise fall through to the unchanged white-label admin attribution.
+    # ── Broker selection (MANDATORY) ──────────────────────────────────
+    # The user explicitly picks WHICH broker they join under (searchable by
+    # city at signup). This is the AUTHORITATIVE hierarchy — it overrides the
+    # old host / referral-inherited attribution.
+    from app.services import broker_search_service
+
+    broker = await broker_search_service.resolve_active_visible_broker(payload.broker_id)
+    if broker is None:
+        raise ValidationFailedError("Please choose a valid broker to sign up.")
+    assigned_admin_id = broker.assigned_admin_id
+    assigned_broker_id = broker.id
+    broker_ancestry = (broker.broker_ancestry or []) + [broker.id]
+
+    # Optional user-to-user referral — recorded for REWARD tracking only; it no
+    # longer changes the hierarchy (the picked broker is authoritative).
     referrer = await referral_service.resolve_referrer(payload.referral_code)
-    if referrer is not None:
-        assigned_admin_id = referrer.assigned_admin_id
-        assigned_broker_id = referrer.assigned_broker_id
-        broker_ancestry = referrer.broker_ancestry or []
-        signup_origin = "REFERRAL"
-    else:
-        assigned_admin_id, assigned_broker_id, broker_ancestry, signup_origin = (
-            await branding_service.resolve_signup_attribution(
-                request_host=request_host,
-                referral_code=payload.referral_code,
-            )
-        )
 
     user = await user_service.create_user(
         email=payload.email,
@@ -114,9 +104,9 @@ async def register(payload: RegisterRequest, request: Request):
         full_name=payload.full_name,
         status=UserStatus.ACTIVE,  # for self-register; admin flow can set PENDING
         assigned_admin_id=assigned_admin_id,
-        assigned_broker_id=assigned_broker_id or None,
-        broker_ancestry=broker_ancestry or None,
-        signup_origin=signup_origin,
+        assigned_broker_id=assigned_broker_id,
+        broker_ancestry=broker_ancestry,
+        signup_origin="BROKER_PICK",
     )
     # Link the referral (sets referred_by + creates the Referral doc). Never
     # let a referral bookkeeping error fail the signup.
@@ -150,6 +140,17 @@ async def register(payload: RegisterRequest, request: Request):
         ),
         message="Registered successfully. Please log in.",
     )
+
+
+@router.get("/brokers", response_model=APIResponse[list], dependencies=[rate_limit("auth")])
+async def list_brokers_for_signup(q: str | None = None, limit: int = 30):
+    """PUBLIC broker directory for the signup broker-picker. Active brokers +
+    sub-brokers across all admins (minus admins the super-admin hid from
+    search), matched by city / name / user_code. No auth (pre-login)."""
+    from app.services import broker_search_service
+
+    rows = await broker_search_service.search_brokers(q=q, limit=min(max(int(limit or 30), 1), 50))
+    return APIResponse(data=rows)
 
 
 @router.post(

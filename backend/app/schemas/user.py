@@ -42,7 +42,10 @@ class UserOut(BaseModel):
 
 
 class UserMeOut(UserOut):
-    """Same as UserOut for now — separate type so we can extend safely."""
+    """UserOut + the user's current broker (name/city) for the profile."""
+
+    assigned_broker_id: str | None = None
+    broker: dict | None = None  # {user_code, full_name, city}
 
 
 class UpdateProfileRequest(BaseModel):

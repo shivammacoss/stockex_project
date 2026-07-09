@@ -178,6 +178,37 @@ async def set_admin_float_enabled(payload: UpdatePlatformSettingRequest, admin: 
     return APIResponse(data={"enabled": enabled})
 
 
+# ── Broker-search visibility (which admins' brokers show at signup) ──
+@router.get("/settings/broker-search", response_model=APIResponse[dict])
+async def get_broker_search_hidden(admin: CurrentAdmin):
+    """Admin ids whose brokers are HIDDEN from the signup broker-search."""
+    _require_super_admin(admin)
+    from app.services import broker_search_service
+
+    return APIResponse(data={"hidden_admin_ids": await broker_search_service.get_hidden_admin_ids()})
+
+
+@router.put("/settings/broker-search", response_model=APIResponse[dict])
+async def set_broker_search_hidden(payload: dict, admin: CurrentAdmin):
+    """Set the full list of admin ids whose brokers are hidden from the signup
+    broker-search (default [] = every admin's brokers are searchable)."""
+    _require_super_admin(admin)
+    from app.services import broker_search_service
+
+    ids = payload.get("hidden_admin_ids")
+    if not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="hidden_admin_ids must be a list")
+    saved = await broker_search_service.set_hidden_admin_ids([str(x) for x in ids])
+    await log_event(
+        action=AuditAction.SETTING_CHANGE,
+        entity_type="PlatformSetting",
+        entity_id=broker_search_service.HIDDEN_ADMINS_KEY,
+        actor_id=admin.id,
+        new_values={"hidden_admin_ids": saved},
+    )
+    return APIResponse(data={"hidden_admin_ids": saved})
+
+
 # ── Holidays ────────────────────────────────────────────────────────
 @router.get("/holidays", response_model=APIResponse[list])
 async def list_holidays(admin: CurrentAdmin, year: int | None = None):

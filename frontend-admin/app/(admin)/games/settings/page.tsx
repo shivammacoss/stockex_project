@@ -35,6 +35,9 @@ const GAME_FIELDS: { key: string; label: string; group: GroupKey; type?: "bool" 
   { key: "max_tickets", label: "Max tickets", group: "core" },
   { key: "fixed_profit", label: "Winning amount (₹, number games)", group: "core" },
   { key: "top_winners", label: "Top winners (jackpot)", group: "core" },
+  // Number-game per-user limits (super-admin controls how much a user can play).
+  { key: "bets_per_day", label: "Numbers a user can play / day (number game)", group: "core" },
+  { key: "max_tickets_per_number", label: "Max tickets per number (number game)", group: "core" },
   // Up/Down uses start/end_time; Number/Bracket/Jackpot use bidding_* + result.
   { key: "start_time", label: "Betting start — up/down (HH:MM:SS)", group: "core" },
   { key: "end_time", label: "Betting end — up/down (HH:MM:SS)", group: "core" },

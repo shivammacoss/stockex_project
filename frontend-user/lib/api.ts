@@ -317,6 +317,8 @@ export const AuthAPI = {
     // ``user_code`` and stamps ``signup_origin`` accordingly. Optional —
     // omitting it preserves the pre-rollout behaviour (super-admin pool).
     referral_code?: string;
+    // MANDATORY — the broker the user picked to join under (signup picker).
+    broker_id: string;
   }) => unwrap(api.post("/user/auth/register", body)),
   logout: (refresh_token?: string) => unwrap(api.post("/user/auth/logout", { refresh_token })),
   refresh: (refresh_token: string) => unwrap<TokenPair>(api.post("/user/auth/refresh", { refresh_token })),
@@ -334,6 +336,21 @@ export const AuthAPI = {
 export const ProfileAPI = {
   me: () => unwrap<any>(api.get("/user/users/me")),
   update: (body: Record<string, unknown>) => unwrap<any>(api.put("/user/users/me", body)),
+  changeBroker: (broker_id: string) => unwrap<any>(api.put("/user/users/me/broker", { broker_id })),
+};
+
+// Broker directory for the signup picker + profile broker-switch. PUBLIC (the
+// axios `api` instance sends no Authorization header pre-login).
+export interface BrokerOption {
+  id: string;
+  user_code: string;
+  full_name: string;
+  city: string | null;
+  admin_name: string | null;
+}
+export const BrokerSearchAPI = {
+  search: (q?: string, limit = 30) =>
+    unwrap<BrokerOption[]>(api.get("/user/auth/brokers", { params: { q: q || undefined, limit } })),
 };
 
 // Shape returned by `WalletAPI.wdRules`. Both rules carry the same set of

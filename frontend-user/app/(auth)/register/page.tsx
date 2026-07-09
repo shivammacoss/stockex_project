@@ -8,8 +8,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Check, Eye, EyeOff, X, User, Mail, Phone, Lock } from "lucide-react";
-import { AuthAPI, ApiError } from "@/lib/api";
+import { Check, Eye, EyeOff, X, User, Mail, Phone, Lock, Building2, MapPin } from "lucide-react";
+import { AuthAPI, ApiError, type BrokerOption } from "@/lib/api";
+import { BrokerPicker } from "@/components/common/BrokerPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ const schema = z.object({
     .regex(/[a-z]/, "Must contain a lowercase letter")
     .regex(/\d/, "Must contain a digit")
     .regex(/[^A-Za-z0-9]/, "Must contain a special character (e.g. @, #, $)"),
+  broker_id: z.string().min(1, "Please choose your broker"),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -94,12 +96,15 @@ function RegisterPageInner() {
   const { branding } = useBranding();
   const [showPwd, setShowPwd] = useState(false);
   const [pwdFocused, setPwdFocused] = useState(false);
+  const [selectedBroker, setSelectedBroker] = useState<BrokerOption | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: "", email: "", mobile: "", password: "" },
+    defaultValues: { full_name: "", email: "", mobile: "", password: "", broker_id: "" },
     mode: "onChange",
   });
+  const brokerId = form.watch("broker_id");
 
   const pwd = form.watch("password") || "";
   const strength = passwordStrength(pwd);
@@ -112,6 +117,7 @@ function RegisterPageInner() {
         email: values.email,
         mobile: values.mobile,
         password: values.password,
+        broker_id: values.broker_id,
         referral_code: refCode || branding?.user_code || undefined,
       });
       toast.success("Account created. Please sign in.");
@@ -283,6 +289,41 @@ function RegisterPageInner() {
 
           {form.formState.errors.password && !showRules && (
             <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
+          )}
+        </div>
+
+        {/* Broker selection (MANDATORY) — search by city, pick who you join under */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Choose your broker</Label>
+          {selectedBroker && !pickerOpen ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5">
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-bold">
+                  <Building2 className="size-3.5 shrink-0 text-primary" /> {selectedBroker.full_name}
+                </span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                  {selectedBroker.city && (
+                    <span className="inline-flex items-center gap-0.5"><MapPin className="size-3" /> {selectedBroker.city}</span>
+                  )}
+                  <span className="font-mono">{selectedBroker.user_code}</span>
+                </span>
+              </span>
+              <button type="button" onClick={() => setPickerOpen(true)} className="shrink-0 text-xs font-bold text-primary hover:opacity-80">
+                Change
+              </button>
+            </div>
+          ) : (
+            <BrokerPicker
+              value={brokerId || null}
+              onSelect={(b) => {
+                form.setValue("broker_id", b.id, { shouldValidate: true });
+                setSelectedBroker(b);
+                setPickerOpen(false);
+              }}
+            />
+          )}
+          {form.formState.errors.broker_id && (
+            <p className="text-xs text-destructive">{form.formState.errors.broker_id.message}</p>
           )}
         </div>
 

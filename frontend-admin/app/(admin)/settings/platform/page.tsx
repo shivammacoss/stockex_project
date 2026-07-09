@@ -5,13 +5,16 @@ import { useTheme } from "next-themes";
 import {
   Bell,
   BellOff,
+  Building2,
   CalendarClock,
   Check,
   Loader2,
   Mail,
+  MapPin,
   Moon,
   Palette,
   Play,
+  Search,
   ShieldCheck,
   Sun,
   User,
@@ -20,8 +23,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminAuthStore } from "@/stores/authStore";
-import { SettingsAPI } from "@/lib/api";
+import { SettingsAPI, AdminMeAPI, ManagementAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { cn } from "@/lib/utils";
@@ -74,7 +78,121 @@ export default function PlatformSettingsPage() {
         <NotificationsCard />
         <WeeklySettlementCard />
       </div>
+
+      <BrokerSearchVisibilityCard />
     </div>
+  );
+}
+
+/* ── Signup broker-search visibility (SUPER_ADMIN) ────────────────────
+   Which admins' brokers appear when a user searches for a broker at signup.
+   Turn an admin OFF → all their brokers vanish from the search. */
+function BrokerSearchVisibilityCard() {
+  const admin = useAdminAuthStore((s) => s.admin);
+  const isSuperAdmin = (admin?.role ?? "") === "SUPER_ADMIN";
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    (async () => {
+      try {
+        const [list, h] = await Promise.all([
+          ManagementAPI.listSubAdmins({ page_size: 200 }),
+          SettingsAPI.brokerSearchHidden(),
+        ]);
+        setAdmins((list as any)?.items ?? (Array.isArray(list) ? list : []));
+        setHidden(new Set(h?.hidden_admin_ids ?? []));
+      } catch {
+        /* ignore */
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [isSuperAdmin]);
+
+  if (!isSuperAdmin) return null;
+
+  async function toggle(id: string) {
+    const prev = hidden;
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setHidden(next);
+    try {
+      await SettingsAPI.setBrokerSearchHidden([...next]);
+    } catch (e: any) {
+      toast.error(e?.message || "Save failed");
+      setHidden(prev); // revert
+    }
+  }
+
+  const needle = q.trim().toLowerCase();
+  const filtered = admins.filter(
+    (a) =>
+      !needle ||
+      String(a.full_name || "").toLowerCase().includes(needle) ||
+      String(a.user_code || "").toLowerCase().includes(needle),
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Building2 className="size-4 text-primary" /> Signup broker search
+        </CardTitle>
+        <CardDescription>
+          Which admins&apos; brokers appear when a user searches at signup. Turn an admin{" "}
+          <span className="font-medium text-foreground">OFF</span> to hide all their brokers.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search admins" className="h-9 pl-8" />
+        </div>
+        {loading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">Loading admins…</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">No admins found.</div>
+        ) : (
+          <div className="space-y-1.5">
+            {filtered.map((a) => {
+              const shown = !hidden.has(a.id);
+              return (
+                <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-card p-2.5">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">{a.full_name || a.user_code}</span>
+                    <span className="block font-mono text-[11px] text-muted-foreground">
+                      {a.user_code}
+                      {typeof a.broker_count === "number" ? ` · ${a.broker_count} broker${a.broker_count === 1 ? "" : "s"}` : ""}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className={cn("text-[10px] font-bold uppercase", shown ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                      {shown ? "Shown" : "Hidden"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggle(a.id)}
+                      aria-pressed={shown}
+                      aria-label={shown ? "Hide this admin's brokers" : "Show this admin's brokers"}
+                      className={cn(
+                        "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors",
+                        shown ? "bg-emerald-500" : "bg-muted",
+                      )}
+                    >
+                      <span className={cn("inline-block size-5 transform rounded-full bg-white shadow transition-transform", shown ? "translate-x-6" : "translate-x-1")} />
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -193,8 +311,63 @@ function ProfileCard() {
             value={String(admin.role).replace(/_/g, " ")}
           />
         </ul>
+
+        <CityEditor />
       </CardContent>
     </Card>
+  );
+}
+
+/* Self-service city (place) — a BROKER sets this so they show up in the
+   signup broker-search. Visible to every admin-tier user. */
+function CityEditor() {
+  const [city, setCity] = useState("");
+  const [initial, setInitial] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    AdminMeAPI.profile()
+      .then((p) => {
+        setCity(p?.city || "");
+        setInitial(p?.city || "");
+      })
+      .catch(() => {});
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await AdminMeAPI.setProfile({ city });
+      setInitial(res?.city || "");
+      setCity(res?.city || "");
+      toast.success("City saved");
+    } catch (e: any) {
+      toast.error(e?.message || "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card p-3">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <MapPin className="size-3.5 text-primary" /> Your city (place)
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        Brokers: set your city so clients can find you in the signup broker-search.
+      </p>
+      <div className="mt-2 flex items-center gap-2">
+        <Input
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          placeholder="e.g. Mumbai"
+          className="h-9"
+        />
+        <Button size="sm" disabled={saving || city.trim() === initial.trim()} loading={saving} onClick={save}>
+          Save
+        </Button>
+      </div>
+    </div>
   );
 }
 

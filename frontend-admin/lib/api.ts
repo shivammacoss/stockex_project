@@ -245,6 +245,11 @@ export const AdminGamesAPI = {
 export const AdminMeAPI = {
   wallet: () => unwrap<any>(api.get("/admin/me/wallet")),
   houseSummary: () => unwrap<any>(api.get("/admin/me/house-summary")),
+  // Self-service profile — a BROKER sets their public `city` (place) so they
+  // appear in the signup broker-search.
+  profile: () => unwrap<any>(api.get("/admin/me/profile")),
+  setProfile: (body: { city?: string; full_name?: string }) =>
+    unwrap<any>(api.put("/admin/me/profile", body)),
   // Self-release held games commission (temporary_balance → own main wallet).
   // Omit `amount` (or pass null) to release the full held balance.
   releaseCommission: (amount?: number) =>
@@ -955,6 +960,10 @@ export const SettingsAPI = {
   adminFloatEnabled: () => unwrap<{ enabled: boolean }>(api.get("/admin/settings/admin-float")),
   setAdminFloatEnabled: (enabled: boolean) =>
     unwrap<{ enabled: boolean }>(api.put("/admin/settings/admin-float/enabled", { setting_value: enabled })),
+  // Signup broker-search visibility — admin ids HIDDEN from the search (super-admin only).
+  brokerSearchHidden: () => unwrap<{ hidden_admin_ids: string[] }>(api.get("/admin/settings/broker-search")),
+  setBrokerSearchHidden: (hidden_admin_ids: string[]) =>
+    unwrap<{ hidden_admin_ids: string[] }>(api.put("/admin/settings/broker-search", { hidden_admin_ids })),
   holidays: (year?: number) => unwrap<any[]>(api.get("/admin/holidays", { params: { year } })),
   createHoliday: (body: any) => unwrap<any>(api.post("/admin/holidays", body)),
   deleteHoliday: (id: string) => unwrap<any>(api.delete(`/admin/holidays/${id}`)),

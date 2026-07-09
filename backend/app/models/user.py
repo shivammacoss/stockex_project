@@ -325,6 +325,12 @@ class User(TimestampMixin):
     # everywhere, so their settlement math stays byte-identical to before.
     broker_brokerage_share_pct: Decimal128 | None = None  # 0..100
 
+    # Broker's PUBLIC city/place — set by the broker themselves. Powers the
+    # signup broker-picker's place-wise search. Only meaningful for role==BROKER
+    # but stored top-level + indexed for a fast search; NULL until the broker
+    # sets it. Distinct from the private `kyc.city`.
+    city: str | None = None
+
     # Per-user "auto settle" toggle (default ON). When True (default),
     # `wallet_service.adjust()` floors any debit that would push
     # available_balance below 0 and books the overflow into
@@ -439,6 +445,8 @@ class User(TimestampMixin):
             IndexModel([("kyc.pan", ASCENDING)]),
             IndexModel([("assigned_admin_id", ASCENDING), ("role", ASCENDING)]),
             IndexModel([("assigned_broker_id", ASCENDING), ("role", ASCENDING)]),
+            # Broker place-wise search for the signup broker-picker.
+            IndexModel([("role", ASCENDING), ("city", ASCENDING)]),
             # Multikey index — Mongo creates one entry per element of the
             # array, so {"broker_ancestry": <id>} matches in O(log n).
             IndexModel([("broker_ancestry", ASCENDING)]),

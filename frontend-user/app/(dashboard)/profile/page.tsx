@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   AtSign,
   Bell,
+  Building2,
   ChevronRight,
   CreditCard,
   FileText,
@@ -28,7 +29,8 @@ import {
   User as UserIcon,
   Wallet as WalletIcon,
 } from "lucide-react";
-import { ProfileAPI, AuthAPI } from "@/lib/api";
+import { ProfileAPI, AuthAPI, type BrokerOption } from "@/lib/api";
+import { BrokerPicker } from "@/components/common/BrokerPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +60,7 @@ import { cn } from "@/lib/utils";
 type SubView =
   | "main"
   | "personal"
+  | "broker"
   | "security"
   | "appearance"
   | "support";
@@ -134,6 +137,7 @@ export default function ProfilePage() {
             onSave={() => save(name, refetch)}
           />
         )}
+        {subView === "broker" && <BrokerForm me={me} onDone={refetch} />}
         {subView === "security" && <SecurityForm me={me} />}
         {subView === "appearance" && <AppearanceForm />}
         {subView === "support" && <SupportLinks />}
@@ -166,6 +170,13 @@ export default function ProfilePage() {
           label="Personal information"
           sub="Name, email, mobile, user code"
           onClick={() => setSubView("personal")}
+        />
+        <ListRow
+          icon={Building2}
+          tone="primary"
+          label="Your broker"
+          sub={me?.broker?.full_name ? `${me.broker.full_name}${me.broker.city ? " · " + me.broker.city : ""}` : "Choose / switch your broker"}
+          onClick={() => setSubView("broker")}
         />
         <ListRowLink
           icon={WalletIcon}
@@ -274,6 +285,8 @@ function subViewTitle(v: SubView): string {
   switch (v) {
     case "personal":
       return "Personal information";
+    case "broker":
+      return "Your broker";
     case "security":
       return "Security";
     case "appearance":
@@ -283,6 +296,72 @@ function subViewTitle(v: SubView): string {
     default:
       return "Profile";
   }
+}
+
+/* ── Broker view — current broker + switch (searchable by city) ──────── */
+function BrokerForm({ me, onDone }: { me: any; onDone: () => any }) {
+  const [saving, setSaving] = useState(false);
+  const [picked, setPicked] = useState<BrokerOption | null>(null);
+  const current = me?.broker;
+
+  async function change() {
+    if (!picked) return;
+    setSaving(true);
+    try {
+      await ProfileAPI.changeBroker(picked.id);
+      toast.success(`Switched to ${picked.full_name}`);
+      setPicked(null);
+      await onDone();
+    } catch (e: any) {
+      toast.error(e?.message || "Could not switch broker");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-border/60 bg-card p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Current broker</div>
+        {current ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <Building2 className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="truncate font-bold">{current.full_name}</div>
+              <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                {current.city && <span>{current.city}</span>}
+                <span className="font-mono">{current.user_code}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1 text-sm text-muted-foreground">No broker set.</div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Switch broker</div>
+        <BrokerPicker value={picked?.id ?? null} onSelect={setPicked} />
+        <Button
+          className="w-full"
+          disabled={!picked || saving || picked.id === me?.assigned_broker_id}
+          loading={saving}
+          onClick={change}
+        >
+          {picked
+            ? picked.id === me?.assigned_broker_id
+              ? "Already your broker"
+              : `Switch to ${picked.full_name}`
+            : "Pick a broker to switch"}
+        </Button>
+        <p className="text-center text-[11px] text-muted-foreground">
+          Changing your broker affects future attribution only — your wallet, positions & history stay the same.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────
