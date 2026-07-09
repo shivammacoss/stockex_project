@@ -12,14 +12,16 @@ import { Cell } from "./Cell";
 import { useAdminAuthStore } from "@/stores/authStore";
 import { canEdit } from "@/lib/permissions";
 
-export function SegmentMatrix({ categoryId }: { categoryId: string }) {
+export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; subAdminId?: string }) {
   const qc = useQueryClient();
   const me = useAdminAuthStore((s) => s.admin);
-  const canMutate = canEdit(me, "segment_settings");
+  // When editing a SPECIFIC admin's settings (subAdminId), only the super-admin
+  // reaches here; otherwise use the normal per-role edit gate.
+  const canMutate = subAdminId ? me?.role === "SUPER_ADMIN" : canEdit(me, "segment_settings");
   const fields = CATEGORY_FIELDS[categoryId] || [];
   const { data: segments, isLoading } = useQuery({
-    queryKey: ["admin", "netting", "segments"],
-    queryFn: () => NettingAPI.segments(),
+    queryKey: ["admin", "netting", "segments", subAdminId ?? "self"],
+    queryFn: () => (subAdminId ? NettingAPI.segmentsForSubAdmin(subAdminId) : NettingAPI.segments()),
   });
 
   const [edits, setEdits] = useState<Record<string, Record<string, any>>>({});
@@ -83,10 +85,16 @@ export function SegmentMatrix({ categoryId }: { categoryId: string }) {
       // effective-settings cache. With Promise.all the round-trips overlap
       // and total wall time drops to ~one slow request, not the sum of all.
       const ids = Object.keys(edits);
-      await Promise.all(ids.map((id) => NettingAPI.updateSegment(id, edits[id])));
+      await Promise.all(
+        ids.map((id) =>
+          subAdminId
+            ? NettingAPI.updateSegmentForSubAdmin(subAdminId, id, edits[id])
+            : NettingAPI.updateSegment(id, edits[id]),
+        ),
+      );
       toast.success(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}`);
       setEdits({});
-      qc.invalidateQueries({ queryKey: ["admin", "netting", "segments"] });
+      qc.invalidateQueries({ queryKey: ["admin", "netting", "segments", subAdminId ?? "self"] });
       // Also evict the user-side effective-settings cache key so any tab the
       // admin has open (terminal preview, etc.) refetches the new numbers on
       // its next 30 s window instead of holding stale values.

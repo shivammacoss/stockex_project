@@ -14,8 +14,10 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Layers,
   Trash2,
 } from "lucide-react";
+import { SubAdminSegmentDialog } from "@/components/admin/netting/SubAdminSegmentDialog";
 
 import { BrokerMgmtAPI, ManagementAPI, SettingsAPI, setTokens } from "@/lib/api";
 import { useAdminAuthStore } from "@/stores/authStore";
@@ -90,6 +92,7 @@ export default function SubAdminsPage() {
   // consistent experience across both flows.
   const [showNewPw, setShowNewPw] = useState(false);
   const [createBrokerForAdmin, setCreateBrokerForAdmin] = useState<{id: string; name: string} | null>(null);
+  const [segSettingsFor, setSegSettingsFor] = useState<{ id: string; name: string } | null>(null);
 
   // Same-origin localStorage means we can't keep both super-admin and sub-admin
   // sessions live in different tabs (both live under localhost:3001). So
@@ -283,6 +286,10 @@ export default function SubAdminsPage() {
                 <Pencil className="size-4" />
                 Edit permissions
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSegSettingsFor({ id: r.id, name: r.full_name || r.user_code })}>
+                <Layers className="size-4 text-primary" />
+                Segment settings
+              </DropdownMenuItem>
               {r.status === "ACTIVE" ? (
                 <DropdownMenuItem onSelect={() => blockMut.mutate(r.id)}>
                   <ShieldOff className="size-4 text-red-500" />
@@ -444,7 +451,13 @@ export default function SubAdminsPage() {
       <CreateSubAdminDialog
         open={creating}
         onOpenChange={setCreating}
-        onCreated={() => qc.invalidateQueries({ queryKey: ["admin", "sub-admins"] })}
+        onCreated={(created) => {
+          qc.invalidateQueries({ queryKey: ["admin", "sub-admins"] });
+          // Open this admin's segment settings right after create so the SA
+          // can set them at "create time" (the admin already inherited the SA
+          // ceiling as a baseline; here the SA tightens/customizes per admin).
+          if (created?.id) setSegSettingsFor({ id: created.id, name: created.full_name || created.user_code });
+        }}
       />
       {editing && (
         <EditSubAdminDialog
@@ -532,6 +545,13 @@ export default function SubAdminsPage() {
         open={!!createBrokerForAdmin}
         admin={createBrokerForAdmin}
         onClose={() => setCreateBrokerForAdmin(null)}
+      />
+
+      <SubAdminSegmentDialog
+        open={!!segSettingsFor}
+        onOpenChange={(v) => !v && setSegSettingsFor(null)}
+        adminId={segSettingsFor?.id ?? null}
+        adminName={segSettingsFor?.name}
       />
     </div>
   );
@@ -712,7 +732,7 @@ function CreateSubAdminDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreated: () => void;
+  onCreated: (created?: any) => void;
 }) {
   const [form, setForm] = useState({
     full_name: "",
@@ -738,7 +758,7 @@ function CreateSubAdminDialog({
     }
     setLoading(true);
     try {
-      await ManagementAPI.createSubAdmin({
+      const created = await ManagementAPI.createSubAdmin({
         full_name: form.full_name,
         email: form.email,
         mobile: form.mobile,
@@ -751,7 +771,7 @@ function CreateSubAdminDialog({
       onOpenChange(false);
       setForm({ full_name: "", email: "", mobile: "", password: "", confirm_password: "", pnl_share_pct: "0", opening_fund: "0" });
       setPerms({ ...ALL_OFF });
-      onCreated();
+      onCreated(created);
     } catch (e: any) {
       toast.error(e.message);
     } finally {

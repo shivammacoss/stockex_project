@@ -379,6 +379,12 @@ export const NettingAPI = {
   getSegment: (id: string) => unwrap<any>(api.get(`/admin/netting/segments/${id}`)),
   updateSegment: (id: string, patch: any) =>
     unwrap<any>(api.put(`/admin/netting/segments/${id}`, { patch })),
+  // Per-admin segment settings — SUPER-ADMIN sets a SPECIFIC admin's (clamped to
+  // the SA ceiling). Powers the sub-admin 3-dot "Segment settings" editor.
+  segmentsForSubAdmin: (adminId: string) =>
+    unwrap<any[]>(api.get(`/admin/netting/sub-admin/${adminId}/segments`)),
+  updateSegmentForSubAdmin: (adminId: string, id: string, patch: any) =>
+    unwrap<any>(api.put(`/admin/netting/sub-admin/${adminId}/segments/${id}`, { patch })),
   scripts: (segment?: string) =>
     unwrap<any[]>(api.get("/admin/netting/scripts", { params: segment ? { segment } : {} })),
   createScript: (body: any) => unwrap<any>(api.post("/admin/netting/scripts", body)),

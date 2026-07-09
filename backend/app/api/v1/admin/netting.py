@@ -202,6 +202,44 @@ async def update_segment(
     return APIResponse(data=_merge_with_override(seg, over, scope))
 
 
+# ── Per-admin segment settings (SUPER-ADMIN sets a SPECIFIC admin's) ──
+async def _get_target_admin(admin_id: str) -> User:
+    target = await User.get(PydanticObjectId(admin_id))
+    if target is None or target.role != UserRole.ADMIN:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    return target
+
+
+@router.get("/sub-admin/{admin_id}/segments", response_model=APIResponse[list])
+async def list_sub_admin_segments(admin_id: str, admin: SuperAdmin):
+    """SUPER-ADMIN views ONE admin's segment settings (GLOBAL + that admin's
+    own SubAdminSegmentOverride) — so the SA can set/adjust them per admin."""
+    target = await _get_target_admin(admin_id)
+    rows = await svc.list_segments()
+    overs = await svc.list_sub_admin_segment_overrides(target.id)
+    by_name = {o.segment_name: o for o in overs}
+    return APIResponse(
+        data=[_merge_with_override(r, by_name.get(r.name), "SUB_ADMIN") for r in rows]
+    )
+
+
+@router.put("/sub-admin/{admin_id}/segments/{segment_id}", response_model=APIResponse[dict])
+async def update_sub_admin_segment(admin_id: str, segment_id: str, payload: dict, admin: SuperAdmin):
+    """SUPER-ADMIN sets ONE admin's segment settings, CLAMPED to the SA's own
+    ceiling (the admin can never exceed what the SA allows; brokerage stays a
+    floor). SA can do this at admin-create and anytime after (3-dot menu)."""
+    target = await _get_target_admin(admin_id)
+    patch = payload.get("patch") or {k: v for k, v in payload.items() if k != "patch"}
+    if not isinstance(patch, dict):
+        raise HTTPException(status_code=400, detail="patch must be an object")
+    seg = await svc.get_segment(segment_id)
+    parent_eff = await svc.resolve_parent_effective_segment(target, seg.name)
+    if parent_eff:
+        patch, _clamp = svc.clamp_child_patch(patch, parent_eff)
+    over = await svc.upsert_sub_admin_segment_override(target.id, seg.name, patch)
+    return APIResponse(data=_merge_with_override(seg, over, "SUB_ADMIN"))
+
+
 @router.get("/diagnose", response_model=APIResponse[dict])
 async def diagnose_segment(
     admin: SuperAdmin,
