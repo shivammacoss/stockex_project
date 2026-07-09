@@ -180,20 +180,28 @@ async def resolve_btc_window(
 
 
 async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
-    """NIFTY close at a specific IST minute (1-min Kite candle), with fallbacks
-    that keep settlement UNSTUCK when the result minute lands after market close.
+    """NIFTY settlement price for a result that lands at / after market close.
 
-    Bug this fixes: niftyNumber / niftyJackpot use result_time 15:45 while NSE
-    shuts at 15:30. The exact 15:43–15:46 window has NO candle and there's no
-    live LTP after close, so the old `dt-2m … dt+1m` lookup + `nifty_ltp()`
-    fallback both returned None and the settler skipped FOREVER — the result
-    never came. We now (1) widen the lookback so the session's LAST candle
-    (the 15:30 close) is still found, and (2) fall back to the persisted
-    last-known close (`nifty_ltp_display`) so a market-closed result always
-    resolves. The last session close IS the correct settlement price once the
-    market is shut."""
+    Uses Zerodha's OFFICIAL closing candle — the last 1-minute historical candle
+    of the session (15:29→15:30) — which is the authoritative daily close the
+    admin terminal shows (e.g. 23,981.90 → number .90). This is what the
+    operator treats as the "real" clearing value.
+
+    Deliberately NOT the WS feed's last STREAMED tick (`mdlast`, via
+    `nifty_ltp_display`): when the live feed drops before the final print it can
+    sit ~20 pts below the official close (2026-07-09 it was 23,962.80 → .80,
+    while the true Zerodha close was 23,981.90 → .90). It's also NOT a literal
+    15:00–15:30 mean (that came to ~23,962.36 → .36) — the operator's "clearing
+    price" is the official close candle, not the arithmetic average.
+
+    During market hours the exact live LTP is returned. A 6-hour lookback makes
+    a post-close result still find the session's final candle; a persisted
+    fallback keeps settlement from ever stalling if historical is unavailable.
+    On resolve it also refreshes the games display cache so the bracket / number
+    "live spot" converges onto the same official value the admin shows."""
     from datetime import timedelta
 
+    from app.core.redis_client import cache_set
     from app.services.zerodha_service import zerodha
     from app.utils.time_utils import now_ist
 
@@ -202,26 +210,7 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
     if live and live > 0:
         return live
 
-    # 2) SAME-DAY result AFTER close: the platform's OWN persisted last tick
-    #    (mdlast, via nifty_ltp_display) IS the official close and matches the
-    #    NIFTY widget the user sees on screen. Prefer it over Zerodha historical
-    #    minute data — right after close that historical can be provisional /
-    #    lag and return a stale intraday candle. Observed 2026-07-09: historical
-    #    tail was 23981.9 while the TRUE close was 23962.8, so the winning
-    #    number settled at .90 instead of the correct .80. The last live tick
-    #    is authoritative once the market is shut.
-    try:
-        is_today = dt.date() == now_ist().date()
-    except Exception:
-        is_today = False
-    if is_today:
-        disp = await nifty_ltp_display()
-        if disp and disp > 0:
-            return disp
-
-    # 3) Historical minute candle — authoritative for an OLDER day (backfill),
-    #    and a last resort today when no persisted tick exists. 6-hour lookback
-    #    so a post-close result still finds the session's last candle.
+    # 2) OFFICIAL close = last historical minute candle of the session.
     try:
         candles = await zerodha.get_historical(
             NIFTY_TOKEN, dt - timedelta(hours=6), dt + timedelta(minutes=1), "minute"
@@ -229,11 +218,19 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
         if candles:
             cl = to_decimal(candles[-1]["close"])
             if cl > 0:
-                return quantize_money(cl)
+                val = quantize_money(cl)
+                # Converge the games UI onto the official close after market shut
+                # so the bracket / number "live spot" matches settlement + admin.
+                try:
+                    if dt.date() == now_ist().date():
+                        await cache_set(_NIFTY_LAST_KEY, str(val), ttl_sec=_NIFTY_LAST_TTL)
+                except Exception:
+                    pass
+                return val
     except Exception:
         logger.debug("nifty_price_at_failed", exc_info=True)
 
-    # 4) Final fallback — persisted last-known close so settlement never stalls.
+    # 3) Final fallback — persisted last-known so settlement never stalls.
     return await nifty_ltp_display()
 
 
