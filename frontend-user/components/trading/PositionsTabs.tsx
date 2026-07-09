@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn, exactTimestamp, formatINR, formatPrice, isUsdSegment, pnlColor } from "@/lib/utils";
+import { walletKindForSegment } from "@/lib/wallets";
 import { isInstrumentMarketOpen, marketLabel } from "@/lib/marketHours";
 import { playClosedTone } from "@/lib/trade-audio";
 import { usePriceFlash } from "@/lib/usePriceFlash";
@@ -62,6 +63,10 @@ interface Props {
    *  "positions" but the Orders rail-toggle opens the drawer on "pending"
    *  so the user sees their order book straight away. */
   initialTab?: TabKey;
+  /** Active trading wallet (MCX / NSE_BSE / …). When set, Active Trades are
+   *  filtered to this wallet's segment so the blotter matches the other
+   *  (already wallet-scoped) tabs. */
+  walletKind?: string;
 }
 
 const ONE_CLICK_KEY = "setupfx.terminal.oneClick";
@@ -115,7 +120,7 @@ function isBenignCloseError(e: any): boolean {
   );
 }
 
-export function PositionsTabs({ positions, pendingOrders, history, cancelled, totalPnL, initialTab = "positions" }: Props) {
+export function PositionsTabs({ positions, pendingOrders, history, cancelled, totalPnL, initialTab = "positions", walletKind }: Props) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>(initialTab);
 
@@ -151,7 +156,7 @@ export function PositionsTabs({ positions, pendingOrders, history, cancelled, to
   // Without this an immediate poll often returns server data that's
   // ~100–500 ms behind a just-written close, briefly resurrecting the
   // row we just removed.
-  const { data: activeTrades } = useQuery<any[]>({
+  const { data: activeTradesRaw } = useQuery<any[]>({
     queryKey: ["active-trades"],
     queryFn: () => PositionAPI.activeTrades(),
     refetchInterval: (query: any) => {
@@ -164,6 +169,18 @@ export function PositionsTabs({ positions, pendingOrders, history, cancelled, to
       return Date.now() - last < 3000 ? 3500 : 2000;
     },
   });
+  // Scope Active Trades to the active wallet's segment so this tab matches
+  // the other (already wallet-scoped) tabs — an MCX wallet never lists a
+  // NIFTY fill.
+  const activeTrades = useMemo(
+    () =>
+      walletKind
+        ? (activeTradesRaw ?? []).filter(
+            (t: any) => walletKindForSegment(t?.segment ?? t?.segment_type) === walletKind,
+          )
+        : (activeTradesRaw ?? []),
+    [activeTradesRaw, walletKind],
+  );
 
   const tabs: { key: TabKey; label: string; count: number }[] = [
     { key: "positions", label: "Positions", count: positions.length },

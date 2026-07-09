@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -274,12 +274,29 @@ export default function TradingTerminalPage() {
     refetchInterval: livePollInterval,
   });
 
+  // Which trading wallet backs the CURRENT instrument. The whole blotter
+  // below (Positions / Active / Pending / History / Cancelled) AND the P&L +
+  // footer strip are SCOPED to this wallet, so switching the charted
+  // instrument's wallet (e.g. to MCX) hides every other segment's trades.
+  // (User: "wallet switch kiya to niche sirf us wallet ka dikhe, dusre
+  // segment ka NIFTY trade na dikhe.")
+  const activeWalletKind: string = (instrument as any)?.segment
+    ? walletKindForSegment((instrument as any).segment)
+    : walletParam || "NSE_BSE";
+  const inActiveWallet = useCallback(
+    (row: any) =>
+      walletKindForSegment(row?.segment_type ?? row?.segment) === activeWalletKind,
+    [activeWalletKind],
+  );
+
   const pendingOrders = useMemo(
     () =>
-      (orders ?? []).filter((o: any) =>
-        ["PENDING", "OPEN", "TRIGGERED"].includes(String(o.status).toUpperCase())
+      (orders ?? []).filter(
+        (o: any) =>
+          ["PENDING", "OPEN", "TRIGGERED"].includes(String(o.status).toUpperCase()) &&
+          inActiveWallet(o),
       ),
-    [orders]
+    [orders, inActiveWallet]
   );
   const history = useMemo(
     () =>
@@ -291,16 +308,21 @@ export default function TradingTerminalPage() {
         // confusion when admin reopens a position (the new BUY shows as
         // "executed" in history while the position is still open).
         if (o.pnl_inr === null || o.pnl_inr === undefined || o.pnl_inr === "") return false;
+        // Scope to the active wallet's segment.
+        if (!inActiveWallet(o)) return false;
         // Show ALL closes — including system stop-outs / SL-TP fires. The
         // History ACTION column now renders the reason (Stop-out / SL hit /
         // TP hit / Closed) so the trader can tell exactly why each closed.
         return true;
       }),
-    [orders]
+    [orders, inActiveWallet]
   );
   const cancelled = useMemo(
-    () => (orders ?? []).filter((o: any) => String(o.status).toUpperCase() === "CANCELLED"),
-    [orders]
+    () =>
+      (orders ?? []).filter(
+        (o: any) => String(o.status).toUpperCase() === "CANCELLED" && inActiveWallet(o),
+      ),
+    [orders, inActiveWallet]
   );
 
   // Live-LTP overlay for the positions table, driven by a WebSocket stream
@@ -368,26 +390,25 @@ export default function TradingTerminalPage() {
     });
   }, [positions, liveQuotesByToken]);
 
+  // Positions scoped to the active wallet — everything downstream (the
+  // Positions tab rows, the tab P&L header, and the footer WalletStrip
+  // P&L) reads from this so an MCX wallet never shows a NIFTY position.
+  const positionsScoped = useMemo(
+    () => (positionsLive ?? []).filter((p: any) => inActiveWallet(p)),
+    [positionsLive, inActiveWallet]
+  );
+
   const totalPnL = useMemo(
     () =>
-      (positionsLive ?? []).reduce(
+      (positionsScoped ?? []).reduce(
         (acc: number, p: any) => acc + (Number(p.unrealized_pnl) || 0),
         0
       ),
-    [positionsLive]
+    [positionsScoped]
   );
 
   const bestBid = quote?.bid ?? quote?.depth?.bids?.[0]?.price ?? null;
   const bestAsk = quote?.ask ?? quote?.depth?.asks?.[0]?.price ?? null;
-
-  // Which trading wallet backs the CURRENT instrument — this is the wallet the
-  // order actually debits (server routes margin by the instrument's segment).
-  // Show its balance in the footer so the trader sees the real capital, not
-  // the Main cash wallet (which stays 0 in the multi-wallet model). Falls back
-  // to the ?wallet= scope until the instrument detail loads.
-  const activeWalletKind: string = (instrument as any)?.segment
-    ? walletKindForSegment((instrument as any).segment)
-    : walletParam || "NSE_BSE";
 
   // Option-chain eligibility — same heuristic as TradeDetailSheet: Indian
   // equity / index / future underlyings can have an option chain; Infoway
@@ -731,11 +752,12 @@ export default function TradingTerminalPage() {
             "Orders" tab which already shows Positions / Holdings / All Orders. */}
         <div className="hidden shrink-0 lg:block">
           <PositionsTabs
-            positions={positionsLive ?? []}
+            positions={positionsScoped ?? []}
             pendingOrders={pendingOrders}
             history={history}
             cancelled={cancelled}
             totalPnL={totalPnL}
+            walletKind={activeWalletKind}
           />
           {/* Slim wallet stats strip — Total Balance / Equity / Used Margin /
               Available / Open P&L. Sits at the bottom of the desktop terminal
