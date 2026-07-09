@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ export default function TradingTerminalPage() {
   // Selected instrument — kept in sync with the ?token= URL param so that
   // soft-nav clicks from the side panel (router.push) actually swap the chart.
   const searchParams = useSearchParams();
+  const router = useRouter();
   const urlToken = searchParams?.get("token") || null;
   const walletParam = searchParams?.get("wallet") || null;
   const [selectedToken, setSelectedToken] = useState<string | null>(urlToken);
@@ -93,15 +94,21 @@ export default function TradingTerminalPage() {
       try {
         // Default the chart to a symbol matching the wallet the terminal was
         // opened for (Accounts → Trade). Falls back to BTCUSD otherwise.
-        const DEFAULT_SYMBOL_BY_WALLET: Record<string, string> = {
-          NSE_BSE: "RELIANCE",
-          MCX: "GOLD",
-          CRYPTO: "BTCUSD",
-          FOREX: "EURUSD",
+        //
+        // The search MUST be scoped to the wallet's exchange, otherwise a bare
+        // seed collides across segments: "GOLD" on the MCX wallet returned
+        // "GOLDSTAR-SM" (an NSE SME stock) as the first hit, so opening the MCX
+        // account loaded an NSE instrument and the whole footer / blotter
+        // switched to NSE/BSE. Passing the exchange makes "GOLD" resolve to the
+        // MCX GOLD future (GOLD26AUGFUT) so the account stays consistent.
+        const DEFAULT_SYMBOL_BY_WALLET: Record<string, { seed: string; exchange?: string }> = {
+          NSE_BSE: { seed: "RELIANCE", exchange: "NSE" },
+          MCX: { seed: "GOLD", exchange: "MCX" },
+          CRYPTO: { seed: "BTCUSD" },
+          FOREX: { seed: "EURUSD" },
         };
-        const seed =
-          (walletParam && DEFAULT_SYMBOL_BY_WALLET[walletParam]) || "BTCUSD";
-        const found = await InstrumentAPI.search(seed, undefined, undefined, 1);
+        const pick = (walletParam && DEFAULT_SYMBOL_BY_WALLET[walletParam]) || { seed: "BTCUSD" };
+        const found = await InstrumentAPI.search(pick.seed, pick.exchange, undefined, 1);
         if (!cancelled && found && found[0]?.token) {
           setSelectedToken(found[0].token);
           return;
@@ -288,6 +295,27 @@ export default function TradingTerminalPage() {
       walletKindForSegment(row?.segment_type ?? row?.segment) === activeWalletKind,
     [activeWalletKind],
   );
+
+  // Keep the URL `?wallet=` (which drives the HEADER account chip) in sync with
+  // the wallet the CHARTED instrument actually trades from — so the header,
+  // footer strip, blotter and order panel never disagree. Without this, opening
+  // the MCX account but then charting an NSE symbol (e.g. a leftover tab) left
+  // the header on MCX while the footer flipped to NSE/BSE. We only correct a
+  // real mismatch when a wallet was explicitly selected; the token is carried
+  // in the replaced URL so the `prevWalletRef` reset below does NOT clear the
+  // chart (which would loop).
+  useEffect(() => {
+    const seg = (instrument as any)?.segment;
+    if (!seg || !selectedToken || !walletParam) return;
+    const k = walletKindForSegment(seg);
+    if (k && k !== walletParam) {
+      const params = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+      params.set("wallet", k);
+      params.set("token", String(selectedToken));
+      router.replace(`/terminal?${params.toString()}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instrument, selectedToken, walletParam]);
 
   const pendingOrders = useMemo(
     () =>
