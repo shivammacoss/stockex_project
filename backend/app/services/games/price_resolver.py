@@ -195,11 +195,34 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
     from datetime import timedelta
 
     from app.services.zerodha_service import zerodha
+    from app.utils.time_utils import now_ist
 
+    # 1) Live LTP during market hours — the exact price right now.
+    live = await nifty_ltp()
+    if live and live > 0:
+        return live
+
+    # 2) SAME-DAY result AFTER close: the platform's OWN persisted last tick
+    #    (mdlast, via nifty_ltp_display) IS the official close and matches the
+    #    NIFTY widget the user sees on screen. Prefer it over Zerodha historical
+    #    minute data — right after close that historical can be provisional /
+    #    lag and return a stale intraday candle. Observed 2026-07-09: historical
+    #    tail was 23981.9 while the TRUE close was 23962.8, so the winning
+    #    number settled at .90 instead of the correct .80. The last live tick
+    #    is authoritative once the market is shut.
     try:
-        # 6-hour lookback → for a 15:45 result this spans the whole session and
-        # the last candle is the 15:29/15:30 close. A tight window that sits
-        # entirely past close returns empty (the original breakage).
+        is_today = dt.date() == now_ist().date()
+    except Exception:
+        is_today = False
+    if is_today:
+        disp = await nifty_ltp_display()
+        if disp and disp > 0:
+            return disp
+
+    # 3) Historical minute candle — authoritative for an OLDER day (backfill),
+    #    and a last resort today when no persisted tick exists. 6-hour lookback
+    #    so a post-close result still finds the session's last candle.
+    try:
         candles = await zerodha.get_historical(
             NIFTY_TOKEN, dt - timedelta(hours=6), dt + timedelta(minutes=1), "minute"
         )
@@ -209,13 +232,8 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
                 return quantize_money(cl)
     except Exception:
         logger.debug("nifty_price_at_failed", exc_info=True)
-    # Live LTP (during market hours / current minute).
-    live = await nifty_ltp()
-    if live and live > 0:
-        return live
-    # Final fallback — persisted last-known close (mdlast). Without this a
-    # result_time set AFTER market close would never resolve and the game
-    # would stay PENDING all day.
+
+    # 4) Final fallback — persisted last-known close so settlement never stalls.
     return await nifty_ltp_display()
 
 
