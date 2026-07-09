@@ -54,16 +54,28 @@ async def nifty_ltp_display() -> Decimal | None:
     worker, it returns that last-known price so the price never blanks to
     "Waiting for feed". NOT for settlement (see `nifty_ltp`)."""
     from app.core.redis_client import cache_get, cache_set
+    from app.utils.time_utils import is_market_open
 
     live = await nifty_ltp()
-    if live and live > 0:
+    market_open = is_market_open()
+
+    # DURING market hours a live tick is the truth — show it and refresh the
+    # persistent last-known so it's available once the feed goes quiet.
+    if live and live > 0 and market_open:
         try:
             await cache_set(_NIFTY_LAST_KEY, str(live), ttl_sec=_NIFTY_LAST_TTL)
         except Exception:
             logger.debug("nifty_ltp_cache_set_failed", exc_info=True)
         return live
 
-    # Fallback 1 — our own persistent last-known (refreshed on every live tick).
+    # MARKET CLOSED: do NOT trust the live `_state` tick — it's frozen at
+    # whatever the WS feed last streamed before close, which can sit ~20 pts
+    # BELOW the OFFICIAL Zerodha close (2026-07-09: streamed 23,962.80 vs the
+    # official 23,981.90). Settlement writes the official close into
+    # `_NIFTY_LAST_KEY`, so prefer that here — this keeps the games "live spot"
+    # matching the declared result + the admin terminal. Critically we must NOT
+    # overwrite `_NIFTY_LAST_KEY` with the stale streamed tick while closed (the
+    # old code did, on every 3 s display poll, clobbering the official close).
     try:
         last = await cache_get(_NIFTY_LAST_KEY)
         if last:
@@ -73,19 +85,19 @@ async def nifty_ltp_display() -> Decimal | None:
     except Exception:
         logger.debug("nifty_ltp_last_cache_failed", exc_info=True)
 
-    # Fallback 2 — the market-data service's own persistent last-quote
-    # (`mdlast:{token}`), which holds the last session's close even when the
-    # live feed serves ltp=0 (market closed / feed down). This is what keeps a
-    # price on screen all day.
+    # Fallback — the market-data service's persistent last-quote (`mdlast`).
     try:
         md = await cache_get(f"mdlast:{NIFTY_TOKEN}")
         if isinstance(md, dict):
             lv = to_decimal(md.get("ltp") or 0)
             if lv > 0:
-                await cache_set(_NIFTY_LAST_KEY, str(lv), ttl_sec=_NIFTY_LAST_TTL)
                 return lv
     except Exception:
         logger.debug("nifty_ltp_mdlast_failed", exc_info=True)
+
+    # Last resort — a stale live tick is still better than a blank screen.
+    if live and live > 0:
+        return live
     return None
 
 
