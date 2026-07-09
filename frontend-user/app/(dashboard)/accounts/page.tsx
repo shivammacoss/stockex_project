@@ -9,6 +9,7 @@ import { Wallet as WalletIcon, ArrowLeftRight, Plus, Star, TrendingUp, LineChart
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn, formatINR } from "@/lib/utils";
+import { isDesktopWeb } from "@/lib/platform";
 import { AccountsAPI, GamesAPI } from "@/lib/api";
 import { WALLET_ACCENT, WALLET_CODE, WALLET_LABEL, SEGMENT_KINDS, type WalletKind } from "@/lib/wallets";
 import { TransferDialog } from "@/components/accounts/TransferDialog";
@@ -135,11 +136,13 @@ export default function AccountsPage() {
                       className="col-span-1"
                       onClick={() => {
                         if (!isPrimary) setPrimary.mutate(kind);
-                        // Open the MARKET (watchlist) page scoped to THIS wallet
-                        // — the instrument chips filter to its segments. From
-                        // there tapping a row opens the trade card. (Was
-                        // /terminal — user wants Trade → market page, not chart.)
-                        router.push(`/marketwatch?wallet=${encodeURIComponent(kind)}`);
+                        // Surface-aware routing (user request):
+                        //  • Desktop WEB → the full Trading Terminal (its layout
+                        //    is desktop-first).
+                        //  • Mobile APP webview / phone → the Market (watchlist)
+                        //    page, the mobile-friendly trade flow.
+                        const w = encodeURIComponent(kind);
+                        router.push(isDesktopWeb() ? `/terminal?wallet=${w}` : `/marketwatch?wallet=${w}`);
                       }}
                     >
                       <LineChart className="size-4" /> Trade
