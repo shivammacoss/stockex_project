@@ -216,6 +216,34 @@ export function UserWsBridge() {
             }
             break;
           }
+          case "stop_out_warning":
+          case "stop_out_triggered": {
+            // Risk alerts from the backend risk-enforcer. Refresh the
+            // notification bell + positions/wallet, and pop a prominent
+            // toast + OS notification + ping so the user actually notices
+            // (these used to be silently dropped by the WS hub).
+            qc.invalidateQueries({ queryKey: ["notifications"] });
+            qc.invalidateQueries({ queryKey: ["positions"] });
+            qc.invalidateQueries({ queryKey: ["positions", "open"] });
+            qc.invalidateQueries({ queryKey: ["wallet"] });
+            {
+              const rp = (msg as any) || {};
+              const title = rp.title || (msg.type === "stop_out_triggered" ? "🛑 Stop-out" : "⚠️ Margin warning");
+              const body =
+                rp.message ||
+                (rp.loss_pct != null ? `Loss at ${Number(rp.loss_pct).toFixed(1)}% of balance` : "");
+              if (userNotificationsEnabled()) {
+                if (msg.type === "stop_out_triggered") {
+                  toast.error(title, { description: body, duration: 12000 });
+                } else {
+                  toast.warning(title, { description: body, duration: 10000 });
+                }
+                playNotifyPing();
+                showNativeNotification(title, body, { tag: `mp-risk-${Date.now()}` });
+              }
+            }
+            break;
+          }
           case "marketwatch":
             // Cross-tab / cross-device sync: when this user adds /
             // removes an instrument on web, the apk (or another web

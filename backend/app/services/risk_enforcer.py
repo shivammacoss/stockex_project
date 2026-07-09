@@ -142,23 +142,99 @@ def _wallet_balance(wallet: Any) -> Decimal:
     )
 
 
+async def _persist_notification(
+    user_id: str, *, ntype: Any, level: Any, title: str, message: str, data: dict
+) -> None:
+    """Insert a durable user Notification (the bell) so a risk alert
+    survives even when the user isn't connected right now. Best-effort."""
+    try:
+        from beanie import PydanticObjectId
+
+        from app.models.notification import Notification
+
+        await Notification(
+            user_id=PydanticObjectId(user_id),
+            type=ntype,
+            level=level,
+            title=title,
+            message=message,
+            data=data,
+        ).insert()
+    except Exception:
+        logger.debug("risk_notification_persist_failed", extra={"user_id": user_id})
+
+
 async def _send_warning(user_id: str, threshold: float, loss_pct: float) -> None:
-    """Best-effort warning ping over the per-user Redis pub/sub channel.
-    The user's open terminal subscribes to `user:{id}:risk` and renders a
-    banner. We don't block the loop on this."""
+    """Margin-warning alert: a durable Notification (bell) PLUS a live
+    pub/sub ping over `user:{id}:risk` so an open terminal toasts at once.
+    Best-effort — never blocks the loop."""
+    from app.models.notification import NotificationLevel, NotificationType
+
+    title = "⚠️ Margin warning"
+    message = (
+        f"Floating loss has reached {loss_pct:.1f}% of your balance "
+        f"(warning at {threshold:.0f}%). Add funds or reduce positions to "
+        f"avoid an auto stop-out."
+    )
+    data = {
+        "kind": "stop_out_warning",
+        "threshold_pct": round(threshold, 2),
+        "loss_pct": round(loss_pct, 2),
+    }
+    await _persist_notification(
+        user_id,
+        ntype=NotificationType.MARGIN,
+        level=NotificationLevel.WARNING,
+        title=title,
+        message=message,
+        data=data,
+    )
     try:
         from app.core.redis_client import publish
 
         await publish(
             f"user:{user_id}:risk",
-            {
-                "type": "stop_out_warning",
-                "threshold_pct": round(threshold, 2),
-                "loss_pct": round(loss_pct, 2),
-            },
+            {"type": "stop_out_warning", "title": title, "message": message, **data},
         )
     except Exception:
         logger.debug("stop_out_warning_publish_failed", extra={"user_id": user_id})
+
+
+async def _send_stop_out(user_id: str, threshold: float, loss_pct: float, n_positions: int) -> None:
+    """Stop-out (auto square-off) alert: durable Notification (bell) + live
+    pub/sub ping. Fired when floating loss crosses the stop-out threshold and
+    every open position is force-closed. Best-effort."""
+    from app.models.notification import NotificationLevel, NotificationType
+
+    title = "🛑 Stop-out — positions closed"
+    message = (
+        f"Floating loss hit {loss_pct:.1f}% of your balance "
+        f"(stop-out at {threshold:.0f}%). {n_positions} open "
+        f"position{'s' if n_positions != 1 else ''} were auto-closed to protect your account."
+    )
+    data = {
+        "kind": "stop_out_triggered",
+        "threshold_pct": round(threshold, 2),
+        "loss_pct": round(loss_pct, 2),
+        "positions_closed": n_positions,
+    }
+    await _persist_notification(
+        user_id,
+        ntype=NotificationType.SQUAREOFF,
+        level=NotificationLevel.DANGER,
+        title=title,
+        message=message,
+        data=data,
+    )
+    try:
+        from app.core.redis_client import publish
+
+        await publish(
+            f"user:{user_id}:risk",
+            {"type": "stop_out_triggered", "title": title, "message": message, **data},
+        )
+    except Exception:
+        logger.debug("stop_out_triggered_publish_failed", extra={"user_id": user_id})
 
 
 def _classify_close_reason(raw: str) -> str:
@@ -735,6 +811,8 @@ async def _enforce_for_user(
                 )
             if _zc_tasks:
                 await asyncio.gather(*_zc_tasks, return_exceptions=True)
+                # Zero-capital force-close — notify the user too (bell + toast).
+                await _send_stop_out(user_id_str, stop_pct, 100.0, len(_zc_tasks))
             _warning_armed[user_id_str] = True
         return
 
@@ -897,6 +975,8 @@ async def _enforce_for_user(
             logger.exception(
                 "net_phantom_settlement_failed", extra={"user_id": user_id_str}
             )
+        # Tell the user their positions were force-closed (bell + live toast).
+        await _send_stop_out(user_id_str, stop_pct, loss_pct, len(_so_tasks))
         _warning_armed[user_id_str] = True
         return
 

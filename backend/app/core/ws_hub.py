@@ -400,7 +400,15 @@ class UserChannelHub(_BaseHub):
     # clients. Adding it is purely additive: existing topics behave
     # identically, and new clients listening for ``marketwatch`` now
     # actually receive the event.
-    _ALLOWED_TOPICS = frozenset({"positions", "orders", "wallet", "kyc", "marketwatch", "games"})
+    # NOTE: "risk" MUST be here — the risk_enforcer publishes stop-out
+    # WARNING and stop-out TRIGGERED events on `user:{id}:risk`. It was
+    # missing from this set (the class docstring wrongly claimed it was
+    # included), so every margin-warning / stop-out push was silently
+    # dropped by the hub and the user never saw a notification. (User
+    # report: "stop-out ka notification nahi aata".)
+    _ALLOWED_TOPICS = frozenset(
+        {"positions", "orders", "wallet", "kyc", "marketwatch", "games", "risk"}
+    )
 
     async def _do_subscribe(self, ps: Any) -> None:
         await ps.psubscribe("user:*")
