@@ -180,15 +180,28 @@ async def resolve_btc_window(
 
 
 async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
-    """NIFTY close at a specific IST minute (1-min Kite candle), with a
-    live-LTP fallback for the current minute."""
+    """NIFTY close at a specific IST minute (1-min Kite candle), with fallbacks
+    that keep settlement UNSTUCK when the result minute lands after market close.
+
+    Bug this fixes: niftyNumber / niftyJackpot use result_time 15:45 while NSE
+    shuts at 15:30. The exact 15:43–15:46 window has NO candle and there's no
+    live LTP after close, so the old `dt-2m … dt+1m` lookup + `nifty_ltp()`
+    fallback both returned None and the settler skipped FOREVER — the result
+    never came. We now (1) widen the lookback so the session's LAST candle
+    (the 15:30 close) is still found, and (2) fall back to the persisted
+    last-known close (`nifty_ltp_display`) so a market-closed result always
+    resolves. The last session close IS the correct settlement price once the
+    market is shut."""
     from datetime import timedelta
 
     from app.services.zerodha_service import zerodha
 
     try:
+        # 6-hour lookback → for a 15:45 result this spans the whole session and
+        # the last candle is the 15:29/15:30 close. A tight window that sits
+        # entirely past close returns empty (the original breakage).
         candles = await zerodha.get_historical(
-            NIFTY_TOKEN, dt - timedelta(minutes=2), dt + timedelta(minutes=1), "minute"
+            NIFTY_TOKEN, dt - timedelta(hours=6), dt + timedelta(minutes=1), "minute"
         )
         if candles:
             cl = to_decimal(candles[-1]["close"])
@@ -196,7 +209,14 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
                 return quantize_money(cl)
     except Exception:
         logger.debug("nifty_price_at_failed", exc_info=True)
-    return await nifty_ltp()
+    # Live LTP (during market hours / current minute).
+    live = await nifty_ltp()
+    if live and live > 0:
+        return live
+    # Final fallback — persisted last-known close (mdlast). Without this a
+    # result_time set AFTER market close would never resolve and the game
+    # would stay PENDING all day.
+    return await nifty_ltp_display()
 
 
 async def resolve_btc_price_at(dt: datetime) -> Decimal | None:
