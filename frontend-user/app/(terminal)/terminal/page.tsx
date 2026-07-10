@@ -313,14 +313,22 @@ export default function TradingTerminalPage() {
   );
 
   // Keep the URL `?wallet=` (which drives the HEADER account chip) in sync with
-  // the wallet the CHARTED instrument actually trades from — so the header,
-  // footer strip, blotter and order panel never disagree. Without this, opening
-  // the MCX account but then charting an NSE symbol (e.g. a leftover tab) left
-  // the header on MCX while the footer flipped to NSE/BSE. We only correct a
-  // real mismatch when a wallet was explicitly selected; the token is carried
-  // in the replaced URL so the `prevWalletRef` reset below does NOT clear the
-  // chart (which would loop).
+  // the wallet the CHARTED instrument trades from — so header, footer, blotter
+  // and order panel never disagree when the user opens a cross-segment TAB.
+  //
+  // CRITICAL: do NOT run this on the render where the wallet ITSELF just changed
+  // (the account switcher's `router.push(?wallet=…)`). On that render the old
+  // instrument (e.g. BTCUSD/CRYPTO) is still loaded, so syncing wallet→instrument
+  // would immediately REVERT the switch back to CRYPTO — the "account switch
+  // doesn't work" bug. When the wallet is switched deliberately it's
+  // authoritative: skip the sync, let the token clear and the new wallet's
+  // default instrument load. Only sync when the wallet is STABLE and the
+  // INSTRUMENT diverged (a stale cross-segment tab click).
+  const syncWalletRef = useRef<string | null>(walletParam);
   useEffect(() => {
+    const walletJustChanged = syncWalletRef.current !== walletParam;
+    syncWalletRef.current = walletParam;
+    if (walletJustChanged) return;
     const seg = (instrument as any)?.segment;
     if (!seg || !selectedToken || !walletParam) return;
     const k = walletKindForSegment(seg);
