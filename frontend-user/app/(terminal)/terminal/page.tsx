@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import { InstrumentAPI, MarketwatchAPI, OrderAPI, PositionAPI } from "@/lib/api";
+import { AccountsAPI, InstrumentAPI, MarketwatchAPI, OrderAPI, PositionAPI } from "@/lib/api";
 import { useMarketStream } from "@/lib/useMarketStream";
 import { OrderPanel } from "@/components/trading/OrderPanel";
 import { PositionsTabs } from "@/components/trading/PositionsTabs";
@@ -39,6 +39,17 @@ export default function TradingTerminalPage() {
     queryFn: () => MarketwatchAPI.list(),
   });
   const activeWl = watchlists?.[0];
+
+  // The user's PRIMARY trading wallet — used as the default account when the
+  // terminal is opened without an explicit `?wallet=` (e.g. the sidebar link),
+  // so the default chart matches their account instead of always defaulting to
+  // BTCUSD. Defaults to NSE_BSE until it loads.
+  const { data: accounts } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => AccountsAPI.list(),
+    staleTime: 10_000,
+  });
+  const primaryWalletKind: string = accounts?.primary_wallet_kind || "NSE_BSE";
 
   const { data: wlQuotes } = useQuery({
     queryKey: ["watchlist-quotes", activeWl?.id],
@@ -92,22 +103,27 @@ export default function TradingTerminalPage() {
     let cancelled = false;
     (async () => {
       try {
-        // Default the chart to a symbol matching the wallet the terminal was
-        // opened for (Accounts → Trade). Falls back to BTCUSD otherwise.
+        // Default the chart to a symbol matching the ACCOUNT the terminal is
+        // scoped to. When opened from Accounts → Trade this is `?wallet=`;
+        // otherwise (sidebar link, closing the last tab) fall back to the
+        // user's PRIMARY wallet — NOT a hard-coded BTCUSD. That hard-coded
+        // BTCUSD was why the crypto pair kept re-appearing on every open and
+        // came back even after the user removed its tab.
         //
-        // The search MUST be scoped to the wallet's exchange, otherwise a bare
-        // seed collides across segments: "GOLD" on the MCX wallet returned
-        // "GOLDSTAR-SM" (an NSE SME stock) as the first hit, so opening the MCX
-        // account loaded an NSE instrument and the whole footer / blotter
-        // switched to NSE/BSE. Passing the exchange makes "GOLD" resolve to the
-        // MCX GOLD future (GOLD26AUGFUT) so the account stays consistent.
+        // The search is scoped to the wallet's exchange, otherwise a bare seed
+        // collides across segments: "GOLD" on the MCX wallet returned
+        // "GOLDSTAR-SM" (an NSE SME stock). Passing the exchange makes it
+        // resolve to the MCX GOLD future so the account stays consistent.
         const DEFAULT_SYMBOL_BY_WALLET: Record<string, { seed: string; exchange?: string }> = {
           NSE_BSE: { seed: "RELIANCE", exchange: "NSE" },
           MCX: { seed: "GOLD", exchange: "MCX" },
           CRYPTO: { seed: "BTCUSD" },
           FOREX: { seed: "EURUSD" },
         };
-        const pick = (walletParam && DEFAULT_SYMBOL_BY_WALLET[walletParam]) || { seed: "BTCUSD" };
+        const effectiveWallet = walletParam || primaryWalletKind || "NSE_BSE";
+        // Final fallback is RELIANCE (NSE) — never BTCUSD — so crypto only ever
+        // loads by default when the effective account actually IS Crypto.
+        const pick = DEFAULT_SYMBOL_BY_WALLET[effectiveWallet] || { seed: "RELIANCE", exchange: "NSE" };
         const found = await InstrumentAPI.search(pick.seed, pick.exchange, undefined, 1);
         if (!cancelled && found && found[0]?.token) {
           setSelectedToken(found[0].token);
@@ -123,7 +139,7 @@ export default function TradingTerminalPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedToken, wlQuotes, walletParam]);
+  }, [selectedToken, wlQuotes, walletParam, primaryWalletKind]);
 
   const { data: instrument } = useQuery({
     queryKey: ["instrument", selectedToken],
