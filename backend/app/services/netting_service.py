@@ -54,6 +54,15 @@ NETTING_FIELDS = list(NettingFieldsRequired.model_fields.keys())
 RISK_FIELDS = list(RiskSettingsRequired.model_fields.keys())
 
 
+def _risk_is_zero(v: Any) -> bool:
+    """True when a numeric risk value is effectively 0. Used to treat a POOL
+    tier's 0 stop-out % as 'unset' so it can't shadow a parent's real value."""
+    try:
+        return float(v) == 0.0
+    except (TypeError, ValueError):
+        return False
+
+
 # ── Hierarchy clamp ─────────────────────────────────────────────────────
 # A NON-super-admin's segment override must stay within the PARENT tier's
 # effective bounds (super-admin sets the ceiling at admin-create; admin/broker
@@ -687,33 +696,45 @@ async def get_effective_risk(
     merged: dict[str, Any] = {f: getattr(g, f) for f in RISK_FIELDS}
     sources = {f: "GLOBAL" for f in RISK_FIELDS}
 
-    # Layer 2: pool default — picks exactly ONE tier override based on
-    # the user's pool membership (broker > sub-admin > super-admin).
-    # Each tier is independent — super-admin's risk edits no longer leak
-    # into admin / broker pools as a shared fallback.
+    # Layer 2: pool defaults — CASCADE the hierarchy from least→most specific
+    # so an admin's setting reaches EVERY user under it, INCLUDING users that
+    # sit under a broker.
+    #
+    # Was: pick exactly ONE tier (the immediate pool = the broker). A broker
+    # whose risk doc was snapshot-seeded at create (stopOutPercent baked to the
+    # then-current 0) shadowed the admin's later 80%, so an admin-configured
+    # stop-out NEVER fired for broker-pool users — the reported bug (a GOLD/MCX
+    # position ran to −105% of balance with no auto-flatten). Now we overlay the
+    # owning admin (or super-admin for the platform pool) and THEN each broker
+    # in the ancestry (root→leaf); each applies only the fields it explicitly
+    # set (non-None).
     user_doc = await User.get(PydanticObjectId(uid))
     if user_doc is not None:
-        pool_risk = None
-        pool_source = None
-        broker_anc = user_doc.broker_ancestry or []
-        if broker_anc:
-            broker_id = broker_anc[-1]
-            pool_risk = await get_broker_risk(broker_id)
-            pool_source = "BROKER"
-        elif user_doc.assigned_admin_id is not None:
-            pool_risk = await get_sub_admin_risk(user_doc.assigned_admin_id)
-            pool_source = "SUB_ADMIN"
+        overlays: list[tuple[str, Any]] = []
+        if user_doc.assigned_admin_id is not None:
+            overlays.append(("SUB_ADMIN", await get_sub_admin_risk(user_doc.assigned_admin_id)))
         else:
             sa_id = await _resolve_super_admin_id()
             if sa_id is not None:
-                pool_risk = await get_super_admin_risk(sa_id)
-                pool_source = "SUPER_ADMIN"
-        if pool_risk is not None and pool_source is not None:
+                overlays.append(("SUPER_ADMIN", await get_super_admin_risk(sa_id)))
+        for bid in (user_doc.broker_ancestry or []):  # root → leaf
+            overlays.append(("BROKER", await get_broker_risk(bid)))
+        for label, doc in overlays:
+            if doc is None:
+                continue
             for f in RISK_FIELDS:
-                v = getattr(pool_risk, f, None)
-                if v is not None:
-                    merged[f] = v
-                    sources[f] = pool_source
+                v = getattr(doc, f, None)
+                if v is None:
+                    continue
+                # A stop-out / warning percentage of 0 in a POOL doc almost
+                # always means "unset / snapshot default", NOT a deliberate
+                # "disable". Skip it so a child (e.g. a snapshot-seeded broker)
+                # can never silently DISABLE a parent's protective stop-out.
+                # Explicit per-user / per-wallet 0 (Layers 3-4) is still honoured.
+                if f in ("stopOutPercent", "stopOutWarningPercent") and _risk_is_zero(v):
+                    continue
+                merged[f] = v
+                sources[f] = label
 
     # Layer 3: per-user override
     u = await get_user_risk(uid)
