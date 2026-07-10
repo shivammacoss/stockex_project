@@ -78,32 +78,47 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
 
   async function saveAll() {
     setSaving(true);
+    const ids = Object.keys(edits);
+    // Parallelise the PUTs, but with allSettled so ONE segment's failure never
+    // discards the whole batch (the old Promise.all rejected on the first
+    // failure → every save silently "reverted" in the UI even though most had
+    // persisted — the "segment setting save nahi ho raha" report).
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        subAdminId
+          ? NettingAPI.updateSegmentForSubAdmin(subAdminId, id, edits[id])
+          : NettingAPI.updateSegment(id, edits[id]),
+      ),
+    );
+    // ALWAYS force-refetch so the grid reflects exactly what the server stored.
+    // Values may have been CLAMPED to the parent ceiling/floor (limits ≤ parent,
+    // brokerage ≥ parent), so this is also what makes the clamp visible.
     try {
-      // Parallelise the PUTs. The old sequential loop made saving 14 dirty
-      // segments take ~14× longer than necessary because every backend
-      // request also does an O(N) Redis SCAN to invalidate the per-user
-      // effective-settings cache. With Promise.all the round-trips overlap
-      // and total wall time drops to ~one slow request, not the sum of all.
-      const ids = Object.keys(edits);
-      await Promise.all(
-        ids.map((id) =>
-          subAdminId
-            ? NettingAPI.updateSegmentForSubAdmin(subAdminId, id, edits[id])
-            : NettingAPI.updateSegment(id, edits[id]),
-        ),
-      );
+      await qc.refetchQueries({ queryKey: ["admin", "netting", "segments", subAdminId ?? "self"] });
+    } catch {
+      /* ignore refetch hiccup */
+    }
+    qc.invalidateQueries({ queryKey: ["segment-settings"] });
+
+    const failedIdx = results
+      .map((r, i) => ({ r, id: ids[i] }))
+      .filter((x) => x.r.status === "rejected");
+    if (failedIdx.length === 0) {
       toast.success(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}`);
       setEdits({});
-      qc.invalidateQueries({ queryKey: ["admin", "netting", "segments", subAdminId ?? "self"] });
-      // Also evict the user-side effective-settings cache key so any tab the
-      // admin has open (terminal preview, etc.) refetches the new numbers on
-      // its next 30 s window instead of holding stale values.
-      qc.invalidateQueries({ queryKey: ["segment-settings"] });
-    } catch (e: any) {
-      toast.error(e.message || "Save failed");
-    } finally {
-      setSaving(false);
+    } else {
+      // Keep ONLY the edits that failed so the operator can retry just those;
+      // succeeded ones are cleared (their values now come from the refetch).
+      const failedIds = new Set(failedIdx.map((f) => f.id));
+      setEdits((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([k]) => failedIds.has(k))),
+      );
+      const firstErr = (failedIdx[0].r as PromiseRejectedResult).reason;
+      toast.error(
+        `${failedIdx.length} of ${ids.length} didn't save: ${firstErr?.message || "error"}`,
+      );
     }
+    setSaving(false);
   }
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading segments…</div>;
