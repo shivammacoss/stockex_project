@@ -84,20 +84,24 @@ type TabKey = "positions" | "active" | "pending" | "history" | "cancelled";
 // forcing a horizontal scroll to reach the Close / SL-TP action buttons.
 // The ACTION column is additionally pinned to the right (sticky) in the
 // header + every Row so it's always visible even on a narrow viewport.
+// Widened TIME / SYM / ENTRY / CURRENT so full timestamps, symbols and
+// price numbers (e.g. "1,44,297.00") show WITHOUT the "…" truncation the
+// operator flagged. Paired with a smaller row font below; the table scrolls
+// horizontally and P/L + ACTION stay pinned, so a wider grid is fine.
 const COL_TEMPLATE =
-  "58px minmax(74px,1fr) 26px 44px 36px 50px minmax(56px,1fr) minmax(56px,1fr) minmax(50px,1fr) minmax(50px,1fr) 68px 80px 104px";
+  "82px minmax(96px,1fr) 24px 42px 34px 48px 78px 78px 52px 52px 60px 84px 96px";
 // Min width the grid needs before it starts scrolling. The two right-most
 // columns (P/L + ACTION) are additionally PINNED, so even if the middle
 // data columns scroll, P/L and the Close button stay on screen.
-const TABLE_MIN_WIDTH = 748;
+const TABLE_MIN_WIDTH = 880;
 // Shared sticky-right classes so the two columns the trader cares about most
 // — P/L and the Close / Edit action buttons — never scroll out of view.
 // `bg-card` covers the row content that scrolls underneath. ACTION is 96 px,
-// so P/L is pinned 104 px (96 + the 8 px grid gap) from the right, sitting
+// so P/L is pinned 102 px (96 + the 6 px grid gap) from the right, sitting
 // just left of the action buttons.
 const STICKY_ACTION_CLASS =
   "sticky right-0 z-[2] bg-card border-l border-border/40 pl-2";
-const STICKY_PNL_CLASS = "sticky right-[112px] z-[2] bg-card text-right";
+const STICKY_PNL_CLASS = "sticky right-[102px] z-[2] bg-card text-right";
 
 // A close that errors with any of these is treated as "don't scare the user,
 // just reconcile from the server": the position is either already gone, or
@@ -524,7 +528,7 @@ export function PositionsTabs({ positions, pendingOrders, history, cancelled, to
       <div className="max-h-[28vh] min-h-[120px] overflow-auto scrollbar-thin">
       {/* Header */}
       <div
-        className="sticky top-0 z-20 grid items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground"
+        className="sticky top-0 z-20 grid items-center gap-1.5 border-b border-border bg-card px-3 py-1.5 text-[9px] uppercase tracking-wider text-muted-foreground"
         style={{ gridTemplateColumns: COL_TEMPLATE, minWidth: TABLE_MIN_WIDTH }}
       >
         <span>TIME</span>
@@ -749,7 +753,7 @@ function Row({ cells }: { cells: React.ReactNode[] }) {
   const lastIdx = cells.length - 1;
   return (
     <div
-      className="group grid items-center gap-2 border-b border-border/40 px-3 py-2 text-xs hover:bg-muted/10"
+      className="group grid items-center gap-1.5 border-b border-border/40 px-3 py-2 text-[11px] hover:bg-muted/10"
       style={{ gridTemplateColumns: COL_TEMPLATE, minWidth: TABLE_MIN_WIDTH }}
     >
       {cells.map((c, i) => (
