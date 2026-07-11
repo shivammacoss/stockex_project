@@ -28,12 +28,22 @@ async def referral_stats(user: CurrentUser):
         for u in await User.find({"_id": {"$in": referred_ids}}).to_list():
             users[str(u.id)] = u
 
+    # Trading-referral threshold config (super-admin) — drives the progress bar.
+    from app.services import referral_service
+
+    _enabled, threshold, reward = await referral_service._trading_referral_config()
+    threshold_f = float(threshold)
+    reward_f = float(reward)
+
     items = []
     total_earn = 0.0
     for r in refs:
         ru = users.get(str(r.referred_user))
         earn = float(str(r.earnings.to_decimal())) if r.earnings else 0.0
         total_earn += earn
+        accrued = float(str(r.sa_brokerage_accrued.to_decimal())) if getattr(r, "sa_brokerage_accrued", None) else 0.0
+        paid = bool(getattr(r, "trading_reward_paid", False))
+        progress = 100.0 if paid else (min(100.0, accrued / threshold_f * 100.0) if threshold_f > 0 else 0.0)
         items.append(
             {
                 "referred_user_code": ru.user_code if ru else None,
@@ -42,6 +52,12 @@ async def referral_stats(user: CurrentUser):
                 "earnings": earn,
                 "first_game_win": bool(r.first_game_win.credited),
                 "trading_referral_count": r.trading_referral_count,
+                # Trading referral THRESHOLD progress (per referred user).
+                "sa_brokerage_accrued": round(accrued, 2),
+                "trading_threshold": threshold_f,
+                "trading_reward": reward_f,
+                "trading_progress_pct": round(progress, 1),
+                "trading_reward_paid": paid,
                 "joined_at": r.created_at,
             }
         )
@@ -56,6 +72,8 @@ async def referral_stats(user: CurrentUser):
             "total_earnings": (
                 float(str(st.total_referral_earnings.to_decimal())) if st else total_earn
             ),
+            "trading_threshold": threshold_f,
+            "trading_reward": reward_f,
             "referrals": items,
         }
     )

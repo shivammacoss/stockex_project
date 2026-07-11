@@ -171,6 +171,14 @@ class ReferralEligibility(BaseModel):
     threshold_amount: float = 1000.0
     threshold_unit: str = "PER_CRORE"  # "PER_CRORE" | "ABSOLUTE"
 
+    # ── Trading referral THRESHOLD model (super-admin configurable) ──────
+    # A referrer earns a ONE-TIME reward once the super-admin's NET brokerage
+    # income from the referred user (accrued across all their closed trades)
+    # reaches `trading_threshold_amount`. The reward paid is
+    # `trading_reward_amount`. Both default ₹1000. `enabled` gates the feature.
+    trading_threshold_amount: float = 1000.0
+    trading_reward_amount: float = 1000.0
+
 
 class ReferralDistributionEnabled(BaseModel):
     """Per-admin toggle of which segments pay referral rewards for their

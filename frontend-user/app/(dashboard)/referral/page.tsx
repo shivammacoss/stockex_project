@@ -185,6 +185,9 @@ export default function ReferralPage() {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-2.5 border-t border-border/50 pt-2.5">
+                    <RewardProgress r={r} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -196,6 +199,7 @@ export default function ReferralPage() {
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">User</th>
                     <th className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th className="px-3 py-2 text-left font-semibold">Reward progress</th>
                     <th className="px-3 py-2 text-right font-semibold">Earned</th>
                     <th className="px-3 py-2 text-right font-semibold">Joined</th>
                   </tr>
@@ -214,6 +218,9 @@ export default function ReferralPage() {
                       </td>
                       <td className="px-3 py-2">
                         <StatusPill status={r.status} />
+                      </td>
+                      <td className="px-3 py-2" style={{ minWidth: 180 }}>
+                        <RewardProgress r={r} />
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-tabular font-bold tabular-nums text-buy">
                         {formatINR(r.earnings)}
@@ -309,5 +316,39 @@ function StatusPill({ status }: { status: string }) {
     >
       {status}
     </span>
+  );
+}
+
+/** Per-referred-user reward progress — how much of the super-admin's net
+ *  brokerage threshold this referral has generated. At 100% the referrer's
+ *  one-time reward has been paid. */
+function RewardProgress({ r }: { r: any }) {
+  const paid = !!r.trading_reward_paid;
+  const pct = paid ? 100 : Math.max(0, Math.min(100, Number(r.trading_progress_pct || 0)));
+  const threshold = Number(r.trading_threshold || 0);
+  const accrued = Number(r.sa_brokerage_accrued || 0);
+  const reward = Number(r.trading_reward || 0);
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 flex items-center justify-between gap-2 text-[10px]">
+        <span className="uppercase tracking-wide text-muted-foreground">
+          {paid ? "Reward unlocked" : "Reward progress"}
+        </span>
+        <span className={cn("font-bold tabular-nums", paid ? "text-buy" : "text-foreground")}>
+          {paid ? `+${formatINR(reward)} ✓` : `${pct.toFixed(0)}%`}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn("h-full rounded-full transition-all", paid ? "bg-buy" : "bg-primary")}
+          style={{ width: `${Math.max(3, pct)}%` }}
+        />
+      </div>
+      {!paid && threshold > 0 && (
+        <div className="mt-1 text-[10px] tabular-nums text-muted-foreground">
+          {formatINR(accrued)} / {formatINR(threshold)} → unlock {formatINR(reward)}
+        </div>
+      )}
+    </div>
   );
 }

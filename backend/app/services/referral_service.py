@@ -190,14 +190,63 @@ def _segment_of_instrument(segment: str | None) -> str:
     return {"MCX": "mcx", "CRYPTO": "crypto", "FOREX": "forex"}.get(kind, "trading")
 
 
-# ── Phase 4: trading referral (every closed trade) ─────────────────────
+async def _super_admin_net_brokerage_share(referred: User, brokerage: Decimal) -> Decimal:
+    """The SUPER-ADMIN's NET brokerage remainder from one trade of `referred`.
+
+    Economics (recon-confirmed): each hierarchy node keeps its own `share_pct`
+    of the house pool and the SUPER-ADMIN (house) keeps the REMAINDER. A broker's
+    cut comes OUT of the admin's share (parent-net cascade), so the SA's net
+    depends only on the OWNING ADMIN's brokerage-share %:
+
+        SA_net = brokerage × (100 − admin.pnl_share_pct) / 100
+
+    A user hanging directly off the platform (no admin) → SA keeps 100%.
+    """
+    admin_uid = getattr(referred, "assigned_admin_id", None)
+    if admin_uid is None:
+        return quantize_money(to_decimal(brokerage))
+    admin = await User.get(admin_uid)
+    if admin is None:
+        return quantize_money(to_decimal(brokerage))
+    admin_pct = to_decimal(getattr(admin, "pnl_share_pct", 0) or 0)
+    sa_fraction = (to_decimal(100) - admin_pct) / to_decimal(100)
+    if sa_fraction < 0:
+        sa_fraction = Decimal("0")
+    if sa_fraction > 1:
+        sa_fraction = Decimal("1")
+    return quantize_money(to_decimal(brokerage) * sa_fraction)
+
+
+async def _trading_referral_config() -> tuple[bool, Decimal, Decimal]:
+    """(enabled, threshold, reward) from the super-admin's referral_eligibility.
+    Defaults: enabled True, ₹1000 threshold, ₹1000 reward."""
+    try:
+        sa_id = await _super_admin_id()
+        sa = await User.get(sa_id) if sa_id else None
+        elig = getattr(sa, "referral_eligibility", None) if sa else None
+        if elig is None:
+            return True, to_decimal(1000), to_decimal(1000)
+        return (
+            bool(elig.enabled),
+            to_decimal(getattr(elig, "trading_threshold_amount", 1000.0) or 1000.0),
+            to_decimal(getattr(elig, "trading_reward_amount", 1000.0) or 1000.0),
+        )
+    except Exception:
+        return True, to_decimal(1000), to_decimal(1000)
+
+
+# ── Phase 4: trading referral — THRESHOLD model (one-time per referred user) ─
 async def credit_referral_trading_reward(
     user_id, brokerage, trade_id: str, instrument_segment: str | None
 ) -> None:
-    """Pay the referrer `DEFAULT_TRADING_REFERRAL_PERCENT%` of the referred
-    user's trade brokerage. Credited to the referrer's segment wallet
-    (mcx/crypto/forex) or Main (NSE/BSE). Idempotent by `trade_id`. Routed
-    through the shared gate. Never raises (caller wraps too)."""
+    """Accrue the SUPER-ADMIN's NET brokerage income from this referred user and,
+    once it reaches the configured threshold, pay the referrer a ONE-TIME reward.
+
+    Per closed brokerage-charging trade: add `SA_net_share` to
+    `Referral.sa_brokerage_accrued` (idempotent by `trade_id`); when the running
+    total ≥ threshold and the reward hasn't been paid yet, credit the referrer's
+    Main wallet the reward amount exactly once. Never raises (caller wraps too).
+    """
     try:
         brok = to_decimal(brokerage)
         if brok <= 0:
@@ -207,46 +256,77 @@ async def credit_referral_trading_reward(
             return
         referrer_id = referred.referred_by
         seg = _segment_of_instrument(instrument_segment)
-        commission = quantize_money(brok * to_decimal(DEFAULT_TRADING_REFERRAL_PERCENT) / to_decimal(100))
-        if commission <= 0:
-            return
 
-        # Idempotency: skip if this trade already credited a referral.
         ref = await Referral.find_one(Referral.referred_user == referred.id)
-        if ref is not None and any(
-            e.trade_id == str(trade_id) for e in (ref.trading_referrals or [])
-        ):
+        if ref is None:
+            return
+        # Idempotency: this trade already accrued?
+        if any(e.trade_id == str(trade_id) for e in (ref.trading_referrals or [])):
             return
 
-        # Shared eligibility gate.
-        if not await process_conditional_referral_payout(referred, commission, seg):
-            return
+        # SA's net brokerage share from THIS trade.
+        sa_share = await _super_admin_net_brokerage_share(referred, brok)
 
-        # Credit the referrer's wallet by segment.
-        from app.models.transaction import TransactionType
-        from app.services import segment_wallet_service, wallet_kinds, wallet_service
+        # Accrue + record the trade (idempotent from here on).
+        from app.models.referral import TradingReferralEntry
 
-        narration = f"Referral commission — {referred.user_code} trade brokerage"
-        kind = wallet_kinds.wallet_kind_for_segment(instrument_segment)
-        if kind in ("MCX", "CRYPTO", "FOREX"):
-            await segment_wallet_service.adjust(
-                referrer_id, kind, commission,
-                transaction_type=TransactionType.REFERRAL_COMMISSION,
-                narration=narration, reference_type="TRADE", reference_id=str(trade_id),
-            )
-        else:
-            await wallet_service.adjust(
-                referrer_id, commission,
-                transaction_type=TransactionType.REFERRAL_COMMISSION,
-                narration=narration, reference_type="TRADE", reference_id=str(trade_id),
-            )
-
-        await record_referral_earning(
-            referrer_id, referred.id, commission,
-            trade={"trade_id": str(trade_id), "brokerage": brok, "segment": seg},
+        ref.sa_brokerage_accrued = Decimal128(
+            str(to_decimal(ref.sa_brokerage_accrued) + sa_share)
         )
-        # Trading brokerage feeds the house-earnings rollup for the threshold.
+        ref.trading_referrals.append(
+            TradingReferralEntry(
+                trade_id=str(trade_id),
+                amount=Decimal128("0"),  # per-trade payout is 0 in the threshold model
+                brokerage=Decimal128(str(brok)),
+                segment=seg,
+                credited_at=now_utc(),
+            )
+        )
+        ref.trading_referral_count += 1
+        await ref.save()
+
+        # House rollup (kept for analytics / other gates).
         await bump_hierarchy_earnings(_root_admin_id(referred, await _super_admin_id()), seg, brok)
+
+        # One-time threshold payout.
+        enabled, threshold, reward = await _trading_referral_config()
+        if not enabled or ref.trading_reward_paid:
+            return
+        if to_decimal(ref.sa_brokerage_accrued) < threshold or reward <= 0:
+            return
+
+        # Atomically claim the one-time payout so a re-entrant tick can't double-pay.
+        claimed = await Referral.get_motor_collection().find_one_and_update(
+            {"_id": ref.id, "trading_reward_paid": {"$ne": True}},
+            {"$set": {"trading_reward_paid": True, "trading_reward_paid_at": now_utc(),
+                      "trading_reward_amount": Decimal128(str(reward)),
+                      "earnings": Decimal128(str(to_decimal(ref.earnings) + reward))}},
+        )
+        if claimed is None:
+            return  # another tick already paid
+
+        from app.models.transaction import TransactionType
+        from app.services import wallet_service
+
+        await wallet_service.adjust(
+            referrer_id, reward,
+            transaction_type=TransactionType.REFERRAL_COMMISSION,
+            narration=f"Referral reward — {referred.user_code} reached threshold",
+            reference_type="REFERRAL_THRESHOLD", reference_id=str(referred.id),
+        )
+        # Referrer rollup.
+        referrer = await User.get(referrer_id)
+        if referrer is not None:
+            stats = referrer.referral_stats or ReferralStats()
+            stats.total_referral_earnings = Decimal128(
+                str(to_decimal(stats.total_referral_earnings) + reward)
+            )
+            referrer.referral_stats = stats
+            await referrer.save()
+        logger.info(
+            "trading_referral_reward_paid referrer=%s referred=%s reward=%s accrued=%s",
+            referrer_id, referred.id, reward, ref.sa_brokerage_accrued,
+        )
     except Exception:
         logger.exception("trading_referral_failed user=%s trade=%s", user_id, trade_id)
 

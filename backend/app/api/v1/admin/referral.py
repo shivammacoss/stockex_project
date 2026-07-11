@@ -27,6 +27,9 @@ async def get_eligibility(admin: SuperAdmin):
             "enabled": elig.enabled,
             "threshold_amount": elig.threshold_amount,
             "threshold_unit": elig.threshold_unit,
+            # Trading referral threshold model (per-referred-user SA net brokerage).
+            "trading_threshold_amount": getattr(elig, "trading_threshold_amount", 1000.0),
+            "trading_reward_amount": getattr(elig, "trading_reward_amount", 1000.0),
         }
     )
 
@@ -46,6 +49,17 @@ async def put_eligibility(payload: dict, admin: SuperAdmin):
         if unit not in ("PER_CRORE", "ABSOLUTE"):
             raise HTTPException(status_code=400, detail="threshold_unit must be PER_CRORE|ABSOLUTE")
         cur.threshold_unit = unit
+    # Trading referral threshold model.
+    if payload.get("trading_threshold_amount") is not None:
+        t = float(payload["trading_threshold_amount"])
+        if t <= 0:
+            raise HTTPException(status_code=400, detail="trading_threshold_amount must be > 0")
+        cur.trading_threshold_amount = t
+    if payload.get("trading_reward_amount") is not None:
+        rw = float(payload["trading_reward_amount"])
+        if rw < 0:
+            raise HTTPException(status_code=400, detail="trading_reward_amount must be >= 0")
+        cur.trading_reward_amount = rw
     admin.referral_eligibility = cur
     await admin.save()
     return APIResponse(
@@ -53,6 +67,8 @@ async def put_eligibility(payload: dict, admin: SuperAdmin):
             "enabled": cur.enabled,
             "threshold_amount": cur.threshold_amount,
             "threshold_unit": cur.threshold_unit,
+            "trading_threshold_amount": getattr(cur, "trading_threshold_amount", 1000.0),
+            "trading_reward_amount": getattr(cur, "trading_reward_amount", 1000.0),
         },
         message="Referral eligibility updated",
     )

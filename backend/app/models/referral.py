@@ -59,9 +59,20 @@ class Referral(TimestampMixin):
     first_game_win: FirstGameWin = Field(default_factory=FirstGameWin)
 
     # Trading: one entry per closed trade that charged brokerage. `trade_id`
-    # is the per-trade idempotency key.
+    # is the per-trade idempotency key. (History kept for the ledger; the
+    # THRESHOLD model below is what actually gates the one-time payout.)
     trading_referral_count: int = 0
     trading_referrals: list[TradingReferralEntry] = Field(default_factory=list)
+
+    # ── Trading referral THRESHOLD model (super-admin configurable) ──────
+    # The referrer earns a ONE-TIME reward once the SUPER-ADMIN's NET brokerage
+    # income from this referred user (accumulated across all their closed
+    # trades) reaches the configured threshold. `sa_brokerage_accrued` is that
+    # running total; the UI shows it as a progress bar toward the threshold.
+    sa_brokerage_accrued: Money = Field(default_factory=_zero)
+    trading_reward_paid: bool = False
+    trading_reward_paid_at: datetime | None = None
+    trading_reward_amount: Money = Field(default_factory=_zero)  # what was paid
 
     activated_at: datetime | None = None
 
