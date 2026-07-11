@@ -369,6 +369,29 @@ async def accounts_summary(
     })
 
 
+@router.get("/account2")
+async def account2(
+    admin: CurrentAdmin,
+    from_date: str | None = Query(default=None),
+    to_date: str | None = Query(default=None),
+    preset: str | None = Query(default=None),
+    _: None = Depends(require_perm("users", "read")),
+) -> APIResponse:
+    """Account 2 — the FIXED-BROKERAGE report for the caller: how much fixed
+    brokerage they earn from each of their direct fixed-brokerage children
+    (admins for a super-admin, brokers for an admin, sub-brokers for a broker).
+    Report-only; separate from the % settlement."""
+    from app.services import account2_service
+
+    start_utc, end_utc = _parse_dates(from_date, to_date, preset)
+    data = await account2_service.compute_account2(admin, start_utc, end_utc)
+    data["filter"] = {
+        "from_date": from_date, "to_date": to_date, "preset": preset,
+        "is_lifetime": start_utc is None,
+    }
+    return APIResponse(data=data)
+
+
 # ── Shared date-parsing helper ───────────────────────────────────────
 def _parse_dates(
     from_date: str | None, to_date: str | None, preset: str | None,

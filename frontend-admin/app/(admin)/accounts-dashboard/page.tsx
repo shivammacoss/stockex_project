@@ -37,15 +37,18 @@ const SUPER_ADMIN_TABS: TabDef[] = [
   { value: "admins", label: "Admins", icon: <Crown className="size-3.5" /> },
   { value: "brokers", label: "Brokers", icon: <Briefcase className="size-3.5" /> },
   { value: "sub_brokers", label: "Sub-Brokers", icon: <UserPlus className="size-3.5" /> },
+  { value: "account2", label: "Account 2", icon: <DollarSign className="size-3.5" /> },
 ];
 const ADMIN_TABS: TabDef[] = [
   { value: "all_users", label: "All Users", icon: <Users className="size-3.5" /> },
   { value: "brokers", label: "Brokers", icon: <Briefcase className="size-3.5" /> },
   { value: "sub_brokers", label: "Sub-Brokers", icon: <UserPlus className="size-3.5" /> },
+  { value: "account2", label: "Account 2", icon: <DollarSign className="size-3.5" /> },
 ];
 const BROKER_TABS: TabDef[] = [
   { value: "all_users", label: "All Users", icon: <Users className="size-3.5" /> },
   { value: "sub_brokers", label: "Sub-Brokers", icon: <UserPlus className="size-3.5" /> },
+  { value: "account2", label: "Account 2", icon: <DollarSign className="size-3.5" /> },
 ];
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -307,20 +310,109 @@ export default function AccountsDashboardPage() {
         </div>
       )}
 
-      {/* ── Entity Cards / User Table ─────────────────────── */}
-      {isBrokerScope ? (
+      {/* ── Entity Cards / User Table / Account 2 ─────────── */}
+      {scope === "account2" ? (
+        <Account2View dateParams={dateParams} />
+      ) : isBrokerScope ? (
         <BrokerEntities entities={entities} dateParams={dateParams} />
       ) : admin?.id ? (
         <AllUsersTable adminId={admin.id} dateParams={dateParams} />
       ) : null}
 
-      {data && (
+      {data && scope !== "account2" && (
         <div className="text-xs text-muted-foreground">
           {data.filter.is_lifetime
             ? "Showing lifetime totals"
             : `Filtered: ${data.filter.from_date || ""} to ${data.filter.to_date || ""}`}
           {" · "}
           {entities.length} entities · {gt?.user_count ?? 0} total users
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* Account 2 — fixed-brokerage report (per direct fixed-brokerage child) */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+function Account2View({ dateParams }: { dateParams: { from_date?: string; to_date?: string } }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "account2", dateParams.from_date, dateParams.to_date],
+    queryFn: () => AccountsAPI.account2(dateParams),
+    refetchInterval: 30000,
+  });
+  const rows: any[] = data?.rows ?? [];
+  const roleLabel =
+    ({ SUPER_ADMIN: "admins", ADMIN: "brokers", BROKER: "sub-brokers" } as Record<string, string>)[
+      data?.viewer_role
+    ] || "children";
+  const fmt = (v: any) =>
+    `₹${Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const num = (v: any) => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-primary" />
+      </div>
+    );
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-border/60 bg-card/40 p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Fixed brokerage you earn from your {roleLabel}
+        </div>
+        <div className="mt-0.5 font-tabular text-2xl font-bold tabular-nums text-buy sm:text-3xl">
+          {fmt(data?.total_fixed_brokerage)}
+        </div>
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          Fixed rate on their whole volume — independent of what they charge their own users.
+          Total volume {fmt(data?.total_volume)} · {data?.child_count ?? 0} {roleLabel}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-border/60 bg-card/40 py-8 text-center text-sm text-muted-foreground">
+          No fixed-brokerage {roleLabel} yet. Create one with the &quot;Fixed-brokerage&quot; option.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold">Name</th>
+                <th className="px-3 py-2 text-left font-semibold">Rate</th>
+                <th className="px-3 py-2 text-right font-semibold">Volume</th>
+                <th className="px-3 py-2 text-right font-semibold">Lots</th>
+                <th className="px-3 py-2 text-right font-semibold">Their user bkg</th>
+                <th className="px-3 py-2 text-right font-semibold">You earn (fixed)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-border/60 hover:bg-muted/15">
+                  <td className="px-3 py-2">
+                    <div className="font-medium">{r.name}</div>
+                    <div className="font-mono text-[11px] text-muted-foreground">{r.user_code}</div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-[12px]">
+                    ₹{num(r.rate)}{" "}
+                    <span className="text-muted-foreground">/{r.unit === "per_lot" ? "lot" : "crore"}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular tabular-nums">{num(r.volume)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular tabular-nums">{num(r.lots)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular tabular-nums text-muted-foreground">
+                    {fmt(r.user_brokerage)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular font-bold tabular-nums text-buy">
+                    {fmt(r.fixed_brokerage)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

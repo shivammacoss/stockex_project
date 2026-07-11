@@ -46,11 +46,19 @@ async def create_sub_admin(
     pnl_share_pct: Decimal,
     created_by: PydanticObjectId,
     brokerage_share_pct: Decimal | None = None,
+    is_fixed_brokerage: bool = False,
+    fixed_brokerage_unit: str | None = None,
+    fixed_brokerage_rate: Decimal | None = None,
 ) -> User:
     if pnl_share_pct < 0 or pnl_share_pct > 100:
         raise ValidationFailedError("pnl_share_pct must be between 0 and 100")
     if brokerage_share_pct is not None and (brokerage_share_pct < 0 or brokerage_share_pct > 100):
         raise ValidationFailedError("brokerage_share_pct must be between 0 and 100")
+    if is_fixed_brokerage:
+        if fixed_brokerage_unit not in ("per_lot", "per_crore"):
+            raise ValidationFailedError("fixed_brokerage_unit must be per_lot|per_crore")
+        if fixed_brokerage_rate is None or fixed_brokerage_rate < 0:
+            raise ValidationFailedError("fixed_brokerage_rate must be >= 0")
 
     sa = await user_service.create_user(
         email=email,
@@ -67,6 +75,10 @@ async def create_sub_admin(
     sa.pnl_share_pct = to_decimal128(pnl_share_pct)
     if brokerage_share_pct is not None:
         sa.admin_brokerage_share_pct = to_decimal128(brokerage_share_pct)
+    if is_fixed_brokerage:
+        sa.is_fixed_brokerage = True
+        sa.fixed_brokerage_unit = fixed_brokerage_unit
+        sa.fixed_brokerage_rate = to_decimal128(fixed_brokerage_rate)
     await sa.save()
 
     # Snapshot the super-admin's current effective settings (segments
@@ -144,6 +156,50 @@ async def update_permissions(
         target_user_id=sa.id,
         old_values={"permissions": old},
         new_values={"permissions": permissions.model_dump()},
+    )
+    return sa
+
+
+async def set_admin_fixed_brokerage(
+    sub_admin_id: str | PydanticObjectId,
+    is_fixed: bool,
+    unit: str | None,
+    rate: Decimal | None,
+    actor_id: PydanticObjectId,
+) -> User:
+    """Set / update an admin's fixed-brokerage config (editable anytime).
+    is_fixed=False clears it back to the normal % flow."""
+    sa = await _get_sub_admin_or_404(sub_admin_id)
+    old = {
+        "is_fixed_brokerage": sa.is_fixed_brokerage,
+        "fixed_brokerage_unit": sa.fixed_brokerage_unit,
+        "fixed_brokerage_rate": str(sa.fixed_brokerage_rate) if sa.fixed_brokerage_rate is not None else None,
+    }
+    if is_fixed:
+        if unit not in ("per_lot", "per_crore"):
+            raise ValidationFailedError("unit must be per_lot|per_crore")
+        if rate is None or to_decimal(rate) < 0:
+            raise ValidationFailedError("rate must be >= 0")
+        sa.is_fixed_brokerage = True
+        sa.fixed_brokerage_unit = unit
+        sa.fixed_brokerage_rate = to_decimal128(to_decimal(rate))
+    else:
+        sa.is_fixed_brokerage = False
+        sa.fixed_brokerage_unit = None
+        sa.fixed_brokerage_rate = None
+    await sa.save()
+    await log_event(
+        action=AuditAction.SUB_ADMIN_PNL_SHARE_UPDATE,
+        entity_type="User",
+        entity_id=sa.id,
+        actor_id=actor_id,
+        target_user_id=sa.id,
+        old_values=old,
+        new_values={
+            "is_fixed_brokerage": sa.is_fixed_brokerage,
+            "fixed_brokerage_unit": sa.fixed_brokerage_unit,
+            "fixed_brokerage_rate": str(sa.fixed_brokerage_rate) if sa.fixed_brokerage_rate is not None else None,
+        },
     )
     return sa
 

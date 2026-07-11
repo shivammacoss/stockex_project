@@ -330,6 +330,19 @@ class User(TimestampMixin):
     # Sub-broker: [top_broker.id]. Sub-sub-broker: [top_broker.id, parent.id].
     broker_ancestry: list[PydanticObjectId] = Field(default_factory=list)
 
+    # ── Fixed-brokerage flow ("Account 2") — parallel to the % sharing ──
+    # A SEPARATE, opt-in model (does NOT touch the existing pnl/brokerage %
+    # sharing). When `is_fixed_brokerage` is set on an ADMIN/BROKER, the node's
+    # PARENT takes a FIXED per-lot / per-crore brokerage from this node's whole
+    # subtree volume — regardless of what this node charges its own users. The
+    # rate here is what the PARENT collects from THIS node.
+    #   • ADMIN  → set by the super-admin at create (SA's cut from the admin).
+    #   • BROKER → set by the owning admin/broker at create (parent's cut).
+    # A fixed-brokerage admin's brokers/sub-brokers are themselves fixed-brokerage.
+    is_fixed_brokerage: bool = False
+    fixed_brokerage_unit: str | None = None  # "per_lot" | "per_crore"
+    fixed_brokerage_rate: Decimal128 | None = None  # ₹ per lot / per crore
+
     # Broker profile — only meaningful when role == BROKER.
     broker_permissions: BrokerPermissions | None = None
     broker_pnl_share_pct: Decimal128 | None = None  # 0..100

@@ -25,6 +25,10 @@ class CreateBrokerRequest(BaseModel):
     permissions: BrokerPermissions = Field(default_factory=BrokerPermissions)
     pnl_share_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
     brokerage_share_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    # Fixed-brokerage flow (Account 2) — the parent's fixed cut from this broker.
+    is_fixed_brokerage: bool = False
+    fixed_brokerage_unit: str | None = None  # "per_lot" | "per_crore"
+    fixed_brokerage_rate: Decimal | None = Field(default=None, ge=0)
     # Super-admin only: pin the new broker to a specific admin's pool.
     # When omitted, super-admin creates a top-level broker in the platform
     # pool (assigned_admin_id = None). Admin/broker callers MUST leave this
@@ -48,6 +52,12 @@ class UpdateBrokerPnlShareRequest(BaseModel):
     pct: Decimal = Field(ge=0, le=100)
     # Optional separate brokerage-sharing %. Omit to leave it unchanged.
     brokerage_pct: Decimal | None = Field(default=None, ge=0, le=100)
+
+
+class UpdateBrokerFixedBrokerageRequest(BaseModel):
+    is_fixed_brokerage: bool = False
+    fixed_brokerage_unit: str | None = None  # "per_lot" | "per_crore"
+    fixed_brokerage_rate: Decimal | None = Field(default=None, ge=0)
 
 
 class AssignUserToBrokerRequest(BaseModel):
@@ -78,6 +88,9 @@ class BrokerDTO(BaseModel):
     permissions: BrokerPermissions | None = None
     pnl_share_pct: str
     brokerage_share_pct: str = "0"
+    is_fixed_brokerage: bool = False
+    fixed_brokerage_unit: str | None = None
+    fixed_brokerage_rate: str | None = None
     user_count: int = 0
     subtree_user_count: int = 0
     broker_ancestry: list[str] = Field(default_factory=list)

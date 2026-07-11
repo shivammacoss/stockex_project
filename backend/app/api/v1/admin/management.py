@@ -27,6 +27,7 @@ from app.schemas.admin.management import (
     SettlementDTO,
     SubAdminDTO,
     UpdatePermissionsRequest,
+    UpdateFixedBrokerageRequest,
     UpdatePnlShareRequest,
     UpdateSubAdminRequest,
 )
@@ -53,6 +54,13 @@ async def _ser_sub_admin(sa: User) -> SubAdminDTO:
         brokerage_share_pct=(
             str(sa.admin_brokerage_share_pct)
             if getattr(sa, "admin_brokerage_share_pct", None) is not None
+            else None
+        ),
+        is_fixed_brokerage=bool(getattr(sa, "is_fixed_brokerage", False)),
+        fixed_brokerage_unit=getattr(sa, "fixed_brokerage_unit", None),
+        fixed_brokerage_rate=(
+            str(sa.fixed_brokerage_rate)
+            if getattr(sa, "fixed_brokerage_rate", None) is not None
             else None
         ),
         user_count=await mgmt.count_assigned_users(sa.id),
@@ -120,6 +128,9 @@ async def create_sub_admin(payload: CreateSubAdminRequest, admin: SuperAdmin):
         permissions=payload.permissions,
         pnl_share_pct=payload.pnl_share_pct,
         brokerage_share_pct=payload.brokerage_share_pct,
+        is_fixed_brokerage=payload.is_fixed_brokerage,
+        fixed_brokerage_unit=payload.fixed_brokerage_unit,
+        fixed_brokerage_rate=payload.fixed_brokerage_rate,
         created_by=admin.id,
     )
     # Optional opening float — SA funds it from kuber/main (best-effort; the
@@ -168,6 +179,23 @@ async def update_pnl_share(
 ):
     sa = await mgmt.set_pnl_share(
         sub_admin_id, payload.pct, admin.id, brokerage_share_pct=payload.brokerage_share_pct
+    )
+    return APIResponse(data=await _ser_sub_admin(sa))
+
+
+@router.put(
+    "/sub-admins/{sub_admin_id}/fixed-brokerage", response_model=APIResponse[SubAdminDTO]
+)
+async def update_fixed_brokerage(
+    sub_admin_id: str, payload: UpdateFixedBrokerageRequest, admin: SuperAdmin
+):
+    """Set / update an admin's fixed-brokerage config (Account 2 flow)."""
+    sa = await mgmt.set_admin_fixed_brokerage(
+        sub_admin_id,
+        payload.is_fixed_brokerage,
+        payload.fixed_brokerage_unit,
+        payload.fixed_brokerage_rate,
+        admin.id,
     )
     return APIResponse(data=await _ser_sub_admin(sa))
 

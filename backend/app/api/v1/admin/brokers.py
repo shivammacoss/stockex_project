@@ -37,6 +37,7 @@ from app.schemas.admin.brokers import (
     MaxGrantableDTO,
     RecomputeBrokerSettlementRequest,
     UpdateBrokerPermissionsRequest,
+    UpdateBrokerFixedBrokerageRequest,
     UpdateBrokerPnlShareRequest,
     UpdateBrokerRequest,
 )
@@ -81,6 +82,13 @@ async def _ser_broker(b: User) -> BrokerDTO:
             if b.broker_brokerage_share_pct is not None
             # Back-compat: pre-split brokers shared brokerage at the PnL %.
             else (str(b.broker_pnl_share_pct) if b.broker_pnl_share_pct is not None else "0")
+        ),
+        is_fixed_brokerage=bool(getattr(b, "is_fixed_brokerage", False)),
+        fixed_brokerage_unit=getattr(b, "fixed_brokerage_unit", None),
+        fixed_brokerage_rate=(
+            str(b.fixed_brokerage_rate)
+            if getattr(b, "fixed_brokerage_rate", None) is not None
+            else None
         ),
         user_count=await svc.count_assigned_users(b.id),
         subtree_user_count=await svc.count_subtree_users(b.id),
@@ -206,6 +214,9 @@ async def create_broker(payload: CreateBrokerRequest, actor: CurrentAdmin):
         pnl_share_pct=payload.pnl_share_pct,
         brokerage_share_pct=payload.brokerage_share_pct,
         assigned_admin_id=payload.assigned_admin_id,
+        is_fixed_brokerage=payload.is_fixed_brokerage,
+        fixed_brokerage_unit=payload.fixed_brokerage_unit,
+        fixed_brokerage_rate=payload.fixed_brokerage_rate,
     )
     # Optional opening float — SA funds from kuber/main, a non-SA creator from
     # their OWN float (add_funds enforces the creator's balance). Best-effort:
@@ -261,6 +272,20 @@ async def update_pnl_share(
 ):
     b = await svc.set_broker_pnl_share(
         actor, broker_id, payload.pct, brokerage_pct=payload.brokerage_pct
+    )
+    return APIResponse(data=await _ser_broker(b))
+
+
+@router.put(
+    "/brokers/{broker_id}/fixed-brokerage", response_model=APIResponse[BrokerDTO]
+)
+async def update_broker_fixed_brokerage(
+    broker_id: str, payload: UpdateBrokerFixedBrokerageRequest, actor: CurrentAdmin
+):
+    """Set / update a broker's fixed-brokerage config (Account 2 flow)."""
+    b = await svc.set_broker_fixed_brokerage(
+        actor, broker_id, payload.is_fixed_brokerage,
+        payload.fixed_brokerage_unit, payload.fixed_brokerage_rate,
     )
     return APIResponse(data=await _ser_broker(b))
 

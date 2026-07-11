@@ -749,6 +749,9 @@ function CreateSubAdminDialog({
     pnl_share_pct: "0",
     brokerage_share_pct: "",
     opening_fund: "0",
+    is_fixed_brokerage: false,
+    fixed_brokerage_unit: "per_crore",
+    fixed_brokerage_rate: "",
   });
   const [perms, setPerms] = useState<AdminPermissions>({ ...ALL_OFF });
   const [loading, setLoading] = useState(false);
@@ -775,6 +778,12 @@ function CreateSubAdminDialog({
         brokerage_share_pct:
           form.brokerage_share_pct.trim() === "" ? undefined : form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
+        is_fixed_brokerage: form.is_fixed_brokerage,
+        fixed_brokerage_unit: form.is_fixed_brokerage ? form.fixed_brokerage_unit : undefined,
+        fixed_brokerage_rate:
+          form.is_fixed_brokerage && form.fixed_brokerage_rate.trim() !== ""
+            ? form.fixed_brokerage_rate
+            : undefined,
       });
       toast.success("Sub-admin created");
       onOpenChange(false);
@@ -878,6 +887,50 @@ function CreateSubAdminDialog({
           </div>
         </div>
 
+        {/* Fixed-brokerage flow (Account 2) — separate from the % sharing above. */}
+        <div className="mt-4 rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={form.is_fixed_brokerage}
+              onChange={(e) => setForm((f) => ({ ...f, is_fixed_brokerage: e.target.checked }))}
+            />
+            Fixed-brokerage admin (Account 2)
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            Super-admin takes a FIXED per-lot / per-crore brokerage from this admin&apos;s
+            volume — regardless of what the admin charges their users. Its brokers /
+            sub-brokers also run in this fixed flow.
+          </p>
+          {form.is_fixed_brokerage && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Unit</Label>
+                <select
+                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  value={form.fixed_brokerage_unit}
+                  onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_unit: e.target.value }))}
+                >
+                  <option value="per_crore">Per crore</option>
+                  <option value="per_lot">Per lot</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Rate (₹ {form.fixed_brokerage_unit === "per_lot" ? "per lot" : "per crore"})</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="e.g. 500"
+                  value={form.fixed_brokerage_rate}
+                  onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_rate: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="mt-4 space-y-2">
           <div className="text-sm font-medium">Permissions</div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -928,6 +981,11 @@ function EditSubAdminDialog({
   const [bkgPct, setBkgPct] = useState<string>(
     subAdmin.brokerage_share_pct != null ? String(subAdmin.brokerage_share_pct) : "",
   );
+  const [isFixed, setIsFixed] = useState<boolean>(!!subAdmin.is_fixed_brokerage);
+  const [fixUnit, setFixUnit] = useState<string>(subAdmin.fixed_brokerage_unit || "per_crore");
+  const [fixRate, setFixRate] = useState<string>(
+    subAdmin.fixed_brokerage_rate != null ? String(subAdmin.fixed_brokerage_rate) : "",
+  );
   const [loading, setLoading] = useState(false);
 
   async function save() {
@@ -937,6 +995,11 @@ function EditSubAdminDialog({
       await ManagementAPI.updatePnlShare(
         subAdmin.id, pnlPct, bkgPct.trim() === "" ? undefined : bkgPct,
       );
+      await ManagementAPI.updateFixedBrokerage(subAdmin.id, {
+        is_fixed_brokerage: isFixed,
+        fixed_brokerage_unit: isFixed ? fixUnit : undefined,
+        fixed_brokerage_rate: isFixed && fixRate.trim() !== "" ? fixRate : undefined,
+      });
       toast.success("Sub-admin updated");
       onSaved();
       onClose();
@@ -981,6 +1044,44 @@ function EditSubAdminDialog({
                 onChange={(e) => setBkgPct(e.target.value)}
               />
             </div>
+          </div>
+          {/* Fixed-brokerage flow (Account 2) */}
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={isFixed}
+                onChange={(e) => setIsFixed(e.target.checked)}
+              />
+              Fixed-brokerage admin (Account 2)
+            </label>
+            {isFixed && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Unit</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={fixUnit}
+                    onChange={(e) => setFixUnit(e.target.value)}
+                  >
+                    <option value="per_crore">Per crore</option>
+                    <option value="per_lot">Per lot</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Rate (₹ {fixUnit === "per_lot" ? "per lot" : "per crore"})</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="e.g. 500"
+                    value={fixRate}
+                    onChange={(e) => setFixRate(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <div className="text-sm font-medium">Permissions</div>

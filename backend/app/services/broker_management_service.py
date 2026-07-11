@@ -121,6 +121,9 @@ async def create_broker(
     pnl_share_pct: Decimal,
     brokerage_share_pct: Decimal = Decimal("0"),
     assigned_admin_id: PydanticObjectId | None = None,
+    is_fixed_brokerage: bool = False,
+    fixed_brokerage_unit: str | None = None,
+    fixed_brokerage_rate: Decimal | None = None,
 ) -> User:
     """Mints a new BROKER row. Validates permission cap, sets the ownership
     chain, and writes an audit log.
@@ -174,6 +177,18 @@ async def create_broker(
     new.broker_permissions = permissions
     new.broker_pnl_share_pct = to_decimal128(pnl_share_pct)
     new.broker_brokerage_share_pct = to_decimal128(brokerage_share_pct)
+    # Fixed-brokerage flow (Account 2): a broker/sub-broker under a fixed-
+    # brokerage parent is itself fixed-brokerage; the parent sets the rate it
+    # takes from this node. Also auto-inherit the flag if the owning admin is
+    # fixed-brokerage but no explicit rate was passed (keeps the chain fixed).
+    if is_fixed_brokerage:
+        if fixed_brokerage_unit not in ("per_lot", "per_crore"):
+            raise ValidationFailedError("fixed_brokerage_unit must be per_lot|per_crore")
+        if fixed_brokerage_rate is None or fixed_brokerage_rate < 0:
+            raise ValidationFailedError("fixed_brokerage_rate must be >= 0")
+        new.is_fixed_brokerage = True
+        new.fixed_brokerage_unit = fixed_brokerage_unit
+        new.fixed_brokerage_rate = to_decimal128(fixed_brokerage_rate)
     await new.save()
 
     # Snapshot the creator's current effective settings (segments + risk)
@@ -317,6 +332,50 @@ async def update_broker_permissions(
                 }
             )
     return b, cascaded
+
+
+async def set_broker_fixed_brokerage(
+    actor: User,
+    broker_id: str | PydanticObjectId,
+    is_fixed: bool,
+    unit: str | None,
+    rate: Decimal | None,
+) -> User:
+    """Set / update a broker's fixed-brokerage config (Account 2 flow) — the
+    fixed rate the parent takes from this broker. Editable anytime."""
+    b = await assert_broker_in_scope(actor, broker_id)
+    old = {
+        "is_fixed_brokerage": b.is_fixed_brokerage,
+        "fixed_brokerage_unit": b.fixed_brokerage_unit,
+        "fixed_brokerage_rate": str(b.fixed_brokerage_rate) if b.fixed_brokerage_rate is not None else None,
+    }
+    if is_fixed:
+        if unit not in ("per_lot", "per_crore"):
+            raise ValidationFailedError("unit must be per_lot|per_crore")
+        if rate is None or to_decimal(rate) < 0:
+            raise ValidationFailedError("rate must be >= 0")
+        b.is_fixed_brokerage = True
+        b.fixed_brokerage_unit = unit
+        b.fixed_brokerage_rate = to_decimal128(to_decimal(rate))
+    else:
+        b.is_fixed_brokerage = False
+        b.fixed_brokerage_unit = None
+        b.fixed_brokerage_rate = None
+    await b.save()
+    await log_event(
+        action=AuditAction.BROKER_PNL_SHARE_UPDATE,
+        entity_type="User",
+        entity_id=b.id,
+        actor_id=actor.id,
+        target_user_id=b.id,
+        old_values=old,
+        new_values={
+            "is_fixed_brokerage": b.is_fixed_brokerage,
+            "fixed_brokerage_unit": b.fixed_brokerage_unit,
+            "fixed_brokerage_rate": str(b.fixed_brokerage_rate) if b.fixed_brokerage_rate is not None else None,
+        },
+    )
+    return b
 
 
 async def set_broker_pnl_share(

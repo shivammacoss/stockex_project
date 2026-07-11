@@ -894,7 +894,14 @@ export const ManagementAPI = {
     pnl_share_pct: number | string;
     brokerage_share_pct?: number | string;
     opening_fund?: number;
+    is_fixed_brokerage?: boolean;
+    fixed_brokerage_unit?: string;
+    fixed_brokerage_rate?: number | string;
   }) => unwrap<any>(api.post("/admin/management/sub-admins", body)),
+  updateFixedBrokerage: (
+    id: string,
+    body: { is_fixed_brokerage: boolean; fixed_brokerage_unit?: string; fixed_brokerage_rate?: number | string },
+  ) => unwrap<any>(api.put(`/admin/management/sub-admins/${id}/fixed-brokerage`, body)),
   updateSubAdmin: (id: string, body: { full_name?: string }) =>
     unwrap<any>(api.put(`/admin/management/sub-admins/${id}`, body)),
   updatePermissions: (id: string, permissions: Record<string, boolean>) =>
@@ -1202,6 +1209,10 @@ export const AccountsAPI = {
     unwrap<WeekOption[]>(
       api.get("/admin/accounts/weeks", { params: numWeeks ? { num_weeks: numWeeks } : undefined }),
     ),
+
+  // Account 2 — fixed-brokerage report (per direct fixed-brokerage child).
+  account2: (params?: { from_date?: string; to_date?: string; preset?: string }) =>
+    unwrap<any>(api.get("/admin/accounts/account2", { params })),
 
   brokerTotals: (entityId: string, params?: DateParams) =>
     unwrap<BrokerTotals>(
