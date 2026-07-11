@@ -208,7 +208,13 @@ async def _super_admin_net_brokerage_share(referred: User, brokerage: Decimal) -
     admin = await User.get(admin_uid)
     if admin is None:
         return quantize_money(to_decimal(brokerage))
-    admin_pct = to_decimal(getattr(admin, "pnl_share_pct", 0) or 0)
+    # Prefer the admin's SEPARATE brokerage-share %; fall back to pnl_share_pct
+    # when it was never split (keeps legacy admins byte-identical).
+    admin_pct = to_decimal(
+        getattr(admin, "admin_brokerage_share_pct", None)
+        if getattr(admin, "admin_brokerage_share_pct", None) is not None
+        else (getattr(admin, "pnl_share_pct", 0) or 0)
+    )
     sa_fraction = (to_decimal(100) - admin_pct) / to_decimal(100)
     if sa_fraction < 0:
         sa_fraction = Decimal("0")

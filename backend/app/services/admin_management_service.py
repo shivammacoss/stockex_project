@@ -45,9 +45,12 @@ async def create_sub_admin(
     permissions: AdminPermissions,
     pnl_share_pct: Decimal,
     created_by: PydanticObjectId,
+    brokerage_share_pct: Decimal | None = None,
 ) -> User:
     if pnl_share_pct < 0 or pnl_share_pct > 100:
         raise ValidationFailedError("pnl_share_pct must be between 0 and 100")
+    if brokerage_share_pct is not None and (brokerage_share_pct < 0 or brokerage_share_pct > 100):
+        raise ValidationFailedError("brokerage_share_pct must be between 0 and 100")
 
     sa = await user_service.create_user(
         email=email,
@@ -62,6 +65,8 @@ async def create_sub_admin(
     )
     sa.admin_permissions = permissions
     sa.pnl_share_pct = to_decimal128(pnl_share_pct)
+    if brokerage_share_pct is not None:
+        sa.admin_brokerage_share_pct = to_decimal128(brokerage_share_pct)
     await sa.save()
 
     # Snapshot the super-admin's current effective settings (segments
@@ -147,13 +152,24 @@ async def set_pnl_share(
     sub_admin_id: str | PydanticObjectId,
     pct: Decimal,
     actor_id: PydanticObjectId,
+    brokerage_share_pct: Decimal | None = None,
 ) -> User:
+    """Update the admin's PnL share % (and optionally its separate brokerage
+    share %) — editable anytime by the super-admin."""
     pct_dec = to_decimal(pct)
     if pct_dec < 0 or pct_dec > 100:
         raise ValidationFailedError("pct must be between 0 and 100")
     sa = await _get_sub_admin_or_404(sub_admin_id)
     old = str(sa.pnl_share_pct) if sa.pnl_share_pct is not None else None
+    old_bkg = str(sa.admin_brokerage_share_pct) if sa.admin_brokerage_share_pct is not None else None
     sa.pnl_share_pct = to_decimal128(pct_dec)
+    new_vals = {"pnl_share_pct": str(pct_dec)}
+    if brokerage_share_pct is not None:
+        bkg = to_decimal(brokerage_share_pct)
+        if bkg < 0 or bkg > 100:
+            raise ValidationFailedError("brokerage_share_pct must be between 0 and 100")
+        sa.admin_brokerage_share_pct = to_decimal128(bkg)
+        new_vals["admin_brokerage_share_pct"] = str(bkg)
     await sa.save()
     await log_event(
         action=AuditAction.SUB_ADMIN_PNL_SHARE_UPDATE,
@@ -161,8 +177,8 @@ async def set_pnl_share(
         entity_id=sa.id,
         actor_id=actor_id,
         target_user_id=sa.id,
-        old_values={"pnl_share_pct": old},
-        new_values={"pnl_share_pct": str(pct_dec)},
+        old_values={"pnl_share_pct": old, "admin_brokerage_share_pct": old_bkg},
+        new_values=new_vals,
     )
     return sa
 

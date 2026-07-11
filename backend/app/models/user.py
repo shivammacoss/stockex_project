@@ -311,6 +311,11 @@ class User(TimestampMixin):
     # Sub-admin profile — only populated for role == ADMIN.
     admin_permissions: AdminPermissions | None = None
     pnl_share_pct: Decimal128 | None = None  # 0..100
+    # Separate brokerage-sharing % (how much of THIS admin's brokerage the
+    # super-admin takes), independent of the PnL share. None ⇒ the admin
+    # inherits `pnl_share_pct` for brokerage too (so existing admins are
+    # unchanged). Mirrors `broker_brokerage_share_pct`.
+    admin_brokerage_share_pct: Decimal128 | None = None  # 0..100
 
     # Immediate broker owner. For BROKER role: their parent broker (NULL for
     # a top-level broker created by an admin/super-admin). For CLIENT role:

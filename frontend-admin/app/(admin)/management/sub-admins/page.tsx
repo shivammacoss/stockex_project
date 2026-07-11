@@ -227,6 +227,12 @@ export default function SubAdminsPage() {
       header: "PNL share %",
       render: (r) => `${r.pnl_share_pct ?? "0"}%`,
     },
+    {
+      key: "brokerage_share_pct",
+      header: "Brokerage %",
+      render: (r) =>
+        r.brokerage_share_pct != null ? `${r.brokerage_share_pct}%` : `${r.pnl_share_pct ?? "0"}%`,
+    },
     { key: "user_count", header: "Users", render: (r) => r.user_count ?? 0 },
     { key: "broker_count", header: "Brokers", render: (r) => r.broker_count ?? 0 },
     {
@@ -741,6 +747,7 @@ function CreateSubAdminDialog({
     password: "",
     confirm_password: "",
     pnl_share_pct: "0",
+    brokerage_share_pct: "",
     opening_fund: "0",
   });
   const [perms, setPerms] = useState<AdminPermissions>({ ...ALL_OFF });
@@ -765,6 +772,8 @@ function CreateSubAdminDialog({
         password: form.password,
         permissions: perms as unknown as Record<string, boolean>,
         pnl_share_pct: form.pnl_share_pct,
+        brokerage_share_pct:
+          form.brokerage_share_pct.trim() === "" ? undefined : form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
       });
       toast.success("Sub-admin created");
@@ -840,6 +849,21 @@ function CreateSubAdminDialog({
             />
           </div>
           <div className="space-y-1.5">
+            <Label>Brokerage share %</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              placeholder="= PNL share"
+              value={form.brokerage_share_pct}
+              onChange={(e) => setForm((f) => ({ ...f, brokerage_share_pct: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              How much of this admin&apos;s brokerage you take (blank = same as PNL share)
+            </p>
+          </div>
+          <div className="space-y-1.5">
             <Label>Opening fund (₹)</Label>
             <Input
               type="number"
@@ -901,13 +925,18 @@ function EditSubAdminDialog({
     ...(subAdmin.permissions || {}),
   });
   const [pnlPct, setPnlPct] = useState<string>(String(subAdmin.pnl_share_pct ?? "0"));
+  const [bkgPct, setBkgPct] = useState<string>(
+    subAdmin.brokerage_share_pct != null ? String(subAdmin.brokerage_share_pct) : "",
+  );
   const [loading, setLoading] = useState(false);
 
   async function save() {
     setLoading(true);
     try {
       await ManagementAPI.updatePermissions(subAdmin.id, perms as unknown as Record<string, boolean>);
-      await ManagementAPI.updatePnlShare(subAdmin.id, pnlPct);
+      await ManagementAPI.updatePnlShare(
+        subAdmin.id, pnlPct, bkgPct.trim() === "" ? undefined : bkgPct,
+      );
       toast.success("Sub-admin updated");
       onSaved();
       onClose();
@@ -928,16 +957,30 @@ function EditSubAdminDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>PNL share %</Label>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              step="0.01"
-              value={pnlPct}
-              onChange={(e) => setPnlPct(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>PNL share %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={pnlPct}
+                onChange={(e) => setPnlPct(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Brokerage share %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                placeholder="= PNL share"
+                value={bkgPct}
+                onChange={(e) => setBkgPct(e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <div className="text-sm font-medium">Permissions</div>

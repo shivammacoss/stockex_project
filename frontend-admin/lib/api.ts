@@ -892,14 +892,20 @@ export const ManagementAPI = {
     password: string;
     permissions: Record<string, boolean>;
     pnl_share_pct: number | string;
+    brokerage_share_pct?: number | string;
     opening_fund?: number;
   }) => unwrap<any>(api.post("/admin/management/sub-admins", body)),
   updateSubAdmin: (id: string, body: { full_name?: string }) =>
     unwrap<any>(api.put(`/admin/management/sub-admins/${id}`, body)),
   updatePermissions: (id: string, permissions: Record<string, boolean>) =>
     unwrap<any>(api.put(`/admin/management/sub-admins/${id}/permissions`, { permissions })),
-  updatePnlShare: (id: string, pct: number | string) =>
-    unwrap<any>(api.put(`/admin/management/sub-admins/${id}/pnl-share`, { pct })),
+  updatePnlShare: (id: string, pct: number | string, brokerage_share_pct?: number | string) =>
+    unwrap<any>(
+      api.put(`/admin/management/sub-admins/${id}/pnl-share`, {
+        pct,
+        ...(brokerage_share_pct !== undefined ? { brokerage_share_pct } : {}),
+      }),
+    ),
   blockSubAdmin: (id: string) =>
     unwrap<any>(api.post(`/admin/management/sub-admins/${id}/block`)),
   unblockSubAdmin: (id: string) =>

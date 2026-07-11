@@ -17,6 +17,9 @@ class CreateSubAdminRequest(BaseModel):
     password: str = Field(min_length=8)
     permissions: AdminPermissions = Field(default_factory=AdminPermissions)
     pnl_share_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    # Separate brokerage-sharing % the super-admin takes from THIS admin's
+    # brokerage (None → inherits pnl_share_pct for brokerage too).
+    brokerage_share_pct: Decimal | None = Field(default=None, ge=0, le=100)
     # Optional opening float given by the super-admin at creation. Credits the
     # new sub-admin's Wallet.available_balance (the float they dispense to users
     # when ADMIN_FLOAT_ENABLED). 0 → no opening fund.
@@ -33,6 +36,8 @@ class UpdatePermissionsRequest(BaseModel):
 
 class UpdatePnlShareRequest(BaseModel):
     pct: Decimal = Field(ge=0, le=100)
+    # Optional — update the admin's separate brokerage share % in the same call.
+    brokerage_share_pct: Decimal | None = Field(default=None, ge=0, le=100)
 
 
 class AssignUserRequest(BaseModel):
@@ -66,6 +71,7 @@ class SubAdminDTO(BaseModel):
     status: str
     permissions: AdminPermissions | None = None
     pnl_share_pct: str
+    brokerage_share_pct: str | None = None  # None ⇒ inherits pnl_share_pct
     user_count: int = 0  # active trading clients (CLOSED + broker rows excluded)
     broker_count: int = 0  # broker + sub-broker login accounts under this admin
     created_at: datetime | None = None

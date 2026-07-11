@@ -50,6 +50,11 @@ async def _ser_sub_admin(sa: User) -> SubAdminDTO:
         status=sa.status.value,
         permissions=sa.admin_permissions,
         pnl_share_pct=str(sa.pnl_share_pct) if sa.pnl_share_pct is not None else "0",
+        brokerage_share_pct=(
+            str(sa.admin_brokerage_share_pct)
+            if getattr(sa, "admin_brokerage_share_pct", None) is not None
+            else None
+        ),
         user_count=await mgmt.count_assigned_users(sa.id),
         broker_count=await mgmt.count_assigned_brokers(sa.id),
         created_at=sa.created_at,
@@ -114,6 +119,7 @@ async def create_sub_admin(payload: CreateSubAdminRequest, admin: SuperAdmin):
         full_name=payload.full_name,
         permissions=payload.permissions,
         pnl_share_pct=payload.pnl_share_pct,
+        brokerage_share_pct=payload.brokerage_share_pct,
         created_by=admin.id,
     )
     # Optional opening float — SA funds it from kuber/main (best-effort; the
@@ -160,7 +166,9 @@ async def update_permissions(
 async def update_pnl_share(
     sub_admin_id: str, payload: UpdatePnlShareRequest, admin: SuperAdmin
 ):
-    sa = await mgmt.set_pnl_share(sub_admin_id, payload.pct, admin.id)
+    sa = await mgmt.set_pnl_share(
+        sub_admin_id, payload.pct, admin.id, brokerage_share_pct=payload.brokerage_share_pct
+    )
     return APIResponse(data=await _ser_sub_admin(sa))
 
 
