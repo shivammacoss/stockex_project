@@ -820,6 +820,9 @@ export const BrokerMgmtAPI = {
     brokerage_share_pct?: number | string;
     opening_fund?: number;
     assigned_admin_id?: string;
+    is_fixed_brokerage?: boolean;
+    fixed_brokerage_unit?: string;
+    fixed_brokerage_rate?: number | string;
   }) => unwrap<any>(api.post("/admin/management/brokers", body)),
   update: (id: string, body: { full_name?: string }) =>
     unwrap<any>(api.put(`/admin/management/brokers/${id}`, body)),
@@ -829,6 +832,10 @@ export const BrokerMgmtAPI = {
     ),
   updatePnlShare: (id: string, pct: number | string, brokerage_pct?: number | string) =>
     unwrap<any>(api.put(`/admin/management/brokers/${id}/pnl-share`, { pct, brokerage_pct })),
+  updateFixedBrokerage: (
+    id: string,
+    body: { is_fixed_brokerage: boolean; fixed_brokerage_unit?: string; fixed_brokerage_rate?: number | string },
+  ) => unwrap<any>(api.put(`/admin/management/brokers/${id}/fixed-brokerage`, body)),
   block: (id: string) => unwrap<any>(api.post(`/admin/management/brokers/${id}/block`)),
   unblock: (id: string) => unwrap<any>(api.post(`/admin/management/brokers/${id}/unblock`)),
   resetPassword: (id: string, new_password: string) =>

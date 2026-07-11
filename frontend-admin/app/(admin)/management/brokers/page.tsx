@@ -592,6 +592,9 @@ function CreateBrokerDialog({
     pnl_share_pct: "0",
     brokerage_share_pct: "0",
     opening_fund: "0",
+    is_fixed_brokerage: false,
+    fixed_brokerage_unit: "per_crore",
+    fixed_brokerage_rate: "",
   });
   const [perms, setPerms] = useState<BrokerPermissions>({ ...ALL_OFF });
   const [selectedAdminId, setSelectedAdminId] = useState("");
@@ -621,6 +624,12 @@ function CreateBrokerDialog({
         brokerage_share_pct: form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
         assigned_admin_id: selectedAdminId || undefined,
+        is_fixed_brokerage: form.is_fixed_brokerage,
+        fixed_brokerage_unit: form.is_fixed_brokerage ? form.fixed_brokerage_unit : undefined,
+        fixed_brokerage_rate:
+          form.is_fixed_brokerage && form.fixed_brokerage_rate.trim() !== ""
+            ? form.fixed_brokerage_rate
+            : undefined,
       });
       toast.success(`${noun} created`);
       onOpenChange(false);
@@ -748,6 +757,49 @@ function CreateBrokerDialog({
             )}
           </div>
 
+          {/* Fixed-brokerage flow (Account 2) */}
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={form.is_fixed_brokerage}
+                onChange={(e) => setForm((f) => ({ ...f, is_fixed_brokerage: e.target.checked }))}
+              />
+              Fixed-brokerage {noun.toLowerCase()} (Account 2)
+            </label>
+            <p className="text-[11px] text-muted-foreground">
+              You take a FIXED per-lot / per-crore brokerage from this {noun.toLowerCase()}&apos;s volume,
+              regardless of what they charge their own users.
+            </p>
+            {form.is_fixed_brokerage && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Unit</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={form.fixed_brokerage_unit}
+                    onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_unit: e.target.value }))}
+                  >
+                    <option value="per_crore">Per crore</option>
+                    <option value="per_lot">Per lot</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Rate (₹ {form.fixed_brokerage_unit === "per_lot" ? "per lot" : "per crore"})</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="e.g. 800"
+                    value={form.fixed_brokerage_rate}
+                    onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_rate: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -815,6 +867,11 @@ function EditBrokerDialog({
   const [brokeragePct, setBrokeragePct] = useState<string>(
     String((broker as any).brokerage_share_pct ?? broker.pnl_share_pct ?? "0"),
   );
+  const [isFixed, setIsFixed] = useState<boolean>(!!(broker as any).is_fixed_brokerage);
+  const [fixUnit, setFixUnit] = useState<string>((broker as any).fixed_brokerage_unit || "per_crore");
+  const [fixRate, setFixRate] = useState<string>(
+    (broker as any).fixed_brokerage_rate != null ? String((broker as any).fixed_brokerage_rate) : "",
+  );
   const [loading, setLoading] = useState(false);
 
   async function save() {
@@ -825,6 +882,11 @@ function EditBrokerDialog({
         perms as unknown as Record<string, "OFF" | "VIEW" | "EDIT">,
       );
       await BrokerMgmtAPI.updatePnlShare(broker.id, pnlPct, brokeragePct);
+      await BrokerMgmtAPI.updateFixedBrokerage(broker.id, {
+        is_fixed_brokerage: isFixed,
+        fixed_brokerage_unit: isFixed ? fixUnit : undefined,
+        fixed_brokerage_rate: isFixed && fixRate.trim() !== "" ? fixRate : undefined,
+      });
       const cascaded = res?.cascaded_changes ?? [];
       toast.success(
         cascaded.length > 0
@@ -873,6 +935,44 @@ function EditBrokerDialog({
                 onChange={(e) => setBrokeragePct(e.target.value)}
               />
             </div>
+          </div>
+          {/* Fixed-brokerage flow (Account 2) */}
+          <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={isFixed}
+                onChange={(e) => setIsFixed(e.target.checked)}
+              />
+              Fixed-brokerage {noun.toLowerCase()} (Account 2)
+            </label>
+            {isFixed && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Unit</Label>
+                  <select
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    value={fixUnit}
+                    onChange={(e) => setFixUnit(e.target.value)}
+                  >
+                    <option value="per_crore">Per crore</option>
+                    <option value="per_lot">Per lot</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Rate (₹ {fixUnit === "per_lot" ? "per lot" : "per crore"})</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="e.g. 800"
+                    value={fixRate}
+                    onChange={(e) => setFixRate(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
