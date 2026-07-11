@@ -374,37 +374,58 @@ async def compute_broker_totals(
     # Otherwise the broker's own create-form PnL %. Brokerage %: the broker's
     # dedicated field when set, else falls back to the PnL % (pre-split
     # parity — a broker with no separate brokerage % shares it at the PnL %).
-    if agreement:
-        pnl_pct = agreement_pct
-    else:
-        pnl_pct = (
-            to_decimal(entity.broker_pnl_share_pct)
-            if getattr(entity, "broker_pnl_share_pct", None) is not None
-            else Decimal("0")
+    if entity.role == UserRole.ADMIN and not agreement:
+        # ADMIN entity on the super-admin's "Admins" tab: show the SUPER-ADMIN's
+        # OWN cut = the REMAINDER after the admin's configured kept share. The
+        # admin keeps `pnl_share_pct` / `admin_brokerage_share_pct`; the SA
+        # (house) keeps the rest — the same model the settlement + trading
+        # referral use. So `share_pct` here is the SA's %, and Sharing PnL/BKG
+        # are what the SA earns from this admin's whole book.
+        admin_pnl_kept = (
+            to_decimal(entity.pnl_share_pct) if entity.pnl_share_pct is not None else Decimal("0")
         )
-    bkg_pct = (
-        to_decimal(entity.broker_brokerage_share_pct)
-        if getattr(entity, "broker_brokerage_share_pct", None) is not None
-        else pnl_pct
-    )
-    share_pct = pnl_pct
-    if agreement:
-        # A formal PnlSharingAgreement stays AUTHORITATIVE and unchanged — no
-        # regression for setups configured on the P&L-Sharing page: P&L and
-        # brokerage share on their own bases, settlement excluded.
-        sharing_pnl = quantize_money(broker_view_pnl * (pnl_pct / Decimal("100")))
-        sharing_bkg = quantize_money(net_client_bkg * (bkg_pct / Decimal("100")))
-        if agreement.agreement_type == AgreementType.BROKERAGE_ONLY:
-            sharing_pnl = Decimal("0")
-    else:
-        # No agreement → BOTH figures shown, exactly as the operator wants:
-        #   • Sharing PnL = (Total of Both − Settlement) × PnL %   (the
-        #     headline broker take on the actual P&L)
-        #   • Sharing BKG = client brokerage × Brokerage %
-        # These are two independent DISPLAY figures (brokerage also sits
-        # inside actual_pnl) — not meant to be summed into one payout.
+        admin_bkg_kept = (
+            to_decimal(entity.admin_brokerage_share_pct)
+            if getattr(entity, "admin_brokerage_share_pct", None) is not None
+            else admin_pnl_kept
+        )
+        pnl_pct = Decimal("100") - admin_pnl_kept  # SA's PnL %
+        bkg_pct = Decimal("100") - admin_bkg_kept  # SA's brokerage %
+        share_pct = pnl_pct
         sharing_pnl = quantize_money(actual_pnl * (pnl_pct / Decimal("100")))
         sharing_bkg = quantize_money(net_client_bkg * (bkg_pct / Decimal("100")))
+    else:
+        if agreement:
+            pnl_pct = agreement_pct
+        else:
+            pnl_pct = (
+                to_decimal(entity.broker_pnl_share_pct)
+                if getattr(entity, "broker_pnl_share_pct", None) is not None
+                else Decimal("0")
+            )
+        bkg_pct = (
+            to_decimal(entity.broker_brokerage_share_pct)
+            if getattr(entity, "broker_brokerage_share_pct", None) is not None
+            else pnl_pct
+        )
+        share_pct = pnl_pct
+        if agreement:
+            # A formal PnlSharingAgreement stays AUTHORITATIVE and unchanged — no
+            # regression for setups configured on the P&L-Sharing page: P&L and
+            # brokerage share on their own bases, settlement excluded.
+            sharing_pnl = quantize_money(broker_view_pnl * (pnl_pct / Decimal("100")))
+            sharing_bkg = quantize_money(net_client_bkg * (bkg_pct / Decimal("100")))
+            if agreement.agreement_type == AgreementType.BROKERAGE_ONLY:
+                sharing_pnl = Decimal("0")
+        else:
+            # No agreement → BOTH figures shown, exactly as the operator wants:
+            #   • Sharing PnL = (Total of Both − Settlement) × PnL %   (the
+            #     headline broker take on the actual P&L)
+            #   • Sharing BKG = client brokerage × Brokerage %
+            # These are two independent DISPLAY figures (brokerage also sits
+            # inside actual_pnl) — not meant to be summed into one payout.
+            sharing_pnl = quantize_money(actual_pnl * (pnl_pct / Decimal("100")))
+            sharing_bkg = quantize_money(net_client_bkg * (bkg_pct / Decimal("100")))
 
     return {
         "net_client_pnl": str(quantize_money(net_client_pnl)),

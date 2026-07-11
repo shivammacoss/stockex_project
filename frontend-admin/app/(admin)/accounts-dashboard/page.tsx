@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import {
   ArrowDownRight, ArrowUpRight, Briefcase,
-  ChevronRight, DollarSign, Download,
+  ChevronRight, Crown, DollarSign, Download,
   FileSpreadsheet, FileText, Loader2, PieChartIcon,
   RefreshCw, Search, TrendingUp, Trophy, UserPlus, Users, X,
 } from "lucide-react";
@@ -34,6 +34,7 @@ type TabDef = { value: string; label: string; icon: React.ReactNode };
 
 const SUPER_ADMIN_TABS: TabDef[] = [
   { value: "all_users", label: "All Users", icon: <Users className="size-3.5" /> },
+  { value: "admins", label: "Admins", icon: <Crown className="size-3.5" /> },
   { value: "brokers", label: "Brokers", icon: <Briefcase className="size-3.5" /> },
   { value: "sub_brokers", label: "Sub-Brokers", icon: <UserPlus className="size-3.5" /> },
 ];
@@ -185,7 +186,10 @@ export default function AccountsDashboardPage() {
     );
   });
 
-  const isBrokerScope = scope === "brokers" || scope === "sub_brokers";
+  // Admins / Brokers / Sub-Brokers all render as per-entity cards (each a
+  // weekly card you can expand); All Users renders the flat user table.
+  const isBrokerScope =
+    scope === "admins" || scope === "brokers" || scope === "sub_brokers";
 
   return (
     <div className="space-y-5">
