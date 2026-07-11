@@ -123,16 +123,18 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     title: "Management",
     items: [
       { href: "/management/sub-admins", label: "Admin Management", icon: Crown, superOnly: true },
-      { href: "/management/settlements", label: "Settlements", icon: Wallet, superOnly: true },
+      // Broker Management — sits right under Admin Management. Visible to the
+      // SUPER-ADMIN too (they can create brokers directly in the platform pool),
+      // to admins (their own brokers), and to brokers (their sub-brokers).
       {
         href: "/management/brokers",
-        label: "Brokers",
-        icon: Crown,
+        label: "Broker Management",
+        icon: GitBranch,
         perm: "brokers",
         brokerPerm: "sub_brokers",
         brokerLabel: "Sub-brokers",
-        hideForSuperAdmin: true,
       },
+      { href: "/management/settlements", label: "Settlements", icon: Wallet, superOnly: true },
       { href: "/management/pnl-sharing", label: "P&L Sharing", icon: Handshake },
       { href: "/patti", label: "Patti Sharing", icon: GitBranch, superOnly: true },
     ],
