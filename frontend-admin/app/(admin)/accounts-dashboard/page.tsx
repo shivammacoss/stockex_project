@@ -373,46 +373,97 @@ function Account2View({ dateParams }: { dateParams: { from_date?: string; to_dat
         </div>
       </div>
 
+      {/* Per-segment grand totals across all children */}
+      {(data?.segment_totals ?? []).some((s: any) => Number(s.fixed_brokerage) > 0) && (
+        <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            By segment (all {roleLabel})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(data?.segment_totals ?? [])
+              .filter((s: any) => Number(s.fixed_brokerage) > 0)
+              .map((s: any) => (
+                <div key={s.segment} className="rounded-md border border-border/60 bg-background px-2.5 py-1.5">
+                  <div className="text-[11px] text-muted-foreground">{s.segment_label}</div>
+                  <div className="font-tabular text-sm font-bold tabular-nums text-buy">{fmt(s.fixed_brokerage)}</div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <div className="rounded-lg border border-border/60 bg-card/40 py-8 text-center text-sm text-muted-foreground">
           No fixed-brokerage {roleLabel} yet. Create one with the &quot;Fixed-brokerage&quot; option.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold">Name</th>
-                <th className="px-3 py-2 text-left font-semibold">Rate</th>
-                <th className="px-3 py-2 text-right font-semibold">Volume</th>
-                <th className="px-3 py-2 text-right font-semibold">Lots</th>
-                <th className="px-3 py-2 text-right font-semibold">Their user bkg</th>
-                <th className="px-3 py-2 text-right font-semibold">You earn (fixed)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-border/60 hover:bg-muted/15">
-                  <td className="px-3 py-2">
-                    <div className="font-medium">{r.name}</div>
-                    <div className="font-mono text-[11px] text-muted-foreground">{r.user_code}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-[12px]">
-                    ₹{num(r.rate)}{" "}
-                    <span className="text-muted-foreground">/{r.unit === "per_lot" ? "lot" : "crore"}</span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular tabular-nums">{num(r.volume)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular tabular-nums">{num(r.lots)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular tabular-nums text-muted-foreground">
-                    {fmt(r.user_brokerage)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-tabular font-bold tabular-nums text-buy">
-                    {fmt(r.fixed_brokerage)}
-                  </td>
+        rows.map((r) => <Account2ChildCard key={r.id} r={r} fmt={fmt} num={num} />)
+      )}
+    </div>
+  );
+}
+
+function Account2ChildCard({ r, fmt, num }: { r: any; fmt: (v: any) => string; num: (v: any) => string }) {
+  const [open, setOpen] = useState(true);
+  // Only segments that actually earned or traded are worth showing.
+  const segs: any[] = (r.segments ?? []).filter(
+    (s: any) => Number(s.fixed_brokerage) > 0 || Number(s.volume) > 0,
+  );
+  return (
+    <div className="overflow-hidden rounded-lg border border-border">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 bg-muted/30 px-3 py-2.5 text-left hover:bg-muted/50"
+      >
+        <div className="flex items-center gap-2">
+          <ChevronRight className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`} />
+          <div>
+            <div className="font-medium">{r.name}</div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {r.user_code} · {r.user_count} user{r.user_count === 1 ? "" : "s"} · vol {num(r.volume)}
+            </div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">You earn</div>
+          <div className="font-tabular text-base font-bold tabular-nums text-buy">{fmt(r.fixed_brokerage)}</div>
+        </div>
+      </button>
+      {open && (
+        <div className="overflow-x-auto">
+          {segs.length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+              No trades in this period.
+            </div>
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead className="bg-muted/20 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-1.5 text-left font-semibold">Segment</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Rate</th>
+                  <th className="px-3 py-1.5 text-right font-semibold">Volume</th>
+                  <th className="px-3 py-1.5 text-right font-semibold">Lots</th>
+                  <th className="px-3 py-1.5 text-right font-semibold">You earn</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {segs.map((s) => (
+                  <tr key={s.segment} className="border-t border-border/50">
+                    <td className="px-3 py-1.5 font-medium">{s.segment_label}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5">
+                      ₹{num(s.rate)}{" "}
+                      <span className="text-muted-foreground">/{s.unit === "per_lot" ? "lot" : "crore"}</span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right font-tabular tabular-nums">{num(s.volume)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right font-tabular tabular-nums">{num(s.lots)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right font-tabular font-bold tabular-nums text-buy">
+                      {fmt(s.fixed_brokerage)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

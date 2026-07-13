@@ -200,6 +200,12 @@ async def create_broker(
         from app.services.settings_snapshot import snapshot_for_new_broker
 
         await snapshot_for_new_broker(new.id, creator=creator)
+        # Account 2: freeze the broker's per-segment fixed-brokerage take from
+        # its just-baked effective brokerage (the parent admin/broker's rate).
+        if is_fixed_brokerage:
+            from app.services.netting_service import seed_fixed_brokerage_rates
+
+            await seed_fixed_brokerage_rates(new)
     except Exception:
         # Snapshot is best-effort. Boot-time backfill catches misses.
         import logging as _lg

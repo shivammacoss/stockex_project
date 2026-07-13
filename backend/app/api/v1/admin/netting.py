@@ -187,6 +187,17 @@ async def update_segment(
     # sets the ceiling at admin-create; admins/brokers can't exceed it. SA is
     # unbounded and can change any tier's settings anytime.
     if admin.role != UserRole.SUPER_ADMIN:
+        # Margin MODE is set by the PARENT (SA sets the admin's mode; admin sets
+        # the broker's) via the per-node editor, and lands in THIS node's own
+        # override. So the lock reference is the node's OWN current effective
+        # mode — the child may change the number but NOT switch modes. Reject a
+        # switch with a clear popup rather than silently clamping it.
+        from app.services import settings_snapshot
+
+        own_eff = await settings_snapshot._resolve_effective_segment(source_user=admin, segment_name=seg.name)
+        mode_err = svc.margin_mode_lock_violation(patch, own_eff or {})
+        if mode_err:
+            raise HTTPException(status_code=400, detail=mode_err)
         parent_eff = await svc.resolve_parent_effective_segment(admin, seg.name)
         if parent_eff:
             patch, _clamp_notes = svc.clamp_child_patch(patch, parent_eff)

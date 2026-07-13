@@ -778,12 +778,9 @@ function CreateSubAdminDialog({
         brokerage_share_pct:
           form.brokerage_share_pct.trim() === "" ? undefined : form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
+        // Account 2 fixed-brokerage is a FLAG only now — the actual per-segment
+        // rate is set (and frozen) in the admin's Segment settings → Brokerage.
         is_fixed_brokerage: form.is_fixed_brokerage,
-        fixed_brokerage_unit: form.is_fixed_brokerage ? form.fixed_brokerage_unit : undefined,
-        fixed_brokerage_rate:
-          form.is_fixed_brokerage && form.fixed_brokerage_rate.trim() !== ""
-            ? form.fixed_brokerage_rate
-            : undefined,
       });
       toast.success("Sub-admin created");
       onOpenChange(false);
@@ -899,35 +896,17 @@ function CreateSubAdminDialog({
             Fixed-brokerage admin (Account 2)
           </label>
           <p className="text-[11px] text-muted-foreground">
-            Super-admin takes a FIXED per-lot / per-crore brokerage from this admin&apos;s
-            volume — regardless of what the admin charges their users. Its brokers /
-            sub-brokers also run in this fixed flow.
+            Super-admin takes a FIXED brokerage from this admin&apos;s volume —
+            regardless of what the admin charges their users. Its brokers / sub-brokers
+            also run in this fixed flow.
           </p>
           {form.is_fixed_brokerage && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Unit</Label>
-                <select
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                  value={form.fixed_brokerage_unit}
-                  onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_unit: e.target.value }))}
-                >
-                  <option value="per_crore">Per crore</option>
-                  <option value="per_lot">Per lot</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Rate (₹ {form.fixed_brokerage_unit === "per_lot" ? "per lot" : "per crore"})</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="e.g. 500"
-                  value={form.fixed_brokerage_rate}
-                  onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_rate: e.target.value }))}
-                />
-              </div>
-            </div>
+            <p className="rounded-md bg-primary/10 px-2.5 py-2 text-[11px] text-foreground/80">
+              You set the fixed rate <b>per segment</b> in this admin&apos;s{" "}
+              <b>Segment settings → Brokerage</b> (NSE fut/opt, MCX, crypto, forex… each
+              its own per-lot / per-crore rate). That&apos;s what Account 2 charges the
+              admin. Opens right after you create them (or via the 3-dot menu anytime).
+            </p>
           )}
         </div>
 
@@ -982,10 +961,6 @@ function EditSubAdminDialog({
     subAdmin.brokerage_share_pct != null ? String(subAdmin.brokerage_share_pct) : "",
   );
   const [isFixed, setIsFixed] = useState<boolean>(!!subAdmin.is_fixed_brokerage);
-  const [fixUnit, setFixUnit] = useState<string>(subAdmin.fixed_brokerage_unit || "per_crore");
-  const [fixRate, setFixRate] = useState<string>(
-    subAdmin.fixed_brokerage_rate != null ? String(subAdmin.fixed_brokerage_rate) : "",
-  );
   const [loading, setLoading] = useState(false);
 
   async function save() {
@@ -997,8 +972,6 @@ function EditSubAdminDialog({
       );
       await ManagementAPI.updateFixedBrokerage(subAdmin.id, {
         is_fixed_brokerage: isFixed,
-        fixed_brokerage_unit: isFixed ? fixUnit : undefined,
-        fixed_brokerage_rate: isFixed && fixRate.trim() !== "" ? fixRate : undefined,
       });
       toast.success("Sub-admin updated");
       onSaved();
@@ -1057,30 +1030,12 @@ function EditSubAdminDialog({
               Fixed-brokerage admin (Account 2)
             </label>
             {isFixed && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Unit</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                    value={fixUnit}
-                    onChange={(e) => setFixUnit(e.target.value)}
-                  >
-                    <option value="per_crore">Per crore</option>
-                    <option value="per_lot">Per lot</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Rate (₹ {fixUnit === "per_lot" ? "per lot" : "per crore"})</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="e.g. 500"
-                    value={fixRate}
-                    onChange={(e) => setFixRate(e.target.value)}
-                  />
-                </div>
-              </div>
+              <p className="rounded-md bg-primary/10 px-2.5 py-2 text-[11px] text-foreground/80">
+                Fixed rate is set <b>per segment</b> in this admin&apos;s{" "}
+                <b>Segment settings → Brokerage</b> (3-dot menu). Account 2 charges the
+                admin that frozen rate; whatever they later charge their own users
+                doesn&apos;t change it.
+              </p>
             )}
           </div>
           <div className="space-y-2">

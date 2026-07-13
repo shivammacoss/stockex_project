@@ -624,12 +624,9 @@ function CreateBrokerDialog({
         brokerage_share_pct: form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
         assigned_admin_id: selectedAdminId || undefined,
+        // Account 2 fixed-brokerage is a FLAG now — per-segment rate is frozen
+        // from the node's Brokerage segment settings (seeded at create).
         is_fixed_brokerage: form.is_fixed_brokerage,
-        fixed_brokerage_unit: form.is_fixed_brokerage ? form.fixed_brokerage_unit : undefined,
-        fixed_brokerage_rate:
-          form.is_fixed_brokerage && form.fixed_brokerage_rate.trim() !== ""
-            ? form.fixed_brokerage_rate
-            : undefined,
       });
       toast.success(`${noun} created`);
       onOpenChange(false);
@@ -769,34 +766,15 @@ function CreateBrokerDialog({
               Fixed-brokerage {noun.toLowerCase()} (Account 2)
             </label>
             <p className="text-[11px] text-muted-foreground">
-              You take a FIXED per-lot / per-crore brokerage from this {noun.toLowerCase()}&apos;s volume,
+              You take a FIXED brokerage from this {noun.toLowerCase()}&apos;s volume,
               regardless of what they charge their own users.
             </p>
             {form.is_fixed_brokerage && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Unit</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                    value={form.fixed_brokerage_unit}
-                    onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_unit: e.target.value }))}
-                  >
-                    <option value="per_crore">Per crore</option>
-                    <option value="per_lot">Per lot</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Rate (₹ {form.fixed_brokerage_unit === "per_lot" ? "per lot" : "per crore"})</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="e.g. 800"
-                    value={form.fixed_brokerage_rate}
-                    onChange={(e) => setForm((f) => ({ ...f, fixed_brokerage_rate: e.target.value }))}
-                  />
-                </div>
-              </div>
+              <p className="rounded-md bg-primary/10 px-2.5 py-2 text-[11px] text-foreground/80">
+                The fixed rate is <b>per segment</b> — seeded from this {noun.toLowerCase()}&apos;s
+                Brokerage segment settings at create (NSE fut/opt, MCX, crypto, forex… each its
+                own per-lot / per-crore rate) and frozen for Account 2.
+              </p>
             )}
           </div>
 
@@ -868,10 +846,6 @@ function EditBrokerDialog({
     String((broker as any).brokerage_share_pct ?? broker.pnl_share_pct ?? "0"),
   );
   const [isFixed, setIsFixed] = useState<boolean>(!!(broker as any).is_fixed_brokerage);
-  const [fixUnit, setFixUnit] = useState<string>((broker as any).fixed_brokerage_unit || "per_crore");
-  const [fixRate, setFixRate] = useState<string>(
-    (broker as any).fixed_brokerage_rate != null ? String((broker as any).fixed_brokerage_rate) : "",
-  );
   const [loading, setLoading] = useState(false);
 
   async function save() {
@@ -884,8 +858,6 @@ function EditBrokerDialog({
       await BrokerMgmtAPI.updatePnlShare(broker.id, pnlPct, brokeragePct);
       await BrokerMgmtAPI.updateFixedBrokerage(broker.id, {
         is_fixed_brokerage: isFixed,
-        fixed_brokerage_unit: isFixed ? fixUnit : undefined,
-        fixed_brokerage_rate: isFixed && fixRate.trim() !== "" ? fixRate : undefined,
       });
       const cascaded = res?.cascaded_changes ?? [];
       toast.success(
@@ -948,30 +920,11 @@ function EditBrokerDialog({
               Fixed-brokerage {noun.toLowerCase()} (Account 2)
             </label>
             {isFixed && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Unit</Label>
-                  <select
-                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                    value={fixUnit}
-                    onChange={(e) => setFixUnit(e.target.value)}
-                  >
-                    <option value="per_crore">Per crore</option>
-                    <option value="per_lot">Per lot</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Rate (₹ {fixUnit === "per_lot" ? "per lot" : "per crore"})</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="e.g. 800"
-                    value={fixRate}
-                    onChange={(e) => setFixRate(e.target.value)}
-                  />
-                </div>
-              </div>
+              <p className="rounded-md bg-primary/10 px-2.5 py-2 text-[11px] text-foreground/80">
+                Fixed rate is <b>per segment</b>, frozen from this {noun.toLowerCase()}&apos;s
+                Brokerage segment settings. Account 2 charges that frozen rate regardless of
+                what they later charge their own users.
+              </p>
             )}
           </div>
           <div>

@@ -91,6 +91,12 @@ async def create_sub_admin(
         from app.services.settings_snapshot import snapshot_for_new_admin
 
         await snapshot_for_new_admin(sa.id, source_super_admin_id=created_by)
+        # Account 2: freeze the per-segment fixed-brokerage table from the
+        # just-baked effective brokerage, so a fixed admin earns from day one.
+        if is_fixed_brokerage:
+            from app.services.netting_service import seed_fixed_brokerage_rates
+
+            await seed_fixed_brokerage_rates(sa)
     except Exception:
         # Snapshot is best-effort — a Mongo hiccup here must not roll
         # back the admin creation. The boot-time backfill will pick up

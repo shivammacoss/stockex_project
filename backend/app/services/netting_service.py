@@ -130,6 +130,36 @@ def clamp_child_patch(patch: dict, parent: dict) -> tuple[dict, list[str]]:
     return out, notes
 
 
+_MODE_LABEL = {"times": "Times (leverage)", "fixed": "Fixed (₹/lot)", "percent": "Percent (% notional)"}
+
+
+def margin_mode_lock_violation(patch: dict, parent: dict) -> str | None:
+    """The margin CALC MODE is inherited, not free. If the parent set an EXPLICIT
+    mode for a segment (Times / Fixed / Percent), the child must stay in it — it
+    can only change the NUMBER, not the mode. Returns a human message to show as
+    a popup when the child tries to switch modes, else None. (Parent mode None =
+    'not explicitly set' → no lock; the child may pick a mode.)
+
+    Covers the segment-level mode + the option Buy/Sell per-side modes."""
+    for key, what in (
+        ("marginCalcMode", "margin"),
+        ("optionBuyMarginCalcMode", "option BUY margin"),
+        ("optionSellMarginCalcMode", "option SELL margin"),
+    ):
+        want = patch.get(key)
+        locked = parent.get(key)
+        if want is None or locked is None:
+            continue
+        if str(want) != str(locked):
+            return (
+                f"Your super-admin locked this segment's {what} mode to "
+                f"{_MODE_LABEL.get(str(locked), locked)} — you can't switch to "
+                f"{_MODE_LABEL.get(str(want), want)}. You can only change the value "
+                f"within that mode."
+            )
+    return None
+
+
 async def resolve_parent_effective_segment(actor, segment_name: str) -> dict:
     """The parent tier's effective segment settings that BOUND `actor`'s save.
     ADMIN → super-admin; BROKER → its immediate parent (parent broker, else
@@ -174,6 +204,31 @@ async def snapshot_fixed_brokerage_rate(node, segment_name: str, effective: dict
     }
     rates = dict(getattr(node, "fixed_brokerage_rates", None) or {})
     rates[segment_name] = entry
+    node.fixed_brokerage_rates = rates
+    await node.save()  # type: ignore[attr-defined]
+
+
+async def seed_fixed_brokerage_rates(node) -> None:
+    """Account 2: at CREATE, freeze a fresh fixed-brokerage node's per-segment
+    take from its just-baked effective brokerage (snapshot_for_new_admin/broker
+    already copied the parent's segment brokerage into the node's override). So
+    the node has a full frozen rate table immediately; the parent can re-freeze
+    any segment later via the segment editor. No-op if not fixed / already seeded."""
+    if not getattr(node, "is_fixed_brokerage", False):
+        return
+    if getattr(node, "fixed_brokerage_rates", None):
+        return
+    from app.services import settings_snapshot
+
+    rates: dict[str, dict] = {}
+    for seg in SEGMENT_CODES:
+        eff = await settings_snapshot._resolve_effective_segment(source_user=node, segment_name=seg)
+        rates[seg] = {
+            "commission": eff.get("commission"),
+            "commissionType": eff.get("commissionType") or "per_crore",
+            "optionBuyCommission": eff.get("optionBuyCommission"),
+            "optionSellCommission": eff.get("optionSellCommission"),
+        }
     node.fixed_brokerage_rates = rates
     await node.save()  # type: ignore[attr-defined]
 
