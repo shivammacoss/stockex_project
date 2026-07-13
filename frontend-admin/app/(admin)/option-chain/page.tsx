@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Search, Trash2 } from "lucide-react";
-import { ExpiryOverridesAPI, InstrumentAdminAPI, SettingsAPI } from "@/lib/api";
+import { AdminMeAPI, ExpiryOverridesAPI, InstrumentAdminAPI, SettingsAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +51,15 @@ export default function OptionChainAdminPage() {
     role === "ADMIN" ? "ADMIN" : role === "BROKER" ? "BROKER" : null;
   const myId = admin?.id ?? "";
   const canOverride = !isSuper && !!myKind && !!myId;
+
+  // Expiry-edit lock: an admin/broker may only edit when the super-admin has
+  // unlocked it (`can_edit_expiry_settings`). Super-admin is always allowed.
+  const { data: meProfile } = useQuery({
+    queryKey: ["admin", "me", "profile"],
+    queryFn: () => AdminMeAPI.profile(),
+    staleTime: 30_000,
+  });
+  const expiryLocked = !isSuper && meProfile != null && !meProfile.can_edit_expiry_settings;
 
   const { data: rows } = useQuery({
     queryKey: ["admin", "settings", "platform", "option_chain"],
@@ -228,13 +237,20 @@ export default function OptionChainAdminPage() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {canOverride && overrideRow?.exists && (
+            {canOverride && !expiryLocked && overrideRow?.exists && (
               <Button variant="outline" onClick={resetToDefault}>Reset to default</Button>
             )}
-            <Button onClick={save} disabled={!dirty} loading={saving}>Save changes</Button>
+            <Button onClick={save} disabled={!dirty || expiryLocked} loading={saving}>Save changes</Button>
           </div>
         }
       />
+
+      {expiryLocked && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-300">
+          🔒 Expiry settings are <b>locked by the super-admin</b>. You&apos;re seeing what they
+          set — you can&apos;t change it until they enable <b>Expiry edit</b> for your account.
+        </div>
+      )}
 
       {canOverride && (
         <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-300">

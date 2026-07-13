@@ -51,6 +51,13 @@ async def my_profile(admin: CurrentAdmin):
             "full_name": admin.full_name,
             "city": getattr(admin, "city", None),
             "role": admin.role.value if hasattr(admin.role, "value") else str(admin.role),
+            # Expiry-settings lock — super-admin always True; an admin/broker is
+            # True only when the SA unlocked it (drives the read-only expiry page).
+            "can_edit_expiry_settings": (
+                True
+                if (admin.role.value if hasattr(admin.role, "value") else str(admin.role)) == "SUPER_ADMIN"
+                else bool(getattr(admin, "can_edit_expiry_settings", False))
+            ),
         }
     )
 

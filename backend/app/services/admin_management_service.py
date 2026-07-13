@@ -218,6 +218,30 @@ async def set_admin_fixed_brokerage(
     return sa
 
 
+async def set_admin_expiry_edit_allowed(
+    sub_admin_id: str | PydanticObjectId,
+    allowed: bool,
+    actor_id: PydanticObjectId,
+) -> User:
+    """Super-admin toggles whether this admin may edit its OWN expiry / option-
+    chain settings. Default OFF — the admin inherits what the super-admin set and
+    can't override until unlocked here."""
+    sa = await _get_sub_admin_or_404(sub_admin_id)
+    old = bool(getattr(sa, "can_edit_expiry_settings", False))
+    sa.can_edit_expiry_settings = bool(allowed)
+    await sa.save()
+    await log_event(
+        action=AuditAction.SUB_ADMIN_PNL_SHARE_UPDATE,
+        entity_type="User",
+        entity_id=sa.id,
+        actor_id=actor_id,
+        target_user_id=sa.id,
+        old_values={"can_edit_expiry_settings": old},
+        new_values={"can_edit_expiry_settings": sa.can_edit_expiry_settings},
+    )
+    return sa
+
+
 async def set_pnl_share(
     sub_admin_id: str | PydanticObjectId,
     pct: Decimal,

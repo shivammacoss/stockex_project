@@ -909,6 +909,8 @@ export const ManagementAPI = {
     id: string,
     body: { is_fixed_brokerage: boolean; fixed_brokerage_unit?: string; fixed_brokerage_rate?: number | string },
   ) => unwrap<any>(api.put(`/admin/management/sub-admins/${id}/fixed-brokerage`, body)),
+  setExpiryEditAllowed: (id: string, allowed: boolean) =>
+    unwrap<any>(api.put(`/admin/management/sub-admins/${id}/expiry-edit-allowed`, { allowed })),
   updateSubAdmin: (id: string, body: { full_name?: string }) =>
     unwrap<any>(api.put(`/admin/management/sub-admins/${id}`, body)),
   updatePermissions: (id: string, permissions: Record<string, boolean>) =>

@@ -207,6 +207,15 @@ export default function SubAdminsPage() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+  const expiryEditMut = useMutation({
+    mutationFn: ({ id, allowed }: { id: string; allowed: boolean }) =>
+      ManagementAPI.setExpiryEditAllowed(id, allowed),
+    onSuccess: (_d, v) => {
+      toast.success(v.allowed ? "Expiry edit allowed for this admin" : "Expiry edit locked");
+      qc.invalidateQueries({ queryKey: ["admin", "sub-admins"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
   const resetPwMut = useMutation({
     mutationFn: ({ id, pw }: { id: string; pw: string }) =>
       ManagementAPI.resetSubAdminPassword(id, pw),
@@ -315,6 +324,18 @@ export default function SubAdminsPage() {
               <DropdownMenuItem onSelect={() => setSegSettingsFor({ id: r.id, name: r.full_name || r.user_code })}>
                 <Layers className="size-4 text-primary" />
                 Segment settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  expiryEditMut.mutate({ id: r.id, allowed: !r.can_edit_expiry_settings })
+                }
+              >
+                {r.can_edit_expiry_settings ? (
+                  <ShieldCheck className="size-4 text-emerald-500" />
+                ) : (
+                  <ShieldOff className="size-4 text-muted-foreground" />
+                )}
+                Expiry edit · {r.can_edit_expiry_settings ? "ON" : "OFF"}
               </DropdownMenuItem>
               {r.status === "ACTIVE" ? (
                 <DropdownMenuItem onSelect={() => blockMut.mutate(r.id)}>

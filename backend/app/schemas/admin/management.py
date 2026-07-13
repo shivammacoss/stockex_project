@@ -85,6 +85,7 @@ class SubAdminDTO(BaseModel):
     is_fixed_brokerage: bool = False
     fixed_brokerage_unit: str | None = None
     fixed_brokerage_rate: str | None = None
+    can_edit_expiry_settings: bool = False  # SA-granted expiry-edit unlock
     user_count: int = 0  # active trading clients (CLOSED + broker rows excluded)
     broker_count: int = 0  # broker + sub-broker login accounts under this admin
     created_at: datetime | None = None

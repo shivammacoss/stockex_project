@@ -317,6 +317,12 @@ class User(TimestampMixin):
     # unchanged). Mirrors `broker_brokerage_share_pct`.
     admin_brokerage_share_pct: Decimal128 | None = None  # 0..100
 
+    # Expiry / option-chain settings lock. By DEFAULT an admin/broker CANNOT
+    # edit their own ExpiryOverride — they inherit whatever the super-admin set.
+    # The super-admin flips this ON per-admin (3-dot → "Expiry edit") to let that
+    # admin override. Super-admin itself is always allowed. Default False = locked.
+    can_edit_expiry_settings: bool = False
+
     # Immediate broker owner. For BROKER role: their parent broker (NULL for
     # a top-level broker created by an admin/super-admin). For CLIENT role:
     # the broker that minted them (NULL when client belongs to admin pool).

@@ -63,6 +63,7 @@ async def _ser_sub_admin(sa: User) -> SubAdminDTO:
             if getattr(sa, "fixed_brokerage_rate", None) is not None
             else None
         ),
+        can_edit_expiry_settings=bool(getattr(sa, "can_edit_expiry_settings", False)),
         user_count=await mgmt.count_assigned_users(sa.id),
         broker_count=await mgmt.count_assigned_brokers(sa.id),
         created_at=sa.created_at,
@@ -196,6 +197,20 @@ async def update_fixed_brokerage(
         payload.fixed_brokerage_unit,
         payload.fixed_brokerage_rate,
         admin.id,
+    )
+    return APIResponse(data=await _ser_sub_admin(sa))
+
+
+@router.put(
+    "/sub-admins/{sub_admin_id}/expiry-edit-allowed", response_model=APIResponse[SubAdminDTO]
+)
+async def set_expiry_edit_allowed(
+    sub_admin_id: str, payload: dict, admin: SuperAdmin
+):
+    """Super-admin toggles whether this admin may edit its own expiry settings
+    (default OFF → the admin is locked to the super-admin's expiry config)."""
+    sa = await mgmt.set_admin_expiry_edit_allowed(
+        sub_admin_id, bool(payload.get("allowed")), admin.id
     )
     return APIResponse(data=await _ser_sub_admin(sa))
 

@@ -43,6 +43,22 @@ def _assert_self_or_super(admin: User, oid: PydanticObjectId) -> None:
         )
 
 
+def _assert_expiry_edit_allowed(admin: User) -> None:
+    """Expiry settings are LOCKED for admins/brokers by default — they inherit
+    what the super-admin set. Only a super-admin, or an admin the super-admin
+    explicitly unlocked (`can_edit_expiry_settings`), may WRITE. Blocks the
+    admin from overriding the super-admin until allowed."""
+    role = str(getattr(admin.role, "value", admin.role) or "").upper()
+    if role == "SUPER_ADMIN":
+        return
+    if not getattr(admin, "can_edit_expiry_settings", False):
+        raise HTTPException(
+            403,
+            detail="Expiry settings are locked by the super-admin. Ask them to enable "
+            "\"Expiry edit\" for your account.",
+        )
+
+
 def _serialize(o: ExpiryOverride) -> dict[str, Any]:
     return {
         "id": str(o.id),
@@ -89,6 +105,7 @@ async def upsert_override(
 ):
     kind, oid = _parse_actor(actor_kind, actor_id)
     _assert_self_or_super(admin, oid)
+    _assert_expiry_edit_allowed(admin)
 
     target = await User.get(oid)
     if target is None:
@@ -204,6 +221,7 @@ async def delete_override(
 ):
     kind, oid = _parse_actor(actor_kind, actor_id)
     _assert_self_or_super(admin, oid)
+    _assert_expiry_edit_allowed(admin)
     row = await ExpiryOverride.find_one(
         ExpiryOverride.actor_kind == kind, ExpiryOverride.actor_id == oid
     )
