@@ -173,7 +173,9 @@ async def set_admin_fixed_brokerage(
     rate: Decimal | None,
     actor_id: PydanticObjectId,
 ) -> User:
-    """Set / update an admin's fixed-brokerage config (editable anytime).
+    """Toggle an admin's fixed-brokerage flag (editable anytime, incl. from the
+    3-dot Edit). The actual rate is now PER-SEGMENT (frozen from the admin's
+    Segment settings → Brokerage), so `unit`/`rate` are legacy/optional here.
     is_fixed=False clears it back to the normal % flow."""
     sa = await _get_sub_admin_or_404(sub_admin_id)
     old = {
@@ -182,18 +184,24 @@ async def set_admin_fixed_brokerage(
         "fixed_brokerage_rate": str(sa.fixed_brokerage_rate) if sa.fixed_brokerage_rate is not None else None,
     }
     if is_fixed:
-        if unit not in ("per_lot", "per_crore"):
-            raise ValidationFailedError("unit must be per_lot|per_crore")
-        if rate is None or to_decimal(rate) < 0:
-            raise ValidationFailedError("rate must be >= 0")
         sa.is_fixed_brokerage = True
-        sa.fixed_brokerage_unit = unit
-        sa.fixed_brokerage_rate = to_decimal128(to_decimal(rate))
+        # Legacy single rate only if explicitly supplied (per-segment is primary).
+        if unit in ("per_lot", "per_crore"):
+            sa.fixed_brokerage_unit = unit
+        if rate is not None and to_decimal(rate) >= 0:
+            sa.fixed_brokerage_rate = to_decimal128(to_decimal(rate))
+        await sa.save()
+        # Seed the per-segment frozen table from the admin's current effective
+        # brokerage if it isn't set yet, so Account 2 has data the moment they
+        # switch this admin to fixed. (No-op if already seeded.)
+        from app.services.netting_service import seed_fixed_brokerage_rates
+
+        await seed_fixed_brokerage_rates(sa)
     else:
         sa.is_fixed_brokerage = False
         sa.fixed_brokerage_unit = None
         sa.fixed_brokerage_rate = None
-    await sa.save()
+        await sa.save()
     await log_event(
         action=AuditAction.SUB_ADMIN_PNL_SHARE_UPDATE,
         entity_type="User",

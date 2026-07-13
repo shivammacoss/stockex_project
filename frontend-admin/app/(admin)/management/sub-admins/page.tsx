@@ -79,6 +79,24 @@ const ALL_OFF: AdminPermissions = {
   brokerage: false,
 };
 
+// New admins start with EVERY permission ON by default (operator can uncheck
+// what they don't want) — a fresh admin is typically given full access.
+const ALL_ON: AdminPermissions = {
+  users: true,
+  kyc: true,
+  deposits: true,
+  withdrawals: true,
+  banks: true,
+  segment_settings: true,
+  risk: true,
+  netting: true,
+  trading_view: true,
+  ledger: true,
+  reports: true,
+  brokers: true,
+  brokerage: true,
+};
+
 export default function SubAdminsPage() {
   const qc = useQueryClient();
   const router = useRouter();
@@ -755,15 +773,18 @@ function CreateSubAdminDialog({
     fixed_brokerage_unit: "per_crore",
     fixed_brokerage_rate: "",
   });
-  const [perms, setPerms] = useState<AdminPermissions>({ ...ALL_OFF });
+  const [perms, setPerms] = useState<AdminPermissions>({ ...ALL_ON });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   // Step 1 is a TYPE CHOOSER: pick "normal" (% PNL/brokerage) vs "fixed"
   // (Account 2 per-segment fixed brokerage). null = still on the chooser.
   const [mode, setMode] = useState<"normal" | "fixed" | null>(null);
-  // Reset to the chooser every time the dialog is (re)opened.
+  // Reset to the chooser + all-perms-on every time the dialog is (re)opened.
   useEffect(() => {
-    if (open) setMode(null);
+    if (open) {
+      setMode(null);
+      setPerms({ ...ALL_ON });
+    }
   }, [open]);
   const isFixed = mode === "fixed";
 
@@ -1065,30 +1086,44 @@ function EditSubAdminDialog({
                 onChange={(e) => setPnlPct(e.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Brokerage share %</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                placeholder="= PNL share"
-                value={bkgPct}
-                onChange={(e) => setBkgPct(e.target.value)}
-              />
-            </div>
+            {!isFixed && (
+              <div className="space-y-1.5">
+                <Label>Brokerage share %</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  placeholder="= PNL share"
+                  value={bkgPct}
+                  onChange={(e) => setBkgPct(e.target.value)}
+                />
+              </div>
+            )}
           </div>
-          {/* Fixed-brokerage flow (Account 2) */}
-          <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-2.5">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={isFixed}
-                onChange={(e) => setIsFixed(e.target.checked)}
-              />
-              Fixed-brokerage admin (Account 2)
-            </label>
+          {/* Admin TYPE switch — flip between % (Normal) and fixed (Account 2). */}
+          <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+            <div className="text-sm font-medium">Admin type</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFixed(false)}
+                className={`flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+                  !isFixed ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                <Percent className="size-4" /> Normal PNL (%)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFixed(true)}
+                className={`flex items-center gap-2 rounded-lg border-2 px-3 py-2 text-sm font-medium transition ${
+                  isFixed ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                <DollarSign className="size-4" /> Fixed brokerage
+              </button>
+            </div>
             {isFixed && (
               <p className="rounded-md bg-primary/10 px-2.5 py-2 text-[11px] text-foreground/80">
                 Fixed rate is set <b>per segment</b> in this admin&apos;s{" "}

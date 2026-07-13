@@ -356,18 +356,22 @@ async def set_broker_fixed_brokerage(
         "fixed_brokerage_rate": str(b.fixed_brokerage_rate) if b.fixed_brokerage_rate is not None else None,
     }
     if is_fixed:
-        if unit not in ("per_lot", "per_crore"):
-            raise ValidationFailedError("unit must be per_lot|per_crore")
-        if rate is None or to_decimal(rate) < 0:
-            raise ValidationFailedError("rate must be >= 0")
+        # Rate is PER-SEGMENT now (frozen from segment settings); unit/rate are
+        # legacy/optional. Seed the per-segment table if empty.
         b.is_fixed_brokerage = True
-        b.fixed_brokerage_unit = unit
-        b.fixed_brokerage_rate = to_decimal128(to_decimal(rate))
+        if unit in ("per_lot", "per_crore"):
+            b.fixed_brokerage_unit = unit
+        if rate is not None and to_decimal(rate) >= 0:
+            b.fixed_brokerage_rate = to_decimal128(to_decimal(rate))
+        await b.save()
+        from app.services.netting_service import seed_fixed_brokerage_rates
+
+        await seed_fixed_brokerage_rates(b)
     else:
         b.is_fixed_brokerage = False
         b.fixed_brokerage_unit = None
         b.fixed_brokerage_rate = None
-    await b.save()
+        await b.save()
     await log_event(
         action=AuditAction.BROKER_PNL_SHARE_UPDATE,
         entity_type="User",
