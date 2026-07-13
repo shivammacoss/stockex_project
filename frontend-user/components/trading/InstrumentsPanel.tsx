@@ -176,10 +176,12 @@ export function InstrumentsPanel({ onClose }: Props) {
   const visibleBuckets = useMemo(
     () =>
       BUCKETS.filter((b) => {
-        // Wallet scope — when the terminal is opened for a specific trading
-        // wallet, hide every chip outside that wallet's segments.
-        const allowed = walletKind ? WALLET_BUCKETS[walletKind] : null;
-        if (allowed && !allowed.includes(b.key)) return false;
+        // ALL segments are browseable from ANY wallet — the market page shows
+        // every instrument at once regardless of which wallet is open. The
+        // wallet only decides which one the ORDER debits (OrderPanel resolves
+        // that from the instrument's own segment), never what you can SEE. We
+        // still LAND on the wallet's own segment first (default-bucket effect
+        // below) for convenience, but every chip stays visible.
         const rows = b.adminRows ?? [];
         // Core (Favorites / All) buckets have no `adminRows` — always visible.
         if (rows.length === 0) return true;

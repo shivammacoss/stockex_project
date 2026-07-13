@@ -33,14 +33,14 @@ interface Props {
 }
 
 // Wallet kind → which chip buckets that trading wallet may browse. Favorites
-// is always allowed. Used only when the Market page passes `walletKind`.
-const WALLET_BUCKETS: Record<string, string[]> = {
-  // Only the wallet's own segment chips (+ Favorites) — dropped cross-asset
-  // "indices"/"stocks" from NSE/BSE (mirrors InstrumentsPanel).
-  NSE_BSE: ["favorites", "nse_eq", "nse_fut", "nse_opt", "bse_eq", "bse_fut", "bse_opt"],
-  MCX: ["favorites", "mcx_fut", "mcx_opt", "commodities"],
-  CRYPTO: ["favorites", "crypto"],
-  FOREX: ["favorites", "forex"],
+// First market chip to land on per wallet (chips are ALL visible now, so we
+// can't just pick "the first non-favorites chip" — that would land on some
+// other segment). Mirrors WALLET_DEFAULT_BUCKET in InstrumentsPanel.
+const WALLET_DEFAULT_BUCKET: Record<string, string> = {
+  NSE_BSE: "nse_eq",
+  MCX: "mcx_fut",
+  CRYPTO: "crypto",
+  FOREX: "forex",
 };
 
 type Bucket = {
@@ -125,24 +125,25 @@ export function MobileInstrumentsBar({ activeToken, onSelect, walletKind }: Prop
   });
   const inactiveSet = useMemo(() => new Set(inactiveRows ?? []), [inactiveRows]);
   const visibleBuckets = useMemo(() => {
-    const allowed = walletKind ? WALLET_BUCKETS[walletKind] : null;
     return BUCKETS.filter((b) => {
-      // Primary-wallet filter (Market page) — hide chips outside this wallet.
-      if (allowed && !allowed.includes(b.key)) return false;
+      // ALL segments browseable from ANY wallet — every instrument shows at
+      // once regardless of the open wallet. The wallet only decides which one
+      // the ORDER debits, never what's visible. We still LAND on the wallet's
+      // own market chip first (effect below) but every chip stays visible.
       const rows = b.adminRows ?? [];
       if (rows.length === 0) return true;
       return rows.some((r) => !inactiveSet.has(r));
     });
-  }, [inactiveSet, walletKind]);
+  }, [inactiveSet]);
   useEffect(() => {
     if (!visibleBuckets.find((b) => b.key === bucketKey)) setBucketKey("favorites");
   }, [visibleBuckets, bucketKey]);
   // When a primary wallet is enforced, land on its first MARKET chip (not
   // favorites) so the user sees that wallet's instruments right away.
   useEffect(() => {
-    if (!walletKind || !WALLET_BUCKETS[walletKind]) return;
-    const firstMarket = visibleBuckets.find((b) => b.key !== "favorites");
-    if (firstMarket) setBucketKey(firstMarket.key);
+    if (!walletKind) return;
+    const target = WALLET_DEFAULT_BUCKET[walletKind];
+    if (target && visibleBuckets.find((b) => b.key === target)) setBucketKey(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletKind]);
 
