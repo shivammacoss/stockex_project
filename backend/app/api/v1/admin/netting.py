@@ -225,17 +225,17 @@ async def list_sub_admin_segments(admin_id: str, admin: SuperAdmin):
 
 @router.put("/sub-admin/{admin_id}/segments/{segment_id}", response_model=APIResponse[dict])
 async def update_sub_admin_segment(admin_id: str, segment_id: str, payload: dict, admin: SuperAdmin):
-    """SUPER-ADMIN sets ONE admin's segment settings, CLAMPED to the SA's own
-    ceiling (the admin can never exceed what the SA allows; brokerage stays a
-    floor). SA can do this at admin-create and anytime after (3-dot menu)."""
+    """SUPER-ADMIN sets ONE admin's segment settings — the SA defines the admin's
+    ceiling, so this is written AS-IS (NOT clamped). The clamp only applies the
+    OTHER way: when the ADMIN later edits their OWN segment (`update_segment`),
+    they can't exceed what the SA set here. (Clamping the SA here was the
+    "segment setting save nahi ho raha" bug — the SA raising an admin's value
+    above the SA's own global silently snapped it back to the global.)"""
     target = await _get_target_admin(admin_id)
     patch = payload.get("patch") or {k: v for k, v in payload.items() if k != "patch"}
     if not isinstance(patch, dict):
         raise HTTPException(status_code=400, detail="patch must be an object")
     seg = await svc.get_segment(segment_id)
-    parent_eff = await svc.resolve_parent_effective_segment(target, seg.name)
-    if parent_eff:
-        patch, _clamp = svc.clamp_child_patch(patch, parent_eff)
     over = await svc.upsert_sub_admin_segment_override(target.id, seg.name, patch)
     return APIResponse(data=_merge_with_override(seg, over, "SUB_ADMIN"))
 
