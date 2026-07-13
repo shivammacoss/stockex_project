@@ -154,6 +154,30 @@ async def resolve_parent_effective_segment(actor, segment_name: str) -> dict:
     )
 
 
+async def snapshot_fixed_brokerage_rate(node, segment_name: str, effective: dict) -> None:
+    """Account 2: FREEZE the per-segment brokerage the parent just set for a
+    fixed-brokerage node as the parent's fixed take from it. No-op unless the
+    node runs the fixed flow. Stores {commission, commissionType, +option
+    buy/sell} keyed by segment_name on `node.fixed_brokerage_rates`. Idempotent
+    — always overwrites that one segment with the latest parent-set values.
+
+    Only the PARENT writes here (via the per-node segment editor). The node
+    editing its OWN segment brokerage (what it charges users) never lands here,
+    so the frozen take is insulated from the node raising user prices later."""
+    if not getattr(node, "is_fixed_brokerage", False):
+        return
+    entry = {
+        "commission": effective.get("commission"),
+        "commissionType": effective.get("commissionType") or "per_crore",
+        "optionBuyCommission": effective.get("optionBuyCommission"),
+        "optionSellCommission": effective.get("optionSellCommission"),
+    }
+    rates = dict(getattr(node, "fixed_brokerage_rates", None) or {})
+    rates[segment_name] = entry
+    node.fixed_brokerage_rates = rates
+    await node.save()  # type: ignore[attr-defined]
+
+
 # Cached super-admin id — looked up once per process. The resolver hits
 # this for every "user in super-admin's pool" lookup, so a Mongo round-
 # trip per call would be expensive. The id never changes for a given

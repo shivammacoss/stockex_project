@@ -340,8 +340,18 @@ class User(TimestampMixin):
     #   • BROKER → set by the owning admin/broker at create (parent's cut).
     # A fixed-brokerage admin's brokers/sub-brokers are themselves fixed-brokerage.
     is_fixed_brokerage: bool = False
+    # LEGACY single-rate (pre-2026-07-13). Superseded by per-segment rates
+    # below; kept so old rows don't break and Account 2 can fall back.
     fixed_brokerage_unit: str | None = None  # "per_lot" | "per_crore"
     fixed_brokerage_rate: Decimal128 | None = None  # ₹ per lot / per crore
+    # PER-SEGMENT FROZEN fixed-brokerage rate the PARENT takes from THIS node,
+    # keyed by admin segment name (SEGMENT_CODES: NSE_STK_OPT, MCX_FUT, CRYPTO…).
+    # SNAPSHOTTED the moment the parent sets this node's segment brokerage via the
+    # per-node segment editor — so the child later raising what it charges its OWN
+    # users (its live SubAdminSegmentOverride commission) never changes what the
+    # parent collects. Shape: { seg_name: {"commission": float, "commissionType":
+    # "per_lot"|"per_crore"} }. Account 2 reads THIS.
+    fixed_brokerage_rates: dict[str, dict] = Field(default_factory=dict)
 
     # Broker profile — only meaningful when role == BROKER.
     broker_permissions: BrokerPermissions | None = None

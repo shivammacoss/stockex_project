@@ -237,7 +237,12 @@ async def update_sub_admin_segment(admin_id: str, segment_id: str, payload: dict
         raise HTTPException(status_code=400, detail="patch must be an object")
     seg = await svc.get_segment(segment_id)
     over = await svc.upsert_sub_admin_segment_override(target.id, seg.name, patch)
-    return APIResponse(data=_merge_with_override(seg, over, "SUB_ADMIN"))
+    merged = _merge_with_override(seg, over, "SUB_ADMIN")
+    # Account 2: if this admin runs the FIXED-brokerage flow, FREEZE the per-
+    # segment brokerage the SA just set as the SA's take from this admin. The
+    # admin raising what THEY charge users later won't change this frozen rate.
+    await svc.snapshot_fixed_brokerage_rate(target, seg.name, merged)
+    return APIResponse(data=merged)
 
 
 @router.get("/diagnose", response_model=APIResponse[dict])
