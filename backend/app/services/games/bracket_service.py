@@ -138,7 +138,14 @@ async def declare_and_settle() -> int:
     if not due:
         return 0
 
-    ltp = await price_resolver.nifty_ltp()
+    # Resolve at the OFFICIAL Zerodha close candle (the authoritative daily close
+    # the admin terminal shows), NOT the WS live/frozen tick — which lags the
+    # official close by ~1-20 pts (2026-07-13: streamed 24,206.75 vs official
+    # 24,208.60, flipping the bracket result). All same-day trades share the
+    # result time; resolve once at the latest expiry. None → retry next tick
+    # (the minute candle may not be published yet), never settle at a bogus price.
+    result_dt = max(t.expires_at for t in due)
+    ltp = await price_resolver.resolve_nifty_price_at(result_dt)
     if ltp is None or ltp <= 0:
         return 0
 

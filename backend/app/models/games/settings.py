@@ -252,12 +252,15 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "sub_broker_profit_pct": 8.0, "broker_profit_pct": 1.0, "admin_profit_pct": 1.0, "referrer_profit_pct": 10.0,
     },
     "niftyBracket": {
-        # ticket 1100 · winning = 1100 × 1.818189 ≈ 2000 · window 09:15–15:29:59, result 15:30
+        # ticket 1100 · winning = 1100 × 1.818189 ≈ 2000 · window 09:15–15:29:59,
+        # result 15:30:20 — 20 s AFTER the 15:30 close so Zerodha's OFFICIAL
+        # closing minute candle is published + the WS feed has stopped, so we
+        # settle on the true close (not the lagging live tick).
         "ticket_price": 1100.0, "win_multiplier": 1.818189, "bracket_gap": 20.0,
         "bracket_gap_type": "point", "bracket_anchor_to_spot": True,
         "bracket_session_close_rule": "directionVsEntry", "expiry_minutes": 5,
         "bidding_start_time": "09:15:00", "bidding_end_time": "15:29:59",
-        "result_time": "15:30:00", "brokerage_percent": 5.0,
+        "result_time": "15:30:20", "brokerage_percent": 5.0,
         # incentive on WINNING → SB 2.5% / B 0.5% / A 0.5% · referral 2.5%
         "sub_broker_profit_pct": 2.5, "broker_profit_pct": 0.5, "admin_profit_pct": 0.5, "referrer_profit_pct": 2.5,
     },

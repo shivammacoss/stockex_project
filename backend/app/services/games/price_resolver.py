@@ -215,12 +215,17 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
 
     from app.core.redis_client import cache_set
     from app.services.zerodha_service import zerodha
-    from app.utils.time_utils import now_ist
+    from app.utils.time_utils import is_market_open, now_ist
 
-    # 1) Live LTP during market hours — the exact price right now.
-    live = await nifty_ltp()
-    if live and live > 0:
-        return live
+    # 1) Live LTP ONLY while the market is OPEN — the exact price right now.
+    #    Once the market has CLOSED we must NOT trust the WS feed's frozen last
+    #    tick: it can sit ~1-20 pts below the OFFICIAL Zerodha close (2026-07-13
+    #    it streamed 24,206.75 while the official close candle was 24,208.60).
+    #    So after close we fall through to the official minute candle below.
+    if is_market_open():
+        live = await nifty_ltp()
+        if live and live > 0:
+            return live
 
     # 2) OFFICIAL close = last historical minute candle of the session.
     try:
