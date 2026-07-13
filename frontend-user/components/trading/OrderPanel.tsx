@@ -136,6 +136,23 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
     return (accounts?.wallets ?? []).find((w: any) => w.kind === kind) ?? null;
   }, [accounts, instrument?.segment]);
 
+  // Available margin = the buying power the server checks this order against
+  // (available_balance + credit_limit) on the SAME wallet it will debit — the
+  // segment wallet for this instrument, else the Main summary. Shown in the
+  // margin box so the trader sees up-front whether they can afford the order.
+  const availableMargin = useMemo(() => {
+    if (segWallet) {
+      return Number(segWallet.available_balance ?? 0) + Number(segWallet.credit_limit ?? 0);
+    }
+    if (walletSummary) {
+      return (
+        Number(walletSummary.free ?? walletSummary.available_balance ?? 0) +
+        Number(walletSummary.credit_limit ?? 0)
+      );
+    }
+    return 0;
+  }, [segWallet, walletSummary]);
+
   // Price field stays empty on LIMIT / SL-M switch — the placeholder shows
   // the limit-away boundary (see entryPlaceholder below) so the trader sees
   // the cap they need to stay within, and types the actual price they want
@@ -1209,6 +1226,20 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
 
         {/* Margin breakdown — tighter spacing */}
         <div className="mt-2 space-y-1 rounded-md border border-border bg-muted/10 px-2.5 py-2 text-[11px]">
+          {/* Available margin — buying power on the wallet this order debits.
+              Turns red when it can't cover the intraday margin required. */}
+          <div className="flex items-center justify-between border-b border-border/60 pb-1">
+            <span className="text-muted-foreground">Avl margin</span>
+            <span
+              className={`font-tabular font-semibold ${
+                intradayMargin > 0 && availableMargin < intradayMargin
+                  ? "text-destructive"
+                  : "text-buy"
+              }`}
+            >
+              {formatINR(availableMargin)}
+            </span>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Margin</span>
             <span className="font-tabular">
