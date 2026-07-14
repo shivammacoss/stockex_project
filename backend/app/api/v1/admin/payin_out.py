@@ -320,13 +320,26 @@ async def reject_deposit(
 # pushes available_balance below 0. Admin approves from the Payments
 # → Settlement Requests tab. Reuses the deposit `deposits` permission
 # key — same operator group already manages cash-flow approvals.
+_SEGMENT_KINDS = ("NSE_BSE", "MCX", "CRYPTO", "FOREX")
+
+
 @router.get("/pool-auto-settlement", response_model=APIResponse[dict])
 async def get_pool_auto_settlement(
     admin: CurrentAdmin,
     _: None = Depends(require_perm("deposits", "read")),
 ):
-    """Current 'Auto-settlement' state for THIS admin's pool (default ON)."""
-    return APIResponse(data={"enabled": bool(getattr(admin, "pool_auto_settlement", True))})
+    """Current 'Auto-settlement' state for THIS admin's pool (all default ON).
+
+    `main` governs the main cash wallet (per-user auto_settlement). `kinds` holds
+    the per-segment-wallet toggles (NSE_BSE / MCX / CRYPTO / FOREX) — absent = ON.
+    """
+    kinds_map = getattr(admin, "pool_auto_settlement_kinds", None) or {}
+    return APIResponse(
+        data={
+            "main": bool(getattr(admin, "pool_auto_settlement", True)),
+            "kinds": {k: bool(kinds_map.get(k, True)) for k in _SEGMENT_KINDS},
+        }
+    )
 
 
 @router.post("/pool-auto-settlement", response_model=APIResponse[dict])
@@ -335,24 +348,44 @@ async def set_pool_auto_settlement(
     admin: CurrentAdmin,
     _: None = Depends(require_perm("deposits", "write")),
 ):
-    """Bulk toggle auto-settlement for EVERY user in this admin's pool at once.
+    """Toggle auto-settlement for this admin's pool. `scope` selects the wallet:
 
-    ON (default): each user's wallet auto-floors at 0 and books the shortfall to
-    settlement_outstanding. OFF: wallets are allowed to go negative (mines) and a
-    manual SettlementRequest is queued — so the admin controls settlement, and a
-    user topping up their main wallet no longer auto-clears the debt. New signups
-    under this admin inherit the setting. Super-admin scopes the whole platform.
+    • "MAIN" (default) — bulk-sets every pool user's per-user `auto_settlement`
+      so the MAIN cash wallet floors at 0 (ON) or goes negative + queues a manual
+      SettlementRequest (OFF).
+    • "NSE_BSE" / "MCX" / "CRYPTO" / "FOREX" — sets the per-segment-wallet flag
+      (`pool_auto_settlement_kinds[kind]`), read live in segment_wallet_service:
+      ON floors that segment wallet at 0, OFF lets it go NEGATIVE (mines).
+
+    Applies to all current + future users under this admin (super-admin = whole
+    platform). Payload: `{"enabled": bool, "scope"?: "MAIN"|<segment kind>}`.
     """
     from app.models.user import User
 
     enabled = bool(payload.get("enabled"))
-    # 1) Persist the admin-level pool default (button state + new-signup inherit).
+    scope = str(payload.get("scope") or "MAIN").upper()
     me = await User.get(admin.id)
+
+    if scope in _SEGMENT_KINDS:
+        # Per-segment-wallet flag — read live in segment_wallet_service.adjust,
+        # so no per-user bulk write is needed (covers all current + future).
+        if me is not None:
+            kinds_map = dict(getattr(me, "pool_auto_settlement_kinds", None) or {})
+            kinds_map[scope] = enabled
+            me.pool_auto_settlement_kinds = kinds_map
+            await me.save()
+        await log_event(
+            action=AuditAction.SETTING_CHANGE, entity_type="User", entity_id=admin.id,
+            actor_id=admin.id, target_user_id=admin.id,
+            new_values={"pool_auto_settlement_kind": {scope: enabled}},
+            metadata={"action": "POOL_AUTO_SETTLEMENT_KIND_TOGGLE"},
+        )
+        return APIResponse(data={"scope": scope, "enabled": enabled})
+
+    # MAIN cash wallet — persist the pool default + bulk-apply per-user flag.
     if me is not None:
         me.pool_auto_settlement = enabled
         await me.save()
-    # 2) Bulk-apply to every existing user in scope (incl. CLOSED, so a reopened
-    #    account keeps the pool policy).
     ids = await scoped_user_ids(admin, include_closed=True)
     updated = 0
     if ids:
@@ -361,16 +394,13 @@ async def set_pool_auto_settlement(
         )
         updated = int(getattr(res, "modified_count", 0) or 0)
     await log_event(
-        action=AuditAction.SETTING_CHANGE,
-        entity_type="User",
-        entity_id=admin.id,
-        actor_id=admin.id,
-        target_user_id=admin.id,
+        action=AuditAction.SETTING_CHANGE, entity_type="User", entity_id=admin.id,
+        actor_id=admin.id, target_user_id=admin.id,
         old_values={"pool_auto_settlement": not enabled},
         new_values={"pool_auto_settlement": enabled, "users_updated": updated},
         metadata={"action": "POOL_AUTO_SETTLEMENT_TOGGLE"},
     )
-    return APIResponse(data={"enabled": enabled, "users_updated": updated})
+    return APIResponse(data={"scope": "MAIN", "enabled": enabled, "users_updated": updated})
 
 
 @router.get("/settlement-requests", response_model=APIResponse[list])

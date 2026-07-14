@@ -53,24 +53,37 @@ export function SettlementRequestsPanel() {
     refetchInterval: 5000,
   });
 
-  // Pool-wide auto-settlement switch (default ON). OFF → every user in this
-  // admin's pool goes negative + queues a manual settlement instead of auto-
-  // flooring; a user topping up their main wallet no longer auto-clears debt.
+  // Pool-wide auto-settlement switches (all default ON). OFF → that wallet goes
+  // NEGATIVE (mines) on a shortfall instead of auto-flooring at ₹0. "MAIN" is the
+  // cash wallet (bulk per-user); the segment wallets each have their own toggle.
   const { data: poolAuto } = useQuery({
     queryKey: ["admin", "pool-auto-settlement"],
     queryFn: () => PayinOutAPI.getPoolAutoSettlement(),
   });
-  const autoOn = poolAuto?.enabled ?? true;
-  async function togglePoolAuto() {
-    const next = !autoOn;
+  // scope key → { label, on }
+  const WALLETS: { scope: string; label: string }[] = [
+    { scope: "MAIN", label: "Main (cash)" },
+    { scope: "NSE_BSE", label: "NSE / BSE" },
+    { scope: "MCX", label: "MCX" },
+    { scope: "CRYPTO", label: "Crypto" },
+    { scope: "FOREX", label: "Forex" },
+  ];
+  function isOn(scope: string): boolean {
+    if (scope === "MAIN") return poolAuto?.main ?? true;
+    return poolAuto?.kinds?.[scope] ?? true;
+  }
+  async function togglePoolAuto(scope: string, label: string) {
+    const next = !isOn(scope);
+    const walletTxt = scope === "MAIN" ? "the MAIN cash wallet" : `the ${label} wallet`;
     const msg = next
-      ? "Turn AUTO-SETTLEMENT ON for ALL your users?\n\nEach user's wallet will auto-floor at ₹0 and book the shortfall to settlement_outstanding (no manual approval)."
-      : "Turn AUTO-SETTLEMENT OFF for ALL your users?\n\nEvery user's wallet will be allowed to go NEGATIVE (mines) and queue a manual settlement here. Topping up their main wallet won't auto-clear the debt. New signups inherit this too.";
+      ? `Turn AUTO-SETTLEMENT ON for ${walletTxt} — ALL your users?\n\nOn a shortfall it will auto-floor at ₹0 and book to settlement_outstanding.`
+      : `Turn AUTO-SETTLEMENT OFF for ${walletTxt} — ALL your users?\n\nOn a shortfall it will be allowed to go NEGATIVE (mines) instead of flooring. Applies to all current + future users under you.`;
     if (!window.confirm(msg)) return;
     try {
-      const r = await PayinOutAPI.setPoolAutoSettlement(next);
+      const r = await PayinOutAPI.setPoolAutoSettlement(next, scope);
       toast.success(
-        `Auto-settlement ${next ? "ON" : "OFF"} — ${r.users_updated} user${r.users_updated === 1 ? "" : "s"} updated`,
+        `${label} auto-settlement ${next ? "ON" : "OFF"}` +
+          (r.users_updated != null ? ` — ${r.users_updated} user${r.users_updated === 1 ? "" : "s"} updated` : ""),
       );
       qc.invalidateQueries({ queryKey: ["admin", "pool-auto-settlement"] });
       qc.invalidateQueries({ queryKey: ["admin", "settlement-requests"] });
@@ -227,30 +240,54 @@ export function SettlementRequestsPanel() {
 
   return (
     <div className="space-y-3">
-      {/* Pool-wide auto-settlement switch — the blue control */}
-      <div className="flex flex-col gap-2 rounded-lg border border-blue-500/40 bg-blue-500/5 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2.5">
-          <ShieldCheck className={`mt-0.5 size-5 shrink-0 ${autoOn ? "text-blue-500" : "text-muted-foreground"}`} />
+      {/* Pool-wide auto-settlement switches — per wallet (blue control) */}
+      <div className="rounded-lg border border-blue-500/40 bg-blue-500/5 p-3">
+        <div className="mb-2 flex items-start gap-2.5">
+          <ShieldCheck className="mt-0.5 size-5 shrink-0 text-blue-500" />
           <div className="text-xs">
-            <div className="text-sm font-semibold">
-              Auto-settlement · <span className={autoOn ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"}>{autoOn ? "ON" : "OFF"}</span>
-            </div>
+            <div className="text-sm font-semibold">Auto-settlement — per wallet</div>
             <div className="text-muted-foreground">
-              {autoOn
-                ? "All your users' wallets auto-floor at ₹0 (shortfall booked to settlement). Turn OFF to let accounts go negative (mines) + settle manually here."
-                : "All your users' wallets go NEGATIVE on a shortfall and queue a manual settlement here — topping up their main wallet won't auto-clear it. New signups inherit this."}
+              ON = that wallet auto-floors at ₹0 on a shortfall (books to settlement).
+              OFF = it&apos;s allowed to go <b>NEGATIVE (mines)</b>. Applies to ALL your
+              users (current + future) for that wallet.
             </div>
           </div>
         </div>
-        {canMutate && (
-          <Button
-            onClick={togglePoolAuto}
-            className={`shrink-0 gap-2 text-white ${autoOn ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
-          >
-            <ShieldCheck className="size-4" />
-            {autoOn ? "Turn OFF for all users" : "Turn ON for all users"}
-          </Button>
-        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {WALLETS.map((wl) => {
+            const on = isOn(wl.scope);
+            return (
+              <div
+                key={wl.scope}
+                className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-background/40 p-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold">{wl.label}</span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                      on
+                        ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    {on ? "ON" : "OFF"}
+                  </span>
+                </div>
+                {canMutate && (
+                  <Button
+                    size="sm"
+                    onClick={() => togglePoolAuto(wl.scope, wl.label)}
+                    className={`h-7 w-full text-xs text-white ${
+                      on ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"
+                    }`}
+                  >
+                    {on ? "Turn OFF" : "Turn ON"}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Header strip: status filter + count */}

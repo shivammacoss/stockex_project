@@ -123,6 +123,31 @@ async def release_margin(user_id: str | PydanticObjectId, kind: str, amount: Dec
 
 
 # ── Signed balance adjust (writes a WalletTransaction tagged with kind) ──
+async def _kind_auto_settlement_on(user_id: str | PydanticObjectId, kind: str) -> bool:
+    """Whether THIS segment wallet auto-settles (floors at 0 + books to
+    settlement_outstanding) for the user's owning admin. Default True (floor).
+    When the owning admin has turned auto-settlement OFF for this wallet kind
+    (`pool_auto_settlement_kinds[kind] = False`), returns False → the segment
+    wallet is allowed to go NEGATIVE instead of flooring. Resolved live so it
+    covers all current + future users; only ever called on the below-zero path
+    so it adds no overhead to normal credits/debits. Fails SAFE (True = floor)."""
+    try:
+        from app.models.user import User, UserRole
+
+        u = await User.get(PydanticObjectId(str(user_id)))
+        if u is None:
+            return True
+        owner = await User.get(u.assigned_admin_id) if u.assigned_admin_id else None
+        if owner is None:
+            owner = await User.find_one(User.role == UserRole.SUPER_ADMIN)
+        if owner is None:
+            return True
+        kinds = getattr(owner, "pool_auto_settlement_kinds", None) or {}
+        return bool(kinds.get(kind, True))
+    except Exception:
+        return True
+
+
 async def adjust(
     user_id: str | PydanticObjectId, kind: str, amount: Decimal | float | int | str, *,
     transaction_type: TransactionType, narration: str,
@@ -137,7 +162,15 @@ async def adjust(
         w = await get_or_create(user_id, kind)
         before = to_decimal(w.available_balance)
         after = add(before, amt)
-        if after < ZERO and not allow_negative:
+        # Below-zero shortfall: floor at 0 + book to settlement (default), UNLESS
+        # the owning admin turned auto-settlement OFF for this segment wallet —
+        # then let `available_balance` go NEGATIVE (mines), like the main wallet's
+        # auto_settlement=OFF flow. `allow_negative` (internal transfer-revert etc.)
+        # still bypasses flooring outright.
+        floor_this = after < ZERO and not allow_negative
+        if floor_this and not await _kind_auto_settlement_on(user_id, kind):
+            floor_this = False
+        if floor_this:
             # Debit available all the way down to 0; the shortfall that the
             # wallet can't cover overflows to settlement_outstanding (mirrors
             # the main wallet). `available` is always floored ≥ 0, so `before`

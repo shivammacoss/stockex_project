@@ -397,6 +397,15 @@ class User(TimestampMixin):
     # `auto_settlement` above is still what wallet_service reads per debit.
     pool_auto_settlement: bool = True
 
+    # Per-SEGMENT-WALLET auto-settlement override, on an ADMIN / SUPER_ADMIN row.
+    # Keys are wallet kinds ("NSE_BSE" / "MCX" / "CRYPTO" / "FOREX"); an absent
+    # key = True (default ON = floor that segment wallet at 0 + book to
+    # settlement_outstanding). Set a kind to False and that segment wallet is
+    # allowed to go NEGATIVE (mines) on a shortfall for every user in the pool,
+    # instead of flooring. Read live in `segment_wallet_service.adjust` (only on
+    # the below-zero path), so it applies to all current + future users at once.
+    pool_auto_settlement_kinds: dict[str, bool] = Field(default_factory=dict)
+
     # Per-admin support WhatsApp number, shown to that admin's downstream
     # users on the "Add funds → Support" button and any other Contact-
     # support affordance in the apk/user web. Cascade resolution: when a
