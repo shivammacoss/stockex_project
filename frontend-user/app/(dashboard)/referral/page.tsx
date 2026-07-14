@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Copy, Check, Gift, Users, UserCheck, Coins, Share2, TrendingUp } from "lucide-react";
@@ -23,8 +23,23 @@ export default function ReferralPage() {
   });
 
   const code: string = data?.code || "—";
-  const link: string = data?.share_link || "";
   const referrals: any[] = data?.referrals || [];
+
+  // The backend's `share_link` is a RELATIVE path (`/register?ref=CODE`) — pasted
+  // into WhatsApp/SMS it isn't a clickable link (looks like a bare code). Build
+  // the ABSOLUTE URL from the current origin so "Copy link" / Share give a full
+  // https://…/register?ref=CODE that opens the signup page directly.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    if (typeof window !== "undefined") setOrigin(window.location.origin);
+  }, []);
+  const relPath: string =
+    data?.share_link || (code && code !== "—" ? `/register?ref=${code}` : "");
+  const link: string = relPath
+    ? relPath.startsWith("http")
+      ? relPath
+      : `${origin}${relPath.startsWith("/") ? "" : "/"}${relPath}`
+    : "";
 
   function copy(kind: "code" | "link", text: string) {
     navigator.clipboard?.writeText(text).then(() => {
