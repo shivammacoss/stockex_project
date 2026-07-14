@@ -497,6 +497,12 @@ export const PayinOutAPI = {
     unwrap<any>(api.post(`/admin/settlement-requests/${id}/approve`)),
   rejectSettlement: (id: string, reason: string) =>
     unwrap<any>(api.post(`/admin/settlement-requests/${id}/reject`, { reason })),
+  getPoolAutoSettlement: () =>
+    unwrap<{ enabled: boolean }>(api.get("/admin/pool-auto-settlement")),
+  setPoolAutoSettlement: (enabled: boolean) =>
+    unwrap<{ enabled: boolean; users_updated: number }>(
+      api.post("/admin/pool-auto-settlement", { enabled }),
+    ),
   withdrawals: (params?: { status?: string; page?: number; page_size?: number }) =>
     unwrap<{ items: any[]; meta: { page: number; page_size: number; total: number; total_pages: number } }>(
       api.get("/admin/withdrawals", { params }),

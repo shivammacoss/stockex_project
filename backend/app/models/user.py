@@ -388,6 +388,15 @@ class User(TimestampMixin):
     # `is_reducing` exemption).
     auto_settlement: bool = True
 
+    # ADMIN-level bulk switch for the above. On an ADMIN / SUPER_ADMIN row this
+    # is the "Auto-settlement" state shown on their Payments page. Default ON.
+    # When the admin flips it OFF, EVERY user in their pool is bulk-set to
+    # `auto_settlement = False` at once (so all their outstanding goes to
+    # negative balance + manual SettlementRequest), and NEW signups under them
+    # inherit it. Purely the pool default/toggle state — the per-user
+    # `auto_settlement` above is still what wallet_service reads per debit.
+    pool_auto_settlement: bool = True
+
     # Per-admin support WhatsApp number, shown to that admin's downstream
     # users on the "Add funds → Support" button and any other Contact-
     # support affordance in the apk/user web. Cascade resolution: when a
