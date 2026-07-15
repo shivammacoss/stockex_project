@@ -2279,6 +2279,14 @@ def _to_legacy_dict(
     fixed_margin_per_lot = 0.0
     overnight_fixed_margin_per_lot = 0.0
     if margin_mode == "times":
+        # Times mode is SYMMETRIC — the leverage multiplier applies to BOTH
+        # intraday and carry-forward (a broker doesn't quote "2x intraday but
+        # 100x overnight"). The overnight branch above reads `overnightMargin`
+        # for non-option rows, which defaults to 100 and would make the
+        # carry-forward margin resolve to notional/100 while intraday is
+        # notional/leverage. Force the overnight leverage to match intraday so
+        # the used margin is consistent (matches the symmetric-Times intent).
+        effective_overnight_pct = effective_margin_pct
         leverage = max(1.0, effective_margin_pct)
         margin_pct = 100.0
         overnight_leverage = max(1.0, effective_overnight_pct)
