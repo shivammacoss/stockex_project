@@ -476,6 +476,16 @@ export const TradingAPI = {
   holdings: (params?: any) => unwrap<any[]>(api.get("/admin/holdings", { params })),
 };
 
+export const TransactionHistoryAPI = {
+  list: (params?: { source?: string; admin_id?: string; limit?: number }) =>
+    unwrap<{
+      rows: any[];
+      admins: { id: string; label: string }[];
+      games: { key: string; label: string }[];
+      is_super: boolean;
+    }>(api.get("/admin/transaction-history", { params })),
+};
+
 export const PayinOutAPI = {
   // Deposits / withdrawals are paginated (15 per page by default).
   // Pass `status` empty / undefined to get every status.

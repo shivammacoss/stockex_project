@@ -33,6 +33,7 @@ from app.api.v1.admin import (
     settings,
     support,
     trading,
+    transaction_history,
     users,
     zerodha,
     zerodha_auto_login,
@@ -52,6 +53,7 @@ router.include_router(instruments.router)
 router.include_router(marketwatch.router)
 router.include_router(ledger.router)
 router.include_router(money_transactions.router)
+router.include_router(transaction_history.router)
 router.include_router(reports.router)
 router.include_router(settings.router)
 router.include_router(expiry_overrides.router)

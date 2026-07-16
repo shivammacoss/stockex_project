@@ -34,6 +34,7 @@ import {
   Landmark,
   HandCoins,
   GitBranch,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 import { canSee, isSuperAdmin, type PermissionKey } from "@/lib/permissions";
@@ -87,6 +88,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     title: "Money",
     items: [
       { href: "/money-transactions", label: "Money Transactions", icon: Wallet, perm: "ledger" },
+      { href: "/transaction-history", label: "Transaction History", icon: Receipt, perm: "ledger" },
       { href: "/broker-deposits", label: "Broker Deposits", icon: Handshake, perm: "ledger" },
       // Inter-admin fund flow — all admin-tier users (request up / approve down).
       { href: "/fund-requests", label: "Fund Requests", icon: HandCoins },

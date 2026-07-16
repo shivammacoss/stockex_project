@@ -45,7 +45,15 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
   const locked = !!board?.official;
   // Locked reference (once official) else the live spot that will be locked.
   const refPrice = board?.referenceSpot ? Number(board.referenceSpot) : liveNum;
-  const rows: any[] = board?.leaderboard || [];
+  const allRows: any[] = board?.leaderboard || [];
+  // Show only the TOP 5 ranks (the winning zone) + always the viewer's own row
+  // if it's outside the top 5, so a player still sees where they stand.
+  const rows: any[] = (() => {
+    const top = allRows.filter((r) => r.rank <= 5);
+    const me = allRows.find((r) => r.isMe);
+    if (me && me.rank > 5) top.push(me);
+    return top;
+  })();
 
   const place = useMutation({
     mutationFn: async () => {
@@ -140,8 +148,8 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
         {/* Leaderboard */}
         <Card className="order-2 min-w-0 md:order-1">
           <CardHeader className="flex-row items-center justify-between pb-3">
-            <CardTitle>Leaderboard {locked ? "(official)" : "(live)"}</CardTitle>
-            <span className="text-xs text-muted-foreground">{rows.length} bid{rows.length === 1 ? "" : "s"}</span>
+            <CardTitle>Top 5 {locked ? "(official)" : "(live)"}</CardTitle>
+            <span className="text-xs text-muted-foreground">{allRows.length} bid{allRows.length === 1 ? "" : "s"}</span>
           </CardHeader>
           <CardContent className="space-y-1">
             {rows.length === 0 && (
