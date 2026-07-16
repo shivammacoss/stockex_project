@@ -213,19 +213,43 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
     "live spot" converges onto the same official value the admin shows."""
     from datetime import timedelta
 
-    from app.core.redis_client import cache_set
+    from app.core.redis_client import cache_get, cache_set
     from app.services.zerodha_service import zerodha
     from app.utils.time_utils import is_market_open, now_ist
 
-    async def _converge(val: Decimal) -> Decimal:
+    # Per-DAY official-close key. The REST quote only carries the official NSE
+    # close for a short window right after 15:30; once it goes to 0 the resolver
+    # would fall back to the (wrong) last-traded candle. So the FIRST time we get
+    # the official close for a day we PIN it here (3-day TTL) and every later
+    # resolve for that day reuses it — a re-settlement hours later stays correct.
+    try:
+        ist_day = (dt if dt.tzinfo is None else dt.astimezone(now_ist().tzinfo)).strftime("%Y-%m-%d")
+    except Exception:
+        ist_day = now_ist().strftime("%Y-%m-%d")
+    day_key = f"games:nifty:close:{ist_day}"
+
+    async def _converge(val: Decimal, *, pin_day: bool = False) -> Decimal:
         # Converge the games UI onto the settled value after market shut so the
         # bracket / number "live spot" matches settlement + the broker terminal.
         try:
             if dt.date() == now_ist().date():
                 await cache_set(_NIFTY_LAST_KEY, str(val), ttl_sec=_NIFTY_LAST_TTL)
+            if pin_day:
+                await cache_set(day_key, str(val), ttl_sec=259200)  # 3 days
         except Exception:
             pass
         return val
+
+    # 0) Pinned official close for this day (set once from the REST quote below).
+    if not is_market_open():
+        try:
+            pinned = await cache_get(day_key)
+            if pinned:
+                pv = to_decimal(pinned)
+                if pv > 0:
+                    return pv
+        except Exception:
+            logger.debug("nifty_day_pin_read_failed", exc_info=True)
 
     # 1) Live LTP ONLY while the market is OPEN — the exact price right now.
     if is_market_open():
@@ -248,7 +272,8 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
         q = await market_data_service.get_quote(str(NIFTY_TOKEN))
         qltp = to_decimal(q.get("ltp") or 0)
         if qltp > 0:
-            return await _converge(quantize_money(qltp))
+            # PIN it for the day so a later re-settle (quote gone) stays correct.
+            return await _converge(quantize_money(qltp), pin_day=True)
     except Exception:
         logger.debug("nifty_price_at_quote_failed", exc_info=True)
 
