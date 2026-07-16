@@ -92,6 +92,10 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   const [orderType, setOrderType] = useState<OrderTab>("MARKET");
   const [productType, setProductType] = useState<"MIS" | "NRML" | "CNC">(defaultProduct);
   const [lots, setLots] = useState<number>(1);
+  // Entry unit: LOTS (default) or QTY. The order is ALWAYS placed in lots
+  // internally (lots = qty / lot_size); QTY mode just lets the user type/step by
+  // exchange quantity instead. Toggle sits next to the size label.
+  const [unit, setUnit] = useState<"LOTS" | "QTY">("LOTS");
   const [price, setPrice] = useState<string>("");
   const [trigger, setTrigger] = useState<string>("");
   const [stopLoss, setStopLoss] = useState<string>("");
@@ -1136,27 +1140,49 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
             internally and submitted with every order. The default is segment-
             derived (NRML for crypto/forex, MIS for Indian intraday). */}
 
-        {/* Lot Size — compact: stepper + meta on one row */}
+        {/* Size — stepper + meta. Lot/Qty toggle lets the user enter by lots
+            (default) OR by exchange quantity; both drive the same `lots` state
+            (lots = qty / lot_size). */}
         <div className="mt-2">
-          <Label>{isCrypto || isForex ? "Volume (lots)" : "Lot Size"}</Label>
-          <div className="flex h-9 overflow-hidden rounded-md border border-border bg-muted/20">
+          <div className="flex items-center justify-between">
+            <Label>{unit === "QTY" ? "Quantity" : isCrypto || isForex ? "Volume (lots)" : "Lot Size"}</Label>
+            {lotSize > 1 && (
+              <div className="inline-flex overflow-hidden rounded-md border border-border text-[10px] font-semibold">
+                {(["LOTS", "QTY"] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setUnit(u)}
+                    className={`px-2 py-0.5 transition-colors ${
+                      unit === u ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {u === "LOTS" ? "Lot" : "Qty"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-1 flex h-9 overflow-hidden rounded-md border border-border bg-muted/20">
             <button
               type="button"
               onClick={() => setLots((x) => +Math.max(minLot, x - lotStep).toFixed(3))}
               className="grid w-9 place-items-center text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-              aria-label="Decrease lots"
+              aria-label="Decrease"
             >
               <Minus className="size-4" />
             </button>
             <input
               type="number"
-              step={lotStep}
-              min={minLot}
-              max={maxLotPerOrder || undefined}
-              value={lots}
+              step={unit === "QTY" ? lotSize : lotStep}
+              min={unit === "QTY" ? minLot * lotSize : minLot}
+              value={unit === "QTY" ? +(lots * lotSize).toFixed(3) : lots}
               onChange={(e) => {
                 const v = Number(e.target.value);
-                if (Number.isFinite(v) && v >= 0) setLots(v);
+                if (!Number.isFinite(v) || v < 0) return;
+                // In QTY mode the typed value is exchange quantity → convert to
+                // lots (may be fractional; submit-time validators still apply).
+                setLots(unit === "QTY" ? (lotSize > 0 ? +(v / lotSize).toFixed(6) : v) : v);
               }}
               // DO NOT silently clamp the typed value on blur — neither
               // up to `minLot` nor down to `maxLotPerOrder`. Both clamps
