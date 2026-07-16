@@ -76,11 +76,7 @@ export function TransferDialog({
       return AccountsAPI.transfer(from as WalletKind, to as WalletKind, amt);
     },
     onSuccess: () => {
-      if (gamesToMain) {
-        toast.success("Games → Main request submitted — awaiting admin approval");
-      } else {
-        toast.success("Transfer complete");
-      }
+      toast.success("Transfer complete");
       qc.invalidateQueries({ queryKey: ["accounts"] });
       qc.invalidateQueries({ queryKey: ["wallet-summary"] });
       qc.invalidateQueries({ queryKey: ["games", "wallet"] });
@@ -148,11 +144,11 @@ export function TransferDialog({
             <p className="rounded-md bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground">
               {mainToGames
                 ? "Main → Games is instant — the amount is added to your Games wallet right away."
-                : "Games → Main needs admin approval; your request is queued and credited once approved."}
+                : "Games → Main is instant. Only your free games balance moves — money locked in an active ticket stays until that game settles."}
             </p>
           )}
           <Button className="w-full" loading={m.isPending} disabled={m.isPending} onClick={() => m.mutate()}>
-            {gamesToMain ? "Request" : "Transfer"} {LABEL(from)} → {LABEL(to)}
+            Transfer {LABEL(from)} → {LABEL(to)}
           </Button>
         </div>
       </DialogContent>

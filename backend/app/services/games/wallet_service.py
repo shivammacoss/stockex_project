@@ -279,6 +279,49 @@ async def transfer_main_to_games(
     return {"games_balance": str(w.balance)}
 
 
+# ── games → main (INSTANT, no admin approval) ──────────────────────────
+async def transfer_games_to_main(
+    user_id: str | PydanticObjectId, amount: Decimal | float | int | str
+) -> dict[str, Any]:
+    """Move free games balance straight back to the MAIN wallet — INSTANT, no
+    admin approval. Safe because a placed bet's stake is DEBITED from the games
+    balance immediately (v1), so `balance` is already the FREE amount: money
+    locked in an active ticket isn't in it and can't be pulled out here. Mirror
+    of `transfer_main_to_games` in reverse; reverts the games debit if the main
+    credit fails so money is never destroyed."""
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        raise ValueError("transfer amount must be positive")
+
+    bal = await get_balance(user_id)
+    if bal < amt:
+        raise InsufficientGamesFundsError(
+            f"Insufficient games balance: available ₹{bal}, requested ₹{amt}"
+        )
+
+    w = await atomic_games_wallet_debit(
+        user_id, amt, game_key=None,
+        description="Transfer out to main wallet",
+        meta={"kind": "TRANSFER_OUT"},
+    )
+    try:
+        await wallet_service.adjust(
+            user_id, amt,
+            transaction_type=TransactionType.GAMES_TRANSFER_OUT,
+            narration="Transfer from games wallet",
+            reference_type="GAMES_WALLET",
+        )
+    except Exception:
+        # Main credit failed — return the money to the games wallet.
+        await atomic_games_wallet_credit(
+            user_id, amt, game_key=None,
+            description="Reverted failed games → main transfer",
+            meta={"kind": "TRANSFER_OUT_REVERT"},
+        )
+        raise
+    return {"games_balance": str(w.balance)}
+
+
 # ── games → main (admin-approved request) ──────────────────────────────
 async def create_games_withdrawal(
     user_id: str | PydanticObjectId, amount: Decimal | float | int | str, remark: str | None = None

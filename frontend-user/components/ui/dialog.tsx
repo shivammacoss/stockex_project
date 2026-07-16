@@ -45,8 +45,12 @@ export const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
+      {/* z-50 keeps the close button ABOVE any sticky (z-20) header inside the
+          dialog body — without it a sticky header paints over the X and it
+          vanishes (esp. in dark theme). The subtle bordered pill also gives it
+          contrast on any background, light or dark. */}
       <DialogPrimitive.Close
-        className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        className="absolute right-3 top-3 z-50 rounded-full border border-border bg-background/80 p-1 text-foreground/80 backdrop-blur-sm transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         aria-label="Close"
       >
         <X className="size-4" />

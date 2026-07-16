@@ -44,11 +44,11 @@ async def transfer_in(payload: TransferIn, user: CurrentUser):
 
 @router.post("/withdraw", response_model=APIResponse[dict])
 async def withdraw(payload: WithdrawReq, user: CurrentUser):
-    req = await wallet_service.create_games_withdrawal(user.id, payload.amount, payload.remark)
-    return APIResponse(
-        data={"id": str(req.id), "status": req.status.value},
-        message="Transfer request submitted for approval",
-    )
+    """Move free games balance back to MAIN — now INSTANT (no admin approval).
+    A placed ticket's stake is already debited from the games balance, so only
+    the FREE (uninvested) amount is withdrawable and it lands in main at once."""
+    res = await wallet_service.transfer_games_to_main(user.id, payload.amount)
+    return APIResponse(data={**res, "status": "COMPLETED"}, message="Transferred to main wallet")
 
 
 @router.get("/ledger", response_model=APIResponse[list])

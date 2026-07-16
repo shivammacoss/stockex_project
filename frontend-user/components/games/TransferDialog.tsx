@@ -46,7 +46,7 @@ export function TransferDialog({
     },
     onSuccess: () => {
       toast.success(
-        isIn ? "Added to games wallet" : "Transfer request submitted for approval",
+        isIn ? "Added to games wallet" : "Transferred to main wallet",
       );
       qc.invalidateQueries({ queryKey: ["games", "wallet"] });
       qc.invalidateQueries({ queryKey: ["games", "ledger"] });
@@ -66,7 +66,7 @@ export function TransferDialog({
           <DialogDescription>
             {isIn
               ? "Instantly move money from your main trading wallet into your games wallet."
-              : "Requests a transfer of your games balance back to the main wallet. An admin approves it, just like a withdrawal."}
+              : "Instantly move your free games balance back to the main wallet. Money locked in an active ticket stays in games until that game settles."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -87,7 +87,7 @@ export function TransferDialog({
             disabled={mutation.isPending}
             onClick={() => mutation.mutate()}
           >
-            {isIn ? "Add funds" : "Request transfer"}
+            {isIn ? "Add funds" : "Transfer to main"}
           </Button>
         </div>
       </DialogContent>
