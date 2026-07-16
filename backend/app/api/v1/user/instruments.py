@@ -216,7 +216,8 @@ async def search(
 
     from app.services.zerodha_service import zerodha as _zerodha
     from app.services.netting_service import (
-        _SEGMENT_NAME_MAP,
+        _INDEX_UNDERLYING_PREFIXES,
+        _seg_name_for,
         get_user_blocked_symbols,
         inactive_admin_rows,
         inactive_instrument_segments,
@@ -268,12 +269,20 @@ async def search(
     def _kite_row_admin_row(row: dict) -> str | None:
         ex = (row.get("exchange") or "").upper()
         it = (row.get("instrumentType") or "").upper()
+        # Index vs stock for NSE F&O — a NIFTY/BANKNIFTY/… option must resolve to
+        # the INDEX admin row so a STOCK-option block never hides index options.
+        name_up = (row.get("name") or row.get("tradingsymbol") or "").upper()
+        is_idx = name_up.startswith(_INDEX_UNDERLYING_PREFIXES)
         if ex == "NSE":
             return "NSE_EQ"
         if ex == "BSE":
             return "BSE_EQ"
         if ex == "NFO":
-            return "NSE_FUT" if it == "FUT" else ("NSE_OPT" if it in ("CE", "PE") else None)
+            if it == "FUT":
+                return "NSE_IDX_FUT" if is_idx else "NSE_STK_FUT"
+            if it in ("CE", "PE"):
+                return "NSE_IDX_OPT" if is_idx else "NSE_STK_OPT"
+            return None
         if ex == "BFO":
             return "BSE_FUT" if it == "FUT" else ("BSE_OPT" if it in ("CE", "PE") else None)
         if ex == "MCX":
@@ -288,7 +297,10 @@ async def search(
         seg_val = inst.segment.value if hasattr(inst.segment, "value") else str(inst.segment)
         if seg_val in inactive_segs:
             return False
-        admin_row = _SEGMENT_NAME_MAP.get(seg_val, seg_val)
+        # Symbol-aware: an index-underlying option on a generic segment
+        # (NFO_OPTION → STOCK row by the static map) resolves to the INDEX row,
+        # so a STOCK-option block doesn't wrongly hide NIFTY/BANKNIFTY options.
+        admin_row = _seg_name_for(seg_val, getattr(inst, "symbol", None))
         return admin_row not in inactive_admin
 
     # Fast path: scan the Zerodha in-memory cache. Two modes:

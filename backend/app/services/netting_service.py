@@ -2083,6 +2083,33 @@ _SEGMENT_NAME_MAP: dict[str, str] = {
     "BFO_FUTURE": "BSE_FUT",
 }
 
+# Index underlyings whose F&O must resolve to the INDEX admin rows
+# (NSE_IDX_OPT / NSE_IDX_FUT), not the STOCK ones. Used to correct instruments
+# that came in via a generic segment (NFO_OPTION / NFO_OPT / NFO_FUTURE / …)
+# which the static map above defaults to the STOCK row — so an admin blocking or
+# pricing STOCK options never wrongly affects NIFTY/BANKNIFTY/SENSEX options.
+_INDEX_UNDERLYING_PREFIXES = (
+    "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "MIDCAPNIFTY", "SENSEX", "BANKEX",
+)
+
+
+def _seg_name_for(segment_type: str, symbol: str | None = None) -> str:
+    """Resolve the admin-matrix row name for an instrument segment, but
+    underlying-aware: an INDEX-underlying option/future that arrived on a generic
+    segment (which the static map sends to the STOCK row) is re-routed to the
+    matching INDEX row. Keeps 'block/price STOCK options' from leaking onto
+    NIFTY/BANKNIFTY/SENSEX index options (and vice-versa)."""
+    name = _SEGMENT_NAME_MAP.get(segment_type, segment_type)
+    if symbol:
+        su = symbol.upper()
+        # BANKNIFTY starts with NIFTY-less prefix, so match the full set.
+        if su.startswith(_INDEX_UNDERLYING_PREFIXES):
+            if name == "NSE_STK_OPT":
+                return "NSE_IDX_OPT"
+            if name == "NSE_STK_FUT":
+                return "NSE_IDX_FUT"
+    return name
+
 
 def instrument_segments_for(admin_segment_name: str) -> list[str]:
     """Reverse of ``_SEGMENT_NAME_MAP``: the instrument ``segment`` values that
@@ -2441,7 +2468,7 @@ async def get_effective_settings(
     expiry-day vs normal — so the order validator gets the exact margin %
     and commission that should be applied to **this** specific order.
     """
-    seg_name = _SEGMENT_NAME_MAP.get(segment_type, segment_type)
+    seg_name = _seg_name_for(segment_type, symbol)
     sym_key = (symbol or "").strip().upper() or "_"
     cache_key = (
         f"netting_eff:{user_id}:{seg_name}:{sym_key}:"
