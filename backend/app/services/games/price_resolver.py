@@ -217,17 +217,43 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
     from app.services.zerodha_service import zerodha
     from app.utils.time_utils import is_market_open, now_ist
 
+    async def _converge(val: Decimal) -> Decimal:
+        # Converge the games UI onto the settled value after market shut so the
+        # bracket / number "live spot" matches settlement + the broker terminal.
+        try:
+            if dt.date() == now_ist().date():
+                await cache_set(_NIFTY_LAST_KEY, str(val), ttl_sec=_NIFTY_LAST_TTL)
+        except Exception:
+            pass
+        return val
+
     # 1) Live LTP ONLY while the market is OPEN — the exact price right now.
-    #    Once the market has CLOSED we must NOT trust the WS feed's frozen last
-    #    tick: it can sit ~1-20 pts below the OFFICIAL Zerodha close (2026-07-13
-    #    it streamed 24,206.75 while the official close candle was 24,208.60).
-    #    So after close we fall through to the official minute candle below.
     if is_market_open():
         live = await nifty_ltp()
         if live and live > 0:
             return live
 
-    # 2) OFFICIAL close = last historical minute candle of the session.
+    # 2) OFFICIAL NSE CLOSE = the Zerodha REST QUOTE's ltp after the session.
+    #    NSE computes an index's official close as the WEIGHTED AVERAGE of the
+    #    last 30 min (15:00–15:30) — NOT the last traded print. That official
+    #    value is what every broker terminal shows (2026-07-14: 24,072.75) and
+    #    it lands in the REST quote's `ltp` after close. The historical minute /
+    #    day candle only carries the last-TRADED close (24,081.10, ~8 pts higher)
+    #    — using it made the games settle at a different number than the admin's
+    #    terminal. Prefer the quote; NOT the frozen WS tick (get_ltp_instant),
+    #    which can lag — so we call get_quote (REST) directly.
+    try:
+        from app.services import market_data_service
+
+        q = await market_data_service.get_quote(str(NIFTY_TOKEN))
+        qltp = to_decimal(q.get("ltp") or 0)
+        if qltp > 0:
+            return await _converge(quantize_money(qltp))
+    except Exception:
+        logger.debug("nifty_price_at_quote_failed", exc_info=True)
+
+    # 3) Fallback — last historical minute candle (last-traded close). Only used
+    #    if the REST quote is unavailable (cold worker / API hiccup).
     try:
         candles = await zerodha.get_historical(
             NIFTY_TOKEN, dt - timedelta(hours=6), dt + timedelta(minutes=1), "minute"
@@ -235,19 +261,11 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
         if candles:
             cl = to_decimal(candles[-1]["close"])
             if cl > 0:
-                val = quantize_money(cl)
-                # Converge the games UI onto the official close after market shut
-                # so the bracket / number "live spot" matches settlement + admin.
-                try:
-                    if dt.date() == now_ist().date():
-                        await cache_set(_NIFTY_LAST_KEY, str(val), ttl_sec=_NIFTY_LAST_TTL)
-                except Exception:
-                    pass
-                return val
+                return await _converge(quantize_money(cl))
     except Exception:
         logger.debug("nifty_price_at_failed", exc_info=True)
 
-    # 3) Final fallback — persisted last-known so settlement never stalls.
+    # 4) Final fallback — persisted last-known so settlement never stalls.
     return await nifty_ltp_display()
 
 
