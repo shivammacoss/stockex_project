@@ -30,6 +30,47 @@ from app.services import market_data_service, netting_service, wallet_router, wa
 from app.utils.decimal_utils import to_decimal
 from app.utils.time_utils import is_weekend, now_ist, parse_hhmm, to_ist
 
+# Exchanges that publish a daily circuit (price band). Infoway-fed international
+# markets (crypto / forex / metals) have none, so we skip them.
+_CIRCUIT_EXCHANGES = ("NSE", "BSE", "NFO", "BFO", "MCX", "CDS")
+
+
+async def _circuit_limits(instrument) -> tuple[Decimal | None, Decimal | None]:
+    """(lower, upper) daily circuit band for the instrument, cached per-day in
+    Redis (`circuit:{token}`, 12 h TTL). Sourced from the Zerodha quote's
+    lower/upper_circuit_limit. Fail-open → (None, None) when the band isn't
+    available, so a missing circuit NEVER blocks trading."""
+    ex = str(getattr(instrument.exchange, "value", instrument.exchange) or "").upper()
+    if ex not in _CIRCUIT_EXCHANGES:
+        return (None, None)
+    from app.core.redis_client import cache_get, cache_set
+
+    token = str(instrument.token)
+    ck = f"circuit:{token}"
+    try:
+        cached = await cache_get(ck)
+        if isinstance(cached, dict):
+            lc = to_decimal(cached.get("lc") or 0)
+            uc = to_decimal(cached.get("uc") or 0)
+            return (lc if lc > 0 else None, uc if uc > 0 else None)
+    except Exception:
+        pass
+    try:
+        from app.services.zerodha_service import zerodha
+
+        key = f"{ex}:{instrument.symbol}"
+        q = await zerodha.get_quote([key])
+        row = (q or {}).get(key, {}) if isinstance(q, dict) else {}
+        lc = to_decimal(row.get("lower_circuit_limit") or 0)
+        uc = to_decimal(row.get("upper_circuit_limit") or 0)
+        try:
+            await cache_set(ck, {"lc": str(lc), "uc": str(uc)}, ttl_sec=43200)
+        except Exception:
+            pass
+        return (lc if lc > 0 else None, uc if uc > 0 else None)
+    except Exception:
+        return (None, None)
+
 
 @dataclass
 class ValidatedOrder:
@@ -764,6 +805,28 @@ async def validate(
             ref_price = bid
         else:
             ref_price = ltp
+
+    # ── Circuit (price-band) gate — like the real exchange (Zerodha/Upstox) ──
+    # A NEW opening order priced OUTSIDE the instrument's daily upper/lower
+    # circuit is rejected. Closing / square-off orders are exempt (you must
+    # always be able to exit). Fail-open: no band data → no block, so trading is
+    # never stopped by a missing circuit. Only checked for a concrete price
+    # (LIMIT / SL user price, or the live ref) on native-INR exchanges.
+    if not is_reducing and not is_squareoff and ref_price > 0:
+        lc, uc = await _circuit_limits(instrument)
+        if uc is not None and ref_price > uc:
+            raise OrderRejectedError(
+                f"Price ₹{ref_price} is above the upper circuit ₹{uc}. "
+                f"The exchange won't accept orders above the circuit limit.",
+                code="UPPER_CIRCUIT",
+            )
+        if lc is not None and ref_price < lc:
+            raise OrderRejectedError(
+                f"Price ₹{ref_price} is below the lower circuit ₹{lc}. "
+                f"The exchange won't accept orders below the circuit limit.",
+                code="LOWER_CIRCUIT",
+            )
+
     notional = to_decimal(quantity) * ref_price
     # Fixed-margin segments skip the notional × pct ÷ leverage formula
     # entirely — the admin's configured value is a flat ₹/lot charged
