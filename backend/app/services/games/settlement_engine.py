@@ -46,6 +46,65 @@ async def _safe(label: str, coro) -> None:
         logger.exception("games_settle_failed %s", label)
 
 
+# ── 5 PM auto-cancel for NIFTY games ────────────────────────────────────
+# Every NIFTY game resolves by ~15:45 IST. Anything still PENDING after 17:00
+# never resolved (holiday / no price / stuck feed), so we CANCEL + REFUND it so
+# no user's stake is stranded. BTC games run 24×7 and are untouched.
+_NIFTY_GAME_KEYS = ("niftyUpDown", "niftyNumber", "niftyBracket", "niftyJackpot")
+_CANCEL_HOUR = 17  # 5 PM IST
+
+
+async def cancel_stale_nifty_bets() -> int:
+    """After 5 PM IST refund every still-PENDING NIFTY game bet (stake back to
+    the games wallet, house returns what it collected) and mark it CANCELLED.
+    Atomic status-claim so it can't race the settle loop into a double credit."""
+    from app.models.games.bets import (
+        BracketTrade,
+        GameBetStatus,
+        JackpotBid,
+        NumberBet,
+        UpDownBet,
+    )
+    from app.services.games import wallet_service as gw
+    from app.utils.decimal_utils import to_decimal
+    from app.utils.time_utils import now_ist, now_utc
+
+    if now_ist().hour < _CANCEL_HOUR:
+        return 0
+
+    cancelled = 0
+    for Model in (UpDownBet, NumberBet, BracketTrade, JackpotBid):
+        coll = Model.get_motor_collection()
+        pend = await Model.find(
+            {"game_key": {"$in": list(_NIFTY_GAME_KEYS)}, "status": GameBetStatus.PENDING.value}
+        ).to_list()
+        for bet in pend:
+            claimed = await coll.find_one_and_update(
+                {"_id": bet.id, "status": GameBetStatus.PENDING.value},
+                {"$set": {"status": GameBetStatus.CANCELLED.value, "updated_at": now_utc()}},
+            )
+            if claimed is None:
+                continue  # settled/cancelled by another pass
+            amt = to_decimal(bet.amount)
+            if amt > 0:
+                try:
+                    await gw.atomic_games_wallet_credit(
+                        bet.user_id, amt, game_key=bet.game_key,
+                        description="Refund — game cancelled at 5 PM (no result)",
+                        meta={"kind": "REFUND", "reason": "auto_cancel_5pm"},
+                    )
+                    await gw.house_settle(
+                        -amt, game_key=bet.game_key,
+                        narration="Refund cancelled game bet (5 PM)",
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception("cancel_refund_failed bet=%s", bet.id)
+            cancelled += 1
+    if cancelled:
+        logger.info("cancel_stale_nifty_bets refunded=%s", cancelled)
+    return cancelled
+
+
 async def games_general_tick_loop(interval_sec: float = 30.0) -> None:
     global _general_stop
     _general_stop = False
@@ -56,6 +115,8 @@ async def games_general_tick_loop(interval_sec: float = 30.0) -> None:
         await _safe("niftyNumber", number_service.declare_and_settle("niftyNumber"))
         await _safe("btcNumber", number_service.declare_and_settle("btcNumber"))
         await _safe("niftyJackpot", jackpot_service.declare_and_settle("niftyJackpot"))
+        # 5 PM sweep — refund any NIFTY bet that never resolved (no-op before 5 PM).
+        await _safe("cancel5pm", cancel_stale_nifty_bets())
         try:
             await asyncio.sleep(interval_sec)
         except asyncio.CancelledError:

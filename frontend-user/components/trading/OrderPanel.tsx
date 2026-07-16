@@ -630,6 +630,28 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
           );
           return;
         }
+        // Target must be OUTSIDE today's traded range [Low, High] — a target
+        // that sits BETWEEN the day's High and Low is a level price has already
+        // reached today, so it isn't a real target (it would trigger at once).
+        // BUY → must break ABOVE the day High; SELL → must break BELOW the Low.
+        const dayHigh = Number(high) || 0;
+        const dayLow = Number(low) || 0;
+        if (dayHigh > 0 && dayLow > 0) {
+          if (side === "BUY" && tpNum <= dayHigh) {
+            toast.error(
+              `Target ₹${tpNum} is inside today's range (Low ₹${fmtPrice(dayLow)} – High ₹${fmtPrice(dayHigh)}). A BUY target must be ABOVE the day High ₹${fmtPrice(dayHigh)}.`,
+              { duration: 6000 },
+            );
+            return;
+          }
+          if (side === "SELL" && tpNum >= dayLow) {
+            toast.error(
+              `Target ₹${tpNum} is inside today's range (Low ₹${fmtPrice(dayLow)} – High ₹${fmtPrice(dayHigh)}). A SELL target must be BELOW the day Low ₹${fmtPrice(dayLow)}.`,
+              { duration: 6000 },
+            );
+            return;
+          }
+        }
       }
       // 2. Limit-away min-distance check on SL/TP
       if (limitAwayPct > 0) {
