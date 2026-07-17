@@ -35,6 +35,9 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
     queryKey: ["games", "leaderboard", id],
     queryFn: () => GamesAPI.jackpotLeaderboard(id, 20),
     refetchInterval: 6000,
+    // Keep the last leaderboard on screen while refetching so a transient empty
+    // response never flashes "No bids yet" over a populated board.
+    placeholderData: (prev) => prev,
   });
   const { data: today } = useQuery({
     queryKey: ["games", "bets", "jackpot-today", id],

@@ -69,11 +69,16 @@ async def leaderboard(game_id: str, user: CurrentUser, limit: int = 20):
     bids = await JackpotBid.find(JackpotBid.game_key == key, JackpotBid.bet_date == day).to_list()
 
     # Reference price: locked (official) if declared, else current live spot.
+    # Use the DISPLAY resolver for NIFTY (`nifty_ltp_display`) — it always returns
+    # a value from a persistent last-known cache. The settlement `nifty_ltp()`
+    # returns None off-tick / on a non-leader worker, which made the leaderboard
+    # momentarily compute `ref=None` → an EMPTY board even though bids exist (the
+    # "leaderboard shows then vanishes" flicker).
     if bank and bank.locked_price:
         ref = to_decimal(bank.locked_price)
         official = True
     else:
-        ref = await (price_resolver.btc_ltp() if key == "btcJackpot" else price_resolver.nifty_ltp())
+        ref = await (price_resolver.btc_ltp() if key == "btcJackpot" else price_resolver.nifty_ltp_display())
         official = False
     pool = to_decimal(bank.total_stake) if bank else to_decimal(0)
 
