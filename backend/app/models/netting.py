@@ -397,6 +397,11 @@ class SubAdminSegmentOverride(TimestampMixin, NettingFieldsBase):
 
     sub_admin_id: PydanticObjectId
     segment_name: str
+    # False = this row just MIRRORS the super-admin's global (a snapshot); when
+    # the SA changes the global it CASCADES into these rows so every admin stays
+    # in sync automatically. True = the SA explicitly set THIS admin's segment
+    # via the 3-dot editor, so the global cascade skips it (per-admin override).
+    is_explicit: bool = False
 
     class Settings:
         name = "sub_admin_segment_overrides"

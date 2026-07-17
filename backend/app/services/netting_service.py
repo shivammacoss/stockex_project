@@ -1765,6 +1765,9 @@ async def upsert_sub_admin_segment_override(
     for k, v in patch.items():
         if k in NETTING_FIELDS:
             setattr(existing, k, v)
+    # The super-admin explicitly set THIS admin's segment (3-dot editor), so the
+    # global cascade must skip this admin from now on.
+    existing.is_explicit = True
     await existing.save()
     await _invalidate_pool_netting_cache(sid)
     return existing
@@ -1827,10 +1830,22 @@ async def upsert_super_admin_segment_override(
         existing = SuperAdminSegmentOverride(
             super_admin_id=sid, segment_name=segment_name
         )
-    for k, v in patch.items():
-        if k in NETTING_FIELDS:
-            setattr(existing, k, v)
+    clean = {k: v for k, v in patch.items() if k in NETTING_FIELDS}
+    for k, v in clean.items():
+        setattr(existing, k, v)
     await existing.save()
+    # CASCADE the super-admin's GLOBAL to every admin that hasn't been
+    # EXPLICITLY overridden (the 3-dot editor sets is_explicit=True). So the SA's
+    # global applies to all admins automatically; per-admin overrides survive.
+    try:
+        if clean:
+            await SubAdminSegmentOverride.get_motor_collection().update_many(
+                {"segment_name": segment_name, "is_explicit": {"$ne": True}},
+                {"$set": clean},
+            )
+    except Exception:
+        logger.exception("cascade_super_admin_segment_failed seg=%s", segment_name)
+    await _wipe_eff_cache_debounced()
     await _invalidate_super_admin_pool_netting_cache()
     return existing
 
