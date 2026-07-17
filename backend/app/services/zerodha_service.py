@@ -794,14 +794,32 @@ class ZerodhaService:
         except ValueError:
             instrument_type = InstrumentType.EQ
 
-        # Segment — best-effort string for downstream segment-aware logic
+        # Segment — best-effort string for downstream segment-aware logic.
+        # For NFO (NSE F&O) we MUST distinguish INDEX vs STOCK by the underlying
+        # so a NIFTY/BANKNIFTY option resolves to the NSE_IDX_* admin rows, not
+        # the STOCK ones — otherwise blocking / pricing stock options wrongly hits
+        # index options (and the generic "NFO_OPTION" defaulted to STOCK).
+        _sym_up = (sub.symbol or "").upper()
+        _is_index = _sym_up.startswith(
+            ("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "MIDCAPNIFTY", "SENSEX", "BANKEX")
+        )
+        _is_nfo = exchange.value == "NFO"
         if instrument_type == InstrumentType.EQ:
             segment = f"{exchange.value}_EQUITY"
         elif instrument_type == InstrumentType.FUT:
-            segment = f"{exchange.value}_FUTURE"
+            if _is_nfo:
+                segment = "NSE_INDEX_FUTURE" if _is_index else "NSE_FUTURE"
+            else:
+                segment = f"{exchange.value}_FUTURE"
         elif instrument_type in (InstrumentType.CE, InstrumentType.PE):
-            # Option segment: NFO_OPT, BFO_OPT, MCX_OPT
-            segment = f"{exchange.value}_OPTION"
+            if _is_nfo:
+                side = "BUY" if instrument_type == InstrumentType.CE else "SELL"
+                segment = (
+                    f"NSE_INDEX_OPTION_{side}" if _is_index else f"NSE_STOCK_OPTION_{side}"
+                )
+            else:
+                # BFO_OPTION / MCX_OPTION etc. — non-NFO, keep the generic form.
+                segment = f"{exchange.value}_OPTION"
         else:
             segment = f"{exchange.value}_EQUITY"
 
