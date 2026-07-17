@@ -136,6 +136,16 @@ async def get_effective_for_instrument(
         except Exception:
             pass
 
+    # Daily circuit band (cached in Redis after the first fetch, so this stays
+    # cheap on the 3×/s poll). Drives the OrderPanel BUY/SELL circuit lock.
+    _circ_lc = _circ_uc = None
+    try:
+        from app.services.order_validator import _circuit_limits
+
+        _circ_lc, _circ_uc = await _circuit_limits(instrument)
+    except Exception:
+        pass
+
     # Trim down to the fields the OrderPanel actually displays — keeps the
     # response payload small for a 3× / second poll.
     out = {
@@ -192,6 +202,10 @@ async def get_effective_for_instrument(
         # execution markup in matching_engine.execute_market_order.
         "spread_pips": s.get("spread_pips"),
         "spread_type": s.get("spread_type"),
+        # Daily circuit band (Zerodha upper/lower_circuit_limit, cached). The
+        # OrderPanel disables BUY at the upper circuit / SELL at the lower one.
+        "upper_circuit": (lambda v: float(v) if v else None)(_circ_uc),
+        "lower_circuit": (lambda v: float(v) if v else None)(_circ_lc),
         # Source attribution so the UI can show "Override applied"
         "sources": resolved.get("sources", {}),
         # Expiry-day flag — frontend can tag the margin tile with a

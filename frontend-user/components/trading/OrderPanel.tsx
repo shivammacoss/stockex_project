@@ -393,6 +393,18 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   const sidePriceMissing =
     (side === "BUY" && buyPrice <= 0) || (side === "SELL" && sellPrice <= 0);
 
+  // ── Circuit lock — like the real exchange (Zerodha/Upstox) ──────────
+  // At the UPPER circuit only SELL works (no sellers to buy from); at the LOWER
+  // circuit only BUY. So BUY is blocked at the upper circuit and SELL at the
+  // lower one. Band comes from effSettings (daily, cached server-side).
+  const upperCircuit = Number(effSettings?.upper_circuit ?? 0) || 0;
+  const lowerCircuit = Number(effSettings?.lower_circuit ?? 0) || 0;
+  const curPx = Number(ltp || 0);
+  const atUpperCircuit = upperCircuit > 0 && curPx > 0 && curPx >= upperCircuit;
+  const atLowerCircuit = lowerCircuit > 0 && curPx > 0 && curPx <= lowerCircuit;
+  const circuitBlocksSide =
+    (side === "BUY" && atUpperCircuit) || (side === "SELL" && atLowerCircuit);
+
   // No currency prefix anywhere price is shown — display the bare
   // grouped number. Decimal count still varies by instrument so crypto
   // stays at 2 places and forex keeps 4 places.
@@ -482,6 +494,21 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   function submit() {
     if (!instrument) {
       toast.error("Instrument not loaded — try selecting it again");
+      return;
+    }
+    // ── Circuit lock ───────────────────────────────────────────────────
+    if (side === "BUY" && atUpperCircuit) {
+      toast.error(
+        `${instrument.symbol} is at the UPPER CIRCUIT (${fmtPrice(upperCircuit)}). Only SELL is allowed — you can't BUY at the upper circuit.`,
+        { duration: 6000 },
+      );
+      return;
+    }
+    if (side === "SELL" && atLowerCircuit) {
+      toast.error(
+        `${instrument.symbol} is at the LOWER CIRCUIT (${fmtPrice(lowerCircuit)}). Only BUY is allowed — you can't SELL at the lower circuit.`,
+        { duration: 6000 },
+      );
       return;
     }
     // ── No live quote on this side ─────────────────────────────────────
@@ -1368,15 +1395,37 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
               </span>
             </div>
           ))}
+        {/* Circuit-lock banner — at the upper circuit only SELL works, at the
+            lower circuit only BUY (like the real exchange). */}
+        {(atUpperCircuit || atLowerCircuit) && (
+          <div
+            className={`flex items-start gap-1.5 rounded-md border px-2.5 py-2 text-[11px] ${
+              atUpperCircuit
+                ? "border-buy/40 bg-buy/10 text-buy"
+                : "border-sell/40 bg-sell/10 text-sell"
+            }`}
+          >
+            <AlertTriangle className="mt-px size-3.5 shrink-0" />
+            <span>
+              {atUpperCircuit
+                ? `Upper circuit ${fmtPrice(upperCircuit)} — only SELL allowed (can't BUY).`
+                : `Lower circuit ${fmtPrice(lowerCircuit)} — only BUY allowed (can't SELL).`}
+            </span>
+          </div>
+        )}
         <Button
           type="button"
           variant={side === "BUY" ? "buy" : "sell"}
           className="h-11 w-full text-sm font-semibold"
           loading={submitting}
-          disabled={sidePriceMissing}
+          disabled={sidePriceMissing || circuitBlocksSide}
           onClick={submit}
         >
-          {side} {fmtLots(lots)} {isCrypto || isForex ? "lots" : `lot${lots === 1 ? "" : "s"}`}
+          {circuitBlocksSide
+            ? side === "BUY"
+              ? "BUY locked · Upper circuit"
+              : "SELL locked · Lower circuit"
+            : `${side} ${fmtLots(lots)} ${isCrypto || isForex ? "lots" : `lot${lots === 1 ? "" : "s"}`}`}
         </Button>
       </div>
     </aside>

@@ -806,26 +806,40 @@ async def validate(
         else:
             ref_price = ltp
 
-    # ── Circuit (price-band) gate — like the real exchange (Zerodha/Upstox) ──
-    # A NEW opening order priced OUTSIDE the instrument's daily upper/lower
-    # circuit is rejected. Closing / square-off orders are exempt (you must
-    # always be able to exit). Fail-open: no band data → no block, so trading is
-    # never stopped by a missing circuit. Only checked for a concrete price
-    # (LIMIT / SL user price, or the live ref) on native-INR exchanges.
-    if not is_reducing and not is_squareoff and ref_price > 0:
+    # ── Circuit gate — like the real exchange (Zerodha/Upstox) ──────────
+    # Two rules, only on NEW opening orders (closing/square-off must always be
+    # allowed so you can exit); fail-open when no band data:
+    #   1. CIRCUIT LOCK direction — when the stock is AT the upper circuit only
+    #      SELL is possible (no sellers to buy from), and at the lower circuit
+    #      only BUY (no buyers to sell to). So a BUY at the upper circuit / a
+    #      SELL at the lower circuit is rejected.
+    #   2. A LIMIT / SL priced OUTSIDE the band is rejected outright.
+    if not is_reducing and not is_squareoff:
         lc, uc = await _circuit_limits(instrument)
-        if uc is not None and ref_price > uc:
+        cur = ltp if (ltp and ltp > 0) else ref_price  # live market price
+        if uc is not None and cur > 0 and cur >= uc and action == OrderAction.BUY:
             raise OrderRejectedError(
-                f"Price ₹{ref_price} is above the upper circuit ₹{uc}. "
-                f"The exchange won't accept orders above the circuit limit.",
-                code="UPPER_CIRCUIT",
+                f"{instrument.symbol} is at the UPPER CIRCUIT (₹{uc}). "
+                f"Only SELL is allowed — you can't BUY at the upper circuit.",
+                code="UPPER_CIRCUIT_BUY",
             )
-        if lc is not None and ref_price < lc:
+        if lc is not None and cur > 0 and cur <= lc and action == OrderAction.SELL:
             raise OrderRejectedError(
-                f"Price ₹{ref_price} is below the lower circuit ₹{lc}. "
-                f"The exchange won't accept orders below the circuit limit.",
-                code="LOWER_CIRCUIT",
+                f"{instrument.symbol} is at the LOWER CIRCUIT (₹{lc}). "
+                f"Only BUY is allowed — you can't SELL at the lower circuit.",
+                code="LOWER_CIRCUIT_SELL",
             )
+        if ref_price > 0:
+            if uc is not None and ref_price > uc:
+                raise OrderRejectedError(
+                    f"Price ₹{ref_price} is above the upper circuit ₹{uc}.",
+                    code="UPPER_CIRCUIT",
+                )
+            if lc is not None and ref_price < lc:
+                raise OrderRejectedError(
+                    f"Price ₹{ref_price} is below the lower circuit ₹{lc}.",
+                    code="LOWER_CIRCUIT",
+                )
 
     notional = to_decimal(quantity) * ref_price
     # Fixed-margin segments skip the notional × pct ÷ leverage formula
