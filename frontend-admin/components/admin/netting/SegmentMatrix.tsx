@@ -35,6 +35,23 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
     return seg[key];
   }
 
+  // LOT category only: split the Index Option row into Buy + Sell, each editing
+  // the per-side lot fields (optionBuyMinLots / optionSellMinLots …). Every
+  // other segment/category stays one row editing the field directly.
+  const SPLIT_SEG = "NSE_IDX_OPT";
+  function keyFor(sub: string | null, key: string) {
+    return sub ? `${sub}${key[0].toUpperCase()}${key.slice(1)}` : key;
+  }
+  function expand(seg: any): Array<{ label: string; sub: string | null }> {
+    if (categoryId === "lot" && seg.name === SPLIT_SEG) {
+      return [
+        { label: `${seg.displayName} · Buy`, sub: "optionBuy" },
+        { label: `${seg.displayName} · Sell`, sub: "optionSell" },
+      ];
+    }
+    return [{ label: seg.displayName, sub: null }];
+  }
+
   // Self-heal stored select values that are no longer a valid option
   // (legacy enum like `marginCalcMode: "percent"` after we retired that
   // mode). Stage a dirty edit so the next Save normalises the row to a
@@ -137,7 +154,7 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
       </div>
       {/* ── Mobile: card per segment ─────────────────────────────── */}
       <div className="md:hidden space-y-2">
-        {(segments ?? []).map((seg: any) => {
+        {(segments ?? []).flatMap((seg: any) => {
           const segRow: SegmentRow = {
             code: seg.name,
             name: seg.displayName,
@@ -148,43 +165,42 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
             futureApplies: seg.futureApplies,
           };
           const activeFields = fields.filter((f) => !isFieldNA(segRow, categoryId, f));
-          if (activeFields.length === 0) return null;
-          return (
-            <div key={seg.id} className="rounded-lg border border-border bg-card">
-              {/* Segment header */}
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-                <div className="size-7 rounded-md bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
-                  {seg.displayName.slice(0, 2)}
-                </div>
-                <div>
-                  <div className="text-xs font-semibold">{seg.displayName}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground">{seg.name}</div>
-                </div>
-                {Object.keys(edits[seg.id] ?? {}).length > 0 && (
-                  <span className="ml-auto rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                    {Object.keys(edits[seg.id]).length} edited
-                  </span>
-                )}
-              </div>
-              {/* Fields grid */}
-              <div className="grid grid-cols-2 gap-x-3 gap-y-3 p-3">
-                {activeFields.map((f) => (
-                  <div key={f.key} className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground leading-none">
-                      {f.label}
-                    </Label>
-                    <Cell
-                      field={f}
-                      na={false}
-                      value={getValue(seg, f.key)}
-                      dirty={edits[seg.id]?.[f.key] !== undefined}
-                      onChange={(v) => setEdit(seg.id, f.key, v)}
-                    />
+          if (activeFields.length === 0) return [];
+          return expand(seg).map((row) => {
+            const rowId = seg.id + (row.sub ?? "");
+            return (
+              <div key={rowId} className="rounded-lg border border-border bg-card">
+                {/* Segment header */}
+                <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+                  <div className="size-7 rounded-md bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
+                    {seg.displayName.slice(0, 2)}
                   </div>
-                ))}
+                  <div>
+                    <div className="text-xs font-semibold">{row.label}</div>
+                    <div className="text-[10px] font-mono text-muted-foreground">{seg.name}</div>
+                  </div>
+                </div>
+                {/* Fields grid */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-3 p-3">
+                  {activeFields.map((f) => {
+                    const k = keyFor(row.sub, f.key);
+                    return (
+                      <div key={f.key} className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground leading-none">{f.label}</Label>
+                        <Cell
+                          field={f}
+                          na={false}
+                          value={getValue(seg, k)}
+                          dirty={edits[seg.id]?.[k] !== undefined}
+                          onChange={(v) => setEdit(seg.id, k, v)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
+            );
+          });
         })}
       </div>
 
@@ -204,7 +220,7 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {(segments ?? []).map((seg: any) => {
+            {(segments ?? []).flatMap((seg: any) => {
               const segRow: SegmentRow = {
                 code: seg.name,
                 name: seg.displayName,
@@ -214,25 +230,31 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
                 expiryHoldApplies: seg.expiryHoldApplies,
                 futureApplies: seg.futureApplies,
               };
-              return (
-                <tr key={seg.id} className="hover:bg-muted/30">
-                  <td className="sticky left-0 z-0 whitespace-nowrap bg-card px-3 py-2">
-                    <div className="font-medium">{seg.displayName}</div>
-                    <div className="text-[10px] font-mono text-muted-foreground">{seg.name}</div>
-                  </td>
-                  {fields.map((f) => (
-                    <td key={f.key} className="px-1 py-1">
-                      <Cell
-                        field={f}
-                        na={isFieldNA(segRow, categoryId, f)}
-                        value={getValue(seg, f.key)}
-                        dirty={edits[seg.id]?.[f.key] !== undefined}
-                        onChange={(v) => setEdit(seg.id, f.key, v)}
-                      />
+              return expand(seg).map((row) => {
+                const rowId = seg.id + (row.sub ?? "");
+                return (
+                  <tr key={rowId} className="hover:bg-muted/30">
+                    <td className="sticky left-0 z-0 whitespace-nowrap bg-card px-3 py-2">
+                      <div className="font-medium">{row.label}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground">{seg.name}</div>
                     </td>
-                  ))}
-                </tr>
-              );
+                    {fields.map((f) => {
+                      const k = keyFor(row.sub, f.key);
+                      return (
+                        <td key={f.key} className="px-1 py-1">
+                          <Cell
+                            field={f}
+                            na={isFieldNA(segRow, categoryId, f)}
+                            value={getValue(seg, k)}
+                            dirty={edits[seg.id]?.[k] !== undefined}
+                            onChange={(v) => setEdit(seg.id, k, v)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              });
             })}
           </tbody>
         </table>

@@ -168,6 +168,18 @@ class NettingFieldsBase(BaseModel):
     orderLots: float | None = None
     maxLots: float | None = None
     maxExchangeLots: float | None = None
+    # Per-side LOT limits for INDEX OPTIONS only — lets the super-admin set
+    # different lot limits for option BUY vs SELL (spec: split Index Option into
+    # Buy/Sell ONLY for the Lot category). NULL = inherit the segment-wide lot
+    # value above. The resolver picks these by the order's option side.
+    optionBuyMinLots: float | None = None
+    optionBuyOrderLots: float | None = None
+    optionBuyMaxLots: float | None = None
+    optionBuyMaxExchangeLots: float | None = None
+    optionSellMinLots: float | None = None
+    optionSellOrderLots: float | None = None
+    optionSellMaxLots: float | None = None
+    optionSellMaxExchangeLots: float | None = None
     # Quantity
     minQty: float | None = None
     perOrderQty: float | None = None
@@ -236,6 +248,15 @@ class NettingFieldsRequired(BaseModel):
     orderLots: float = 1.0
     maxLots: float = 100.0
     maxExchangeLots: float = 1000.0
+    # Per-side lot limits for INDEX OPTIONS (None = inherit the segment-wide lot).
+    optionBuyMinLots: float | None = None
+    optionBuyOrderLots: float | None = None
+    optionBuyMaxLots: float | None = None
+    optionBuyMaxExchangeLots: float | None = None
+    optionSellMinLots: float | None = None
+    optionSellOrderLots: float | None = None
+    optionSellMaxLots: float | None = None
+    optionSellMaxExchangeLots: float | None = None
     # Quantity
     minQty: float = 1.0
     perOrderQty: float = 1.0

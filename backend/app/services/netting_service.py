@@ -2388,6 +2388,23 @@ def _to_legacy_dict(
     lot_applies = getattr(seg, "lotApplies", True)
     qty_applies = getattr(seg, "qtyApplies", False)
 
+    # Per-side LOT limit for INDEX OPTIONS — when the order is an option BUY/SELL
+    # and the SA has set a side-specific lot value (optionBuy*/optionSell*), it
+    # wins; otherwise fall back to the segment-wide lot. Only index-option rows
+    # carry these (set via the matrix's split Buy/Sell lot rows); every other
+    # segment has them NULL → the segment-wide value is used unchanged.
+    _lot_side = "optionBuy" if is_option_buy else ("optionSell" if is_option_sell else None)
+
+    def _lot(base: str, fallback: float) -> float:
+        if _lot_side:
+            v = pick(f"{_lot_side}{base[0].upper()}{base[1:]}", None)
+            try:
+                if v is not None and float(v) > 0:
+                    return float(v)
+            except (TypeError, ValueError):
+                pass
+        return fallback
+
     return {
         # legacy 22-field shape (and a few netting-only extras)
         # `allow` is the combined gate for backwards-compat (OrderPanel reads
@@ -2400,16 +2417,16 @@ def _to_legacy_dict(
         "commission_type": legacy_commission_type,
         "commission_value": commission_value,
         "min_brokerage": 0.0,
-        "min_lot": float(pick("minLots", 1.0) if pick("minLots", 1.0) else 1.0) if lot_applies else 0.0,
-        "max_lot": float(pick("maxLots", 0.0) or 0.0) if lot_applies else 0.0,
-        "order_lot": float(pick("orderLots", 0.0) or 0.0) if lot_applies else 0.0,
-        "intraday_lot_limit": float(pick("maxExchangeLots", 0.0) or 0.0) if lot_applies else 0.0,
-        "holding_lot_limit": float(pick("maxExchangeLots", 0.0) or 0.0) if lot_applies else 0.0,
+        "min_lot": _lot("minLots", float(pick("minLots", 1.0) if pick("minLots", 1.0) else 1.0)) if lot_applies else 0.0,
+        "max_lot": _lot("maxLots", float(pick("maxLots", 0.0) or 0.0)) if lot_applies else 0.0,
+        "order_lot": _lot("orderLots", float(pick("orderLots", 0.0) or 0.0)) if lot_applies else 0.0,
+        "intraday_lot_limit": _lot("maxExchangeLots", float(pick("maxExchangeLots", 0.0) or 0.0)) if lot_applies else 0.0,
+        "holding_lot_limit": _lot("maxExchangeLots", float(pick("maxExchangeLots", 0.0) or 0.0)) if lot_applies else 0.0,
         "selling_overnight": bool(pick("allowOvernight", True)),
         "limit_percentage": float(pick("limitAwayPercent", 0.0) or 0.0),
         "strike_difference": 5,
-        "max_each_lot": float(pick("maxLots", 0.0) or 0.0) if lot_applies else 0.0,
-        "otm_max_each_lot": float(pick("maxLots", 0.0) or 0.0) if lot_applies else 0.0,
+        "max_each_lot": _lot("maxLots", float(pick("maxLots", 0.0) or 0.0)) if lot_applies else 0.0,
+        "otm_max_each_lot": _lot("maxLots", float(pick("maxLots", 0.0) or 0.0)) if lot_applies else 0.0,
         "expiry_loss_holding": float(pick("expiryLossHoldMinSeconds", 0) or 0),
         "expiry_profit_hold": float(pick("expiryProfitHoldMinSeconds", 0) or 0),
         "expiry_intraday_margin": float(pick("expiryDayIntradayMargin", effective_margin_pct) or effective_margin_pct),
