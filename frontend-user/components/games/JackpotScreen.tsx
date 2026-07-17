@@ -176,10 +176,20 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
                     >
                       {top3 ? <Medal className="size-3.5" /> : row.rank}
                     </span>
-                    <span className="truncate font-semibold tabular-nums">
-                      {Number(row.predicted).toLocaleString("en-IN")}
+                    <span className="flex min-w-0 flex-col leading-tight">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-semibold tabular-nums">
+                          {Number(row.predicted).toLocaleString("en-IN")}
+                        </span>
+                        {row.isMe && (
+                          <span className="shrink-0 rounded bg-primary/20 px-1.5 text-[10px] font-bold text-primary">YOU</span>
+                        )}
+                      </span>
+                      {row.placed_at && (
+                        // Placement time (ms-precise) — the tie-breaker.
+                        <span className="tabular-nums text-[10px] text-muted-foreground">⏱ {fmtBidTime(row.placed_at)}</span>
+                      )}
                     </span>
-                    {row.isMe && <span className="shrink-0 rounded bg-primary/20 px-1.5 text-[10px] font-bold text-primary">YOU</span>}
                   </span>
                   <span className="shrink-0 font-semibold tabular-nums text-buy">{formatINR(row.projectedPrize)}</span>
                 </div>

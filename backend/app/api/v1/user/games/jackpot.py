@@ -92,6 +92,9 @@ async def leaderboard(game_id: str, user: CurrentUser, limit: int = 20):
             entry = {
                 "rank": r["rank"], "predicted": str(b.predicted_price),
                 "projectedPrize": str(r["prize"]), "isMe": b.user_id == user.id,
+                # Placement time (ms-precise) — the tie-breaker: an earlier bid
+                # wins a tie. Shown per leaderboard row.
+                "placed_at": b.created_at.isoformat() if b.created_at else None,
             }
             board.append(entry)
             if b.user_id == user.id:
