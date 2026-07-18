@@ -1,0 +1,76 @@
+"""Super-admin MARKET CONTROL — per-segment trading hours.
+
+The SA opens/closes any segment at will (including 24×7 crypto / 24×5 forex).
+When a segment is `enabled`, trading is allowed ONLY between open_time and
+close_time IST; outside that the order validator rejects new opening orders
+(closing / square-off is always allowed). Keyed by the admin-row segment code.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.dependencies import SuperAdmin, require_perm
+from app.core.redis_client import cache_delete_pattern
+from app.models.market_control import MarketControl
+from app.models.netting import SEGMENT_CODES
+from app.schemas.common import APIResponse
+
+router = APIRouter(prefix="/market-control", tags=["admin-market-control"])
+
+SEGMENT_LABELS: dict[str, str] = {
+    "NSE_EQ": "NSE Equity", "NSE_STK_FUT": "Stock Future", "NSE_IDX_FUT": "Index Future",
+    "NSE_STK_OPT": "Stock Option", "NSE_IDX_OPT": "Index Option",
+    "BSE_EQ": "BSE Equity", "BSE_FUT": "BSE Future", "BSE_OPT": "BSE Option",
+    "MCX_FUT": "MCX Future", "MCX_OPT": "MCX Option",
+    "FOREX": "Forex", "STOCKS": "Stocks", "INDICES": "Indices",
+    "COMMODITIES": "Commodities", "CRYPTO": "Crypto",
+}
+
+
+def _row_out(code: str, r: MarketControl | None) -> dict:
+    return {
+        "segment": code,
+        "label": SEGMENT_LABELS.get(code, code),
+        "enabled": bool(r.enabled) if r else False,
+        "open_time": (r.open_time if r else "09:15") or "09:15",
+        "close_time": (r.close_time if r else "15:30") or "15:30",
+    }
+
+
+@router.get("", response_model=APIResponse[list])
+async def list_market_control(
+    admin: SuperAdmin,
+    _: None = Depends(require_perm("segment_settings", "read")),
+):
+    """Every segment's market-control row (defaults when unset)."""
+    rows = {r.segment_name: r for r in await MarketControl.find().to_list()}
+    return APIResponse(data=[_row_out(code, rows.get(code)) for code in SEGMENT_CODES])
+
+
+@router.put("/{segment}", response_model=APIResponse[dict])
+async def set_market_control(
+    segment: str,
+    payload: dict,
+    admin: SuperAdmin,
+    _: None = Depends(require_perm("segment_settings", "write")),
+):
+    """Set a segment's trading window. Payload: {enabled, open_time, close_time}."""
+    if segment not in SEGMENT_CODES:
+        raise HTTPException(status_code=400, detail=f"Unknown segment {segment}")
+    row = await MarketControl.find_one(MarketControl.segment_name == segment)
+    if row is None:
+        row = MarketControl(segment_name=segment)
+    if "enabled" in payload:
+        row.enabled = bool(payload["enabled"])
+    if payload.get("open_time"):
+        row.open_time = str(payload["open_time"]).strip()[:5]
+    if payload.get("close_time"):
+        row.close_time = str(payload["close_time"]).strip()[:5]
+    await row.save()
+    # Drop the enforcement cache so the change applies on the next order.
+    try:
+        await cache_delete_pattern("mktctl:*")
+    except Exception:
+        pass
+    return APIResponse(data=_row_out(segment, row))

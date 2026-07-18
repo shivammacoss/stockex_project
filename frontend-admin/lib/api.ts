@@ -476,6 +476,15 @@ export const TradingAPI = {
   holdings: (params?: any) => unwrap<any[]>(api.get("/admin/holdings", { params })),
 };
 
+export const MarketControlAPI = {
+  list: () =>
+    unwrap<{ segment: string; label: string; enabled: boolean; open_time: string; close_time: string }[]>(
+      api.get("/admin/market-control"),
+    ),
+  set: (segment: string, body: { enabled?: boolean; open_time?: string; close_time?: string }) =>
+    unwrap<any>(api.put(`/admin/market-control/${segment}`, body)),
+};
+
 export const TransactionHistoryAPI = {
   list: (params?: { source?: string; admin_id?: string; limit?: number }) =>
     unwrap<{

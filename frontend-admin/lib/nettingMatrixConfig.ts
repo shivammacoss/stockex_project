@@ -238,6 +238,15 @@ export function isFieldNA(segment: SegmentRow | undefined, categoryId: string, f
   if (categoryId === "quantity" && !segment.qtyApplies) return true;
   if (categoryId === "options" && !segment.optionApplies) return true;
   if (categoryId === "expiryHold" && !segment.expiryHoldApplies) return true;
-  if (INTRADAY_ONLY_ROWS.has(segment.code) && OVERNIGHT_FIELD_KEYS.has(field.key)) return true;
+  // Overnight/expiry fields are hidden for the Infoway (intraday-only) segments
+  // — EXCEPT `overnightMargin` (carry-forward), which the super-admin can now set
+  // for them so a position that carries after Market Control closes the market
+  // gets its own carry margin.
+  if (
+    INTRADAY_ONLY_ROWS.has(segment.code) &&
+    OVERNIGHT_FIELD_KEYS.has(field.key) &&
+    field.key !== "overnightMargin"
+  )
+    return true;
   return false;
 }

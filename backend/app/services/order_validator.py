@@ -916,6 +916,19 @@ async def validate(
     )
     is_mcx = "MCX" in seg_upper  # MCX has its own hours (~09:00-23:30 IST)
 
+    # ── Super-admin MARKET CONTROL (per-segment trading hours) ──────────
+    # When the SA has enabled a window for this segment, it OVERRIDES the default
+    # calendar — so the SA can open/close ANY market at will, including the 24×7
+    # CRYPTO and 24×5 FOREX. Blocks new OPENING orders outside the window; exits
+    # (closing / square-off) stay allowed so a user can always flatten.
+    if not is_squareoff and not is_reducing:
+        from app.services.market_control_service import market_control_reason
+
+        _mc_row = netting_service._seg_name_for(segment_type, getattr(instrument, "symbol", None))
+        _mc_reason = await market_control_reason(_mc_row)
+        if _mc_reason:
+            raise MarketClosedError(_mc_reason)
+
     # Squareoff orders (admin force-close, user kill-switch, risk
     # auto-flatten, SL/TP/stop-out fires) intentionally bypass the
     # market-hours guard. We're a B-book — matching is internal, prices

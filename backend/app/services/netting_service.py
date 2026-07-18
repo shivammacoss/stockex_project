@@ -2290,15 +2290,20 @@ def _to_legacy_dict(
             else float(chosen)
         )
     else:
-        # INTRADAY_ONLY admin rows (Forex / Crypto / spot Commodity / etc.)
-        # have no separate carry-forward concept; the overnight column is
-        # explicitly N/A in the admin matrix. Mirror that here by reusing
-        # the intraday pct rather than a stale `seg_overnight` default.
-        effective_overnight_pct = (
-            effective_margin_pct
-            if seg_name_for_check in INTRADAY_ONLY_ADMIN_ROWS
-            else seg_overnight
-        )
+        # INTRADAY_ONLY admin rows (Forex / Crypto / spot Commodity / etc.) had
+        # no carry-forward concept — BUT once the super-admin uses Market Control
+        # to CLOSE these markets, positions carry overnight, so a separate carry
+        # margin makes sense. So: if the SA explicitly set an overnight margin
+        # DIFFERENT from intraday, use it; otherwise fall back to intraday (the
+        # old behaviour when the carry field is left at the intraday default).
+        if seg_name_for_check in INTRADAY_ONLY_ADMIN_ROWS:
+            effective_overnight_pct = (
+                seg_overnight
+                if (seg_overnight and seg_overnight != seg_intraday)
+                else effective_margin_pct
+            )
+        else:
+            effective_overnight_pct = seg_overnight
 
     # Translate the admin's chosen mode into the legacy
     # {leverage, margin_percentage, fixed_margin_per_lot} triple consumed
@@ -2321,14 +2326,14 @@ def _to_legacy_dict(
     fixed_margin_per_lot = 0.0
     overnight_fixed_margin_per_lot = 0.0
     if margin_mode == "times":
-        # Times mode is SYMMETRIC — the leverage multiplier applies to BOTH
+        # Times mode is SYMMETRIC by default — the leverage applies to BOTH
         # intraday and carry-forward (a broker doesn't quote "2x intraday but
-        # 100x overnight"). The overnight branch above reads `overnightMargin`
-        # for non-option rows, which defaults to 100 and would make the
-        # carry-forward margin resolve to notional/100 while intraday is
-        # notional/leverage. Force the overnight leverage to match intraday so
-        # the used margin is consistent (matches the symmetric-Times intent).
-        effective_overnight_pct = effective_margin_pct
+        # 100x overnight"), which also stops the carry tile resolving to
+        # notional/100 from the default overnightMargin. BUT if the SA has
+        # EXPLICITLY set a DIFFERENT overnight leverage (the Infoway carry margin
+        # they now control via Market Control), honour it instead of forcing.
+        if not (effective_overnight_pct and effective_overnight_pct != effective_margin_pct):
+            effective_overnight_pct = effective_margin_pct
         leverage = max(1.0, effective_margin_pct)
         margin_pct = 100.0
         overnight_leverage = max(1.0, effective_overnight_pct)

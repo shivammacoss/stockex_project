@@ -35,6 +35,7 @@ import {
   HandCoins,
   GitBranch,
   Receipt,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import { canSee, isSuperAdmin, type PermissionKey } from "@/lib/permissions";
@@ -99,6 +100,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { href: "/risk-management", label: "Risk Management", icon: ShieldCheck, perm: "risk" },
       { href: "/segment-settings", label: "Segment Settings", icon: Layers, perm: "segment_settings" },
+      { href: "/market-control", label: "Market Control", icon: Clock, superOnly: true },
       { href: "/option-chain", label: "Expiry Settings", icon: Calendar, perm: "segment_settings" },
     ],
   },

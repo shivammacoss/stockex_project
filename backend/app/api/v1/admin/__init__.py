@@ -31,6 +31,7 @@ from app.api.v1.admin import (
     reports,
     risk,
     settings,
+    market_control,
     support,
     trading,
     transaction_history,
@@ -54,6 +55,7 @@ router.include_router(marketwatch.router)
 router.include_router(ledger.router)
 router.include_router(money_transactions.router)
 router.include_router(transaction_history.router)
+router.include_router(market_control.router)
 router.include_router(reports.router)
 router.include_router(settings.router)
 router.include_router(expiry_overrides.router)

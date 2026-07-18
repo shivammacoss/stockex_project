@@ -52,6 +52,7 @@ def _document_models() -> list[type["Document"]]:
     from app.models.holiday import TradingHoliday
     from app.models.instrument import Instrument
     from app.models.kyc import KycSubmission
+    from app.models.market_control import MarketControl
     from app.models.notification import AdminNotification, Notification
     from app.models.order import Order
     from app.models.platform_setting import PlatformSetting
@@ -155,6 +156,7 @@ def _document_models() -> list[type["Document"]]:
         # Ops
         AuditLog,
         KycSubmission,
+        MarketControl,
         Notification,
         AdminNotification,
         PriceAlert,
