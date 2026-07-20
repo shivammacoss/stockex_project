@@ -472,6 +472,13 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
       toast.error("Instrument not loaded");
       return;
     }
+    // Quote for the side ACTUALLY being submitted. The BUY/SELL buttons call
+    // submit() directly and never touch `setSide`, so the `side` state stays
+    // pinned at its initial value for the sheet's whole lifetime — reading
+    // `sideQuote` here sent the ASK along with a SELL order. The backend
+    // honours an expected_price within 1% (the spread is ~0.15%), so the
+    // SELL filled at the BUY price: entry == exit, P&L ₹0 bar charges.
+    const actionQuote = action === "BUY" ? buyPrice : sellPrice;
     // Force-commit any pending lot input — the user can tap BUY/SELL
     // without first blurring the lot field on mobile, in which case
     // `lots` state still holds the previous value while `lotInput`
@@ -572,7 +579,7 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
     );
 
     const optimisticId = `optimistic_${Date.now()}`;
-    const fillPrice = orderType === "MARKET" ? sideQuote : Number(limitPrice || ltp) || ltp;
+    const fillPrice = orderType === "MARKET" ? actionQuote : Number(limitPrice || ltp) || ltp;
     const signedQty = (action === "BUY" ? 1 : -1) * lotsToUse * lotSize;
     const isImmediate = orderType === "MARKET";
 
@@ -739,7 +746,7 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
       is_amo: false,
       stop_loss: slTpEnabled && Number(stopLoss) > 0 ? Number(stopLoss) : null,
       target: slTpEnabled && Number(target) > 0 ? Number(target) : null,
-      expected_price: orderType === "MARKET" ? sideQuote : null,
+      expected_price: orderType === "MARKET" ? actionQuote : null,
     })
       .then(() => {
         // Success toast already fired instantly above; just reconcile caches.
