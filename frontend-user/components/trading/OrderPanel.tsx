@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AccountsAPI, OrderAPI, SegmentSettingsAPI, WalletAPI } from "@/lib/api";
+import { AccountsAPI, OrderAPI, PositionAPI, SegmentSettingsAPI, WalletAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { walletKindForSegment } from "@/lib/wallets";
 import { cn, formatINR } from "@/lib/utils";
@@ -402,8 +402,40 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   const curPx = Number(ltp || 0);
   const atUpperCircuit = upperCircuit > 0 && curPx > 0 && curPx >= upperCircuit;
   const atLowerCircuit = lowerCircuit > 0 && curPx > 0 && curPx <= lowerCircuit;
+
+  // EXITING is always allowed at a circuit — on a real terminal you can
+  // always get out of a position, the band only stops you OPENING into the
+  // locked side. The backend already exempts `is_reducing` from its circuit
+  // gate; without the same exemption here the UI disabled the one button the
+  // user needed (a long stuck at the LOWER circuit couldn't be sold).
+  // Same query key the terminal page already runs, so react-query shares it.
+  // Read-only observer: the terminal page owns this query's polling. Ours
+  // never initiates a fetch of its own, so it can't re-introduce the
+  // post-optimistic-update refetch flicker the trade UI was tuned against.
+  const { data: openPositionsForCircuit } = useQuery({
+    queryKey: ["positions", "open"],
+    queryFn: () => PositionAPI.open(),
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+  const wouldReduce = useMemo(() => {
+    const rows = (openPositionsForCircuit as any[] | undefined) || [];
+    const existing = rows.find(
+      (p) =>
+        p &&
+        p.instrument_token === instrument?.token &&
+        p.product_type === productType,
+    );
+    const heldQty = Number(existing?.quantity ?? 0);
+    if (!heldQty) return false;
+    // Order shrinks the position when it opposes what's held.
+    return side === "BUY" ? heldQty < 0 : heldQty > 0;
+  }, [openPositionsForCircuit, instrument?.token, productType, side]);
+
   const circuitBlocksSide =
-    (side === "BUY" && atUpperCircuit) || (side === "SELL" && atLowerCircuit);
+    !wouldReduce &&
+    ((side === "BUY" && atUpperCircuit) || (side === "SELL" && atLowerCircuit));
 
   // No currency prefix anywhere price is shown — display the bare
   // grouped number. Decimal count still varies by instrument so crypto
@@ -496,15 +528,15 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
       toast.error("Instrument not loaded — try selecting it again");
       return;
     }
-    // ── Circuit lock ───────────────────────────────────────────────────
-    if (side === "BUY" && atUpperCircuit) {
+    // ── Circuit lock (exits exempt — see `wouldReduce` above) ──────────
+    if (side === "BUY" && atUpperCircuit && !wouldReduce) {
       toast.error(
         `${instrument.symbol} is at the UPPER CIRCUIT (${fmtPrice(upperCircuit)}). Only SELL is allowed — you can't BUY at the upper circuit.`,
         { duration: 6000 },
       );
       return;
     }
-    if (side === "SELL" && atLowerCircuit) {
+    if (side === "SELL" && atLowerCircuit && !wouldReduce) {
       toast.error(
         `${instrument.symbol} is at the LOWER CIRCUIT (${fmtPrice(lowerCircuit)}). Only BUY is allowed — you can't SELL at the lower circuit.`,
         { duration: 6000 },
@@ -1410,6 +1442,7 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
               {atUpperCircuit
                 ? `Upper circuit ${fmtPrice(upperCircuit)} — only SELL allowed (can't BUY).`
                 : `Lower circuit ${fmtPrice(lowerCircuit)} — only BUY allowed (can't SELL).`}
+              {wouldReduce && " Closing your open position is still allowed."}
             </span>
           </div>
         )}
