@@ -68,9 +68,11 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=128)
     pan: str | None = None
     referral_code: str | None = None
-    # MANDATORY — the broker the user picks to join under (from the signup
-    # broker-search). Authoritative for the user's hierarchy.
-    broker_id: str = Field(min_length=1)
+    # The broker the user picks to join under (from the signup broker-search).
+    # Authoritative for the user's hierarchy — EXCEPT when a valid
+    # `referral_code` is supplied, in which case the referrer's hierarchy wins
+    # and the pick may be omitted (a referral link carries its own placement).
+    broker_id: str | None = None
 
     @field_validator("mobile")
     @classmethod

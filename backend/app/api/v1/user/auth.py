@@ -86,16 +86,27 @@ async def register(payload: RegisterRequest, request: Request):
     # old host / referral-inherited attribution.
     from app.services import broker_search_service
 
-    broker = await broker_search_service.resolve_active_visible_broker(payload.broker_id)
-    if broker is None:
-        raise ValidationFailedError("Please choose a valid broker to sign up.")
-    assigned_admin_id = broker.assigned_admin_id
-    assigned_broker_id = broker.id
-    broker_ancestry = (broker.broker_ancestry or []) + [broker.id]
-
-    # Optional user-to-user referral — recorded for REWARD tracking only; it no
-    # longer changes the hierarchy (the picked broker is authoritative).
+    # A user-to-user referral places the new user in the REFERRER's pool: an
+    # admin's user brings you under that admin, a broker's user under that
+    # broker, a sub-broker's user under that sub-broker. Copying the referrer's
+    # own attribution verbatim gets all three cases at once, since a client
+    # already carries the full chain. This takes PRECEDENCE over the picked
+    # broker — a referral link is itself the placement.
     referrer = await referral_service.resolve_referrer(payload.referral_code)
+
+    if referrer is not None:
+        assigned_admin_id = referrer.assigned_admin_id
+        assigned_broker_id = referrer.assigned_broker_id
+        broker_ancestry = list(referrer.broker_ancestry or [])
+        signup_origin = "REFERRAL"
+    else:
+        broker = await broker_search_service.resolve_active_visible_broker(payload.broker_id or "")
+        if broker is None:
+            raise ValidationFailedError("Please choose a valid broker to sign up.")
+        assigned_admin_id = broker.assigned_admin_id
+        assigned_broker_id = broker.id
+        broker_ancestry = (broker.broker_ancestry or []) + [broker.id]
+        signup_origin = "BROKER_PICK"
 
     user = await user_service.create_user(
         email=payload.email,
@@ -106,7 +117,7 @@ async def register(payload: RegisterRequest, request: Request):
         assigned_admin_id=assigned_admin_id,
         assigned_broker_id=assigned_broker_id,
         broker_ancestry=broker_ancestry,
-        signup_origin="BROKER_PICK",
+        signup_origin=signup_origin,
     )
     # Inherit the owning admin's pool auto-settlement default — if the admin has
     # turned auto-settlement OFF for their pool, this new user is created OFF too

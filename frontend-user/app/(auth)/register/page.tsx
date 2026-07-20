@@ -29,7 +29,10 @@ const schema = z.object({
     .regex(/[a-z]/, "Must contain a lowercase letter")
     .regex(/\d/, "Must contain a digit")
     .regex(/[^A-Za-z0-9]/, "Must contain a special character (e.g. @, #, $)"),
-  broker_id: z.string().min(1, "Please choose your broker"),
+  // Optional at the schema level: a referral signup inherits the referrer's
+  // broker, so there is nothing to pick. Enforced in onSubmit when there is
+  // no referral code.
+  broker_id: z.string().optional().default(""),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -98,6 +101,10 @@ function RegisterPageInner() {
   const [pwdFocused, setPwdFocused] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState<BrokerOption | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Referral signups inherit the referrer's broker, so the picker is hidden —
+  // unless the backend rejects the code and asks for an explicit pick.
+  const [forcePicker, setForcePicker] = useState(false);
+  const showBrokerPicker = !refCode || forcePicker;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -111,6 +118,10 @@ function RegisterPageInner() {
   const showRules = pwdFocused || pwd.length > 0;
 
   async function onSubmit(values: FormValues) {
+    if (!refCode && !values.broker_id) {
+      form.setError("broker_id", { message: "Please choose your broker" });
+      return;
+    }
     try {
       await AuthAPI.register({
         full_name: values.full_name,
@@ -124,6 +135,10 @@ function RegisterPageInner() {
       router.push(refCode ? `/login?ref=${encodeURIComponent(refCode)}` : "/login");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Registration failed";
+      // A referral link hides the picker. If the code turned out not to resolve
+      // to a referrer, the backend asks for a broker — reveal the picker so the
+      // user isn't stuck on an error they can't act on.
+      if (msg.toLowerCase().includes("broker")) setForcePicker(true);
       toast.error(msg);
     }
   }
@@ -292,7 +307,18 @@ function RegisterPageInner() {
           )}
         </div>
 
-        {/* Broker selection (MANDATORY) — search by city, pick who you join under */}
+        {/* Broker selection — search by city, pick who you join under. Skipped
+            on a referral link: the referrer's own broker/admin chain is
+            inherited, so the new user lands in the referrer's pool. */}
+        {!showBrokerPicker ? (
+          <div className="flex items-start gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5">
+            <Building2 className="mt-0.5 size-3.5 shrink-0 text-primary" />
+            <span className="text-[11px] leading-snug text-muted-foreground">
+              Joining via referral <span className="font-mono font-bold text-foreground">{refCode}</span> — you&apos;ll be
+              placed under the same broker as the person who referred you.
+            </span>
+          </div>
+        ) : (
         <div className="space-y-1.5">
           <Label className="text-sm font-medium">Choose your broker</Label>
           {selectedBroker && !pickerOpen ? (
@@ -326,6 +352,7 @@ function RegisterPageInner() {
             <p className="text-xs text-destructive">{form.formState.errors.broker_id.message}</p>
           )}
         </div>
+        )}
 
         <Button
           type="submit"

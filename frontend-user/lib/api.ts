@@ -317,8 +317,10 @@ export const AuthAPI = {
     // ``user_code`` and stamps ``signup_origin`` accordingly. Optional —
     // omitting it preserves the pre-rollout behaviour (super-admin pool).
     referral_code?: string;
-    // MANDATORY — the broker the user picked to join under (signup picker).
-    broker_id: string;
+    // The broker the user picked to join under (signup picker). Required
+    // EXCEPT on a referral signup, where the referrer's own broker/admin
+    // chain is inherited instead.
+    broker_id?: string;
   }) => unwrap(api.post("/user/auth/register", body)),
   logout: (refresh_token?: string) => unwrap(api.post("/user/auth/logout", { refresh_token })),
   refresh: (refresh_token: string) => unwrap<TokenPair>(api.post("/user/auth/refresh", { refresh_token })),
