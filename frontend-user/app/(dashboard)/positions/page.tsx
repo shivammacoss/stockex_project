@@ -1036,6 +1036,14 @@ export default function PositionsPage() {
     { key: "symbol", header: "Symbol" },
     { key: "exchange", header: "Exch" },
     {
+      // Which way the position was opened. Mirrors the badge the mobile
+      // card already shows — without it a closed row gives no clue whether
+      // it was a long or a short.
+      key: "opened_side",
+      header: "Side",
+      render: (r) => <ClosedSideTag side={resolveClosedSide(r)} />,
+    },
+    {
       // For a closed row `quantity` has been zeroed by the matching engine.
       // Prefer the preserved `opening_quantity` (peak |qty| during the
       // position's lifecycle) so the user sees the size they actually held.
@@ -1044,10 +1052,10 @@ export default function PositionsPage() {
       align: "right",
       render: (r) => {
         const size = Number(r.opening_quantity ?? Math.abs(r.quantity ?? 0)) || 0;
-        // Direction is recorded on the realized leg — positive realized
-        // P&L on a long means long, etc. Fall back to neutral coloring
-        // when we can't infer.
-        const isLong = Number(r.realized_pnl ?? 0) >= 0 ? true : false;
+        // Colour by DIRECTION, not by outcome — a losing long is still a
+        // long. (This used to key off the sign of realized P&L, which made
+        // every loss render as a short.)
+        const isLong = resolveClosedSide(r) === "BUY";
         return (
           <span className={isLong ? "text-buy" : "text-sell"}>{fmtQty(size)}</span>
         );
@@ -2027,17 +2035,35 @@ function ClosedMobileList({ rows, loading }: { rows: any[]; loading: boolean }) 
   );
 }
 
+/** Direction of a CLOSED position row.
+ *
+ * `opened_side` survives the close (`quantity` is zeroed by the matching
+ * engine, so the sign is gone). Rows written before that field existed fall
+ * back to inferring from realized P&L — a coarse guess, but better than
+ * showing nothing. Shared by the desktop table and the mobile card so the
+ * two surfaces can never disagree about which way a trade went. */
+function resolveClosedSide(r: any): "BUY" | "SELL" {
+  const raw = String(r?.opened_side ?? "").toUpperCase();
+  if (raw === "BUY" || raw === "SELL") return raw;
+  return Number(r?.realized_pnl ?? 0) >= 0 ? "BUY" : "SELL";
+}
+
+/** Compact BUY/SELL pill for the closed-positions table cell. */
+function ClosedSideTag({ side }: { side: "BUY" | "SELL" }) {
+  return (
+    <span
+      className={cn(
+        "inline-block rounded px-1.5 py-0.5 text-[10px] font-bold leading-none",
+        side === "BUY" ? "bg-buy/15 text-buy" : "bg-sell/15 text-sell"
+      )}
+    >
+      {side}
+    </span>
+  );
+}
+
 function ClosedMobileCard({ row: r }: { row: any }) {
-  // Direction badge — opened_side survives the close (quantity is zero
-  // on closed rows). Falls back to inferring from realized P&L when an
-  // older row predates the field.
-  const sideRaw = String(r.opened_side ?? "").toUpperCase();
-  const side: "BUY" | "SELL" =
-    sideRaw === "BUY" || sideRaw === "SELL"
-      ? (sideRaw as "BUY" | "SELL")
-      : Number(r.realized_pnl ?? 0) >= 0
-        ? "BUY"
-        : "SELL";
+  const side = resolveClosedSide(r);
 
   const qty = Math.abs(Number(r.opening_quantity ?? r.quantity ?? 0));
   const pnl = Number(r.realized_pnl ?? 0);
