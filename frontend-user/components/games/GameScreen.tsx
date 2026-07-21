@@ -43,8 +43,18 @@ export function GameScreen({ id }: { id: GameUiId }) {
   const [prediction, setPrediction] = useState<"UP" | "DOWN" | null>(null);
   const [tickets, setTickets] = useState(1);
 
-  // Fixed 5-minute candles — no timeframe switcher.
-  const { data: kdata } = useGamesKlines(asset, "5m", asset === "btc" ? 5000 : 8000);
+  // Candle timeframe MATCHES the game window. A 15-min game reads a 15-min
+  // candle — a 5-min candle is meaningless here (three of them per window,
+  // none of which is the candle whose close decides the result). Derived from
+  // round_duration so any window length lines up.
+  const roundSec = cfg?.round_duration || 900;
+  const { ivStr, ivSec, ivLabel } = useMemo(() => {
+    if (roundSec >= 3600) return { ivStr: "1h", ivSec: 3600, ivLabel: "1-hour" };
+    if (roundSec >= 1800) return { ivStr: "30m", ivSec: 1800, ivLabel: "30-min" };
+    if (roundSec >= 900) return { ivStr: "15m", ivSec: 900, ivLabel: "15-min" };
+    return { ivStr: "5m", ivSec: 300, ivLabel: "5-min" };
+  }, [roundSec]);
+  const { data: kdata } = useGamesKlines(asset, ivStr, asset === "btc" ? 5000 : 8000);
   const candles: Candle[] = kdata?.candles || [];
 
   const live = meta.asset === "BTC" ? price?.btc : price?.nifty;
@@ -75,12 +85,39 @@ export function GameScreen({ id }: { id: GameUiId }) {
   const potential = amount * num(cfg?.win_multiplier);
   const mult = num(cfg?.win_multiplier) || 1.95;
 
-  // OHLC panels
-  const forming = candles[candles.length - 1];
-  const lastClosed = candles[candles.length - 2];
-  const formingLive = forming
-    ? { ...forming, close: liveNum || forming.close, high: Math.max(forming.high, liveNum || 0), low: liveNum ? Math.min(forming.low, liveNum) : forming.low }
-    : undefined;
+  // OHLC panels — selected by WALL-CLOCK bucket, not array position.
+  //
+  // The old `candles[len-1]` / `candles[len-2]` picked the forming and closed
+  // candles by index. Right at a candle boundary the feed appends/withholds
+  // the new forming candle between polls, so the index of "last closed"
+  // shifted every few seconds and the panel's O/H/L/C jumped around — the
+  // "12:00:XX ke baad baar-baar fluctuate" the user saw.
+  //
+  // Anchoring to the current interval bucket (Math.floor(now/iv)*iv) makes
+  // "last closed" the newest candle strictly BEFORE this bucket — a candle
+  // fully in the past, so it can't change within the window. `forming` is the
+  // candle for the current bucket (or synthesised from the live price if the
+  // feed hasn't emitted it yet). Nothing "closed" ever carries the live price.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const curBucket = Math.floor(nowSec / ivSec) * ivSec;
+  const formingBase = candles.find((c) => c.time === curBucket);
+  const formingLive: Candle | undefined = formingBase
+    ? {
+        ...formingBase,
+        close: liveNum || formingBase.close,
+        high: Math.max(formingBase.high, liveNum || 0),
+        low: liveNum ? Math.min(formingBase.low, liveNum) : formingBase.low,
+      }
+    : liveNum
+      ? { time: curBucket, open: liveNum, high: liveNum, low: liveNum, close: liveNum }
+      : undefined;
+  // Latest candle whose bucket has fully elapsed. Frozen for the whole window.
+  const lastClosed = useMemo(() => {
+    for (let i = candles.length - 1; i >= 0; i--) {
+      if (candles[i].time < curBucket) return candles[i];
+    }
+    return undefined;
+  }, [candles, curBucket]);
 
   // Window display times
   const closeAt = win?.canTrade ? new Date(Date.now() + win.secondsToClose * 1000) : null;
@@ -205,7 +242,7 @@ export function GameScreen({ id }: { id: GameUiId }) {
                   <span className="text-xs font-bold">{asset === "btc" ? "BTC/USDT" : "NIFTY 50"}</span>
                   <LiveDot live={!!live} label="LIVE" />
                 </div>
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">5-min O/H/L/C</span>
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{ivLabel} O/H/L/C</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 <OhlcPanel title="Forming" c={formingLive} accent />
