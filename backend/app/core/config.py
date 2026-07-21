@@ -189,7 +189,7 @@ class Settings(BaseSettings):
     BINANCE_OPTIONS_ENABLED: bool = False
     BINANCE_OPTIONS_EAPI_BASE: str = "https://eapi.binance.com"
     BINANCE_OPTIONS_UNDERLYINGS: str = "BTC"
-    BINANCE_OPTIONS_POLL_SEC: float = 6.0
+    BINANCE_OPTIONS_POLL_SEC: float = 2.0
     BINANCE_OPTIONS_MAX_EXPIRIES: int = 3
     BINANCE_OPTIONS_STRIKE_PCT: float = 15.0  # keep strikes within ±15% of spot
 
