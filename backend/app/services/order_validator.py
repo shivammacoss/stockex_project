@@ -850,19 +850,30 @@ async def validate(
     fixed_per_lot = to_decimal(s.get("fixed_margin_per_lot") or 0)
     calc_mode = s.get("margin_calc_mode")
     strike_rate = to_decimal(s.get("strike_margin_rate") or 0)
-    if (
+    strike_pct_sell = (
         calc_mode == "strike_pct"
-        and strike_rate > 0
         and instrument.option_type is not None
         and action == OrderAction.SELL
-        and instrument.strike is not None
-    ):
+        and not is_reducing
+        and not is_squareoff
+    )
+    if strike_pct_sell:
         # Option-WRITING margin on the strike notional (the standard for
         # selling options): margin = strike × qty × rate. The rate is the
         # admin-typed decimal (0.03 intraday / 0.06 overnight), already picked
         # for this order's product_type by the resolver. This ignores the tiny
         # premium `ref_price` on purpose — a sold option's risk is the
         # underlying exposure, not the premium collected.
+        #
+        # Guard: if the strike or rate is missing we must NOT silently fall back
+        # to the (much smaller) premium-based margin — that would let someone
+        # write a deep-OTM option for almost nothing. Reject instead.
+        if instrument.strike is None or strike_rate <= 0:
+            raise OrderRejectedError(
+                "Strike-based sell margin isn't configured for this contract "
+                "(missing strike or rate) — contact your admin.",
+                code="STRIKE_MARGIN_MISSING",
+            )
         strike_val = to_decimal(str(instrument.strike))
         margin_required = strike_val * to_decimal(quantity) * strike_rate
     elif calc_mode == "fixed" and fixed_per_lot > 0:
