@@ -154,6 +154,86 @@ async def resolve_result(
     return close, number, "result_time"
 
 
+async def _historical_close_for_day(game_key: str, result_dt) -> Decimal | None:
+    """PURE historical close for a PAST day's result time — used only by the
+    backfill. Unlike `resolve_result`'s auto path it never touches the live
+    quote (which carries only TODAY's value), so it's safe for old days.
+
+    BTC → the 1-minute Binance candle closing at result_dt (Binance keeps full
+    history). NIFTY → the last Zerodha minute candle of that session; returns
+    None on a holiday / weekend (no candles) so those days are simply skipped.
+    """
+    try:
+        if game_key == "btcNumber":
+            return await price_resolver.resolve_btc_price_at(result_dt)
+        from app.services.zerodha_service import zerodha
+
+        candles = await zerodha.get_historical(
+            price_resolver.NIFTY_TOKEN,
+            result_dt - timedelta(hours=6),
+            result_dt + timedelta(minutes=1),
+            "minute",
+        )
+        if candles:
+            cl = to_decimal(candles[-1]["close"])
+            if cl > 0:
+                return quantize_money(cl)
+    except Exception:
+        logger.debug("historical_close_for_day_failed game=%s", game_key, exc_info=True)
+    return None
+
+
+async def backfill_recent_results(game_key: str, days: int = 7) -> int:
+    """Self-heal the daily-results history. For each of the last `days` days
+    whose result time has passed and that has NO published GameResult, resolve
+    the historical close and insert one — so a day nobody bet on still shows in
+    the user's "Last N days results" strip.
+
+    BTC trades every calendar day, so every gap is filled. NIFTY only settles
+    on trading days; a holiday/weekend returns no historical candle and is left
+    out (correct — there was no session). Manual-mode games are still
+    backfilled from the feed here: a MISSING past day never had a hand-typed
+    value, and a real number beats a hole in the history.
+    """
+    settings = await GameSettings.load_singleton()
+    cfg = settings.games.get(game_key)
+    if cfg is None:
+        return 0
+
+    now = now_ist()
+    result_t = parse_hms(cfg.result_time)
+    filled = 0
+    for back in range(days):
+        d = ist_day(now - timedelta(days=back))
+        result_dt = ist_datetime_for_day(d).replace(
+            hour=result_t.hour, minute=result_t.minute, second=result_t.second
+        )
+        if now < result_dt + timedelta(seconds=_RESULT_GRACE_SEC):
+            continue  # that day's result time hasn't arrived yet
+        exists = await GameResult.find_one(
+            GameResult.game_key == game_key, GameResult.day == d,
+            GameResult.window_number == None,  # noqa: E711
+        )
+        if exists is not None:
+            continue
+        close = await _historical_close_for_day(game_key, result_dt)
+        if close is None or close <= 0:
+            continue
+        number = number_from_close(game_key, close)
+        try:
+            await GameResult(
+                game_key=game_key, day=d, window_number=None,
+                close_price=to_decimal128(close), result=str(number),
+                result_number=number, price_source="backfill",
+            ).insert()
+            filled += 1
+        except Exception:
+            pass  # raced with the live declare — fine
+    if filled:
+        logger.info("backfill_recent_results game=%s filled=%s", game_key, filled)
+    return filled
+
+
 async def declare_and_settle(game_key: str) -> int:
     settings = await GameSettings.load_singleton()
     cfg = settings.games.get(game_key)

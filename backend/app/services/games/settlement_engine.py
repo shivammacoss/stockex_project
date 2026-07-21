@@ -109,6 +109,11 @@ async def games_general_tick_loop(interval_sec: float = 30.0) -> None:
     global _general_stop
     _general_stop = False
     logger.info("games_general_tick_loop_started")
+    # Backfill the number-game daily-results history once on startup, then every
+    # ~2 h. This heals any gap (a day nobody bet on, or a worker restart across
+    # result time) so the user's "Last N days results" strip has no holes.
+    _backfill_every = max(1, int(7200 / interval_sec))
+    _tick = 0
     while not _general_stop:
         await _safe("niftyUpDown", updown_service.declare_and_settle("niftyUpDown"))
         await _safe("niftyBracket", bracket_service.declare_and_settle())
@@ -117,6 +122,10 @@ async def games_general_tick_loop(interval_sec: float = 30.0) -> None:
         await _safe("niftyJackpot", jackpot_service.declare_and_settle("niftyJackpot"))
         # 5 PM sweep — refund any NIFTY bet that never resolved (no-op before 5 PM).
         await _safe("cancel5pm", cancel_stale_nifty_bets())
+        if _tick % _backfill_every == 0:
+            await _safe("backfillNiftyNumber", number_service.backfill_recent_results("niftyNumber"))
+            await _safe("backfillBtcNumber", number_service.backfill_recent_results("btcNumber"))
+        _tick += 1
         try:
             await asyncio.sleep(interval_sec)
         except asyncio.CancelledError:
