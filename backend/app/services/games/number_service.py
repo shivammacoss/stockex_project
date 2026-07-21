@@ -20,10 +20,15 @@ from app.core.exceptions import (
     GameWindowClosedError,
 )
 from app.core.redis_client import publish
-from app.models.games.bets import GameBetStatus, GameResult, NumberBet
+from app.models.games.bets import (
+    GameBetStatus,
+    GameManualResult,
+    GameResult,
+    NumberBet,
+)
 from app.models.games.settings import GameSettings
 from app.services.games import price_resolver, wallet_service
-from app.services.games.common import ist_datetime_for_day, parse_hms
+from app.services.games.common import ist_datetime_for_day, ist_day, parse_hms
 from app.services.games.payout_math import compute_number_payout
 from app.utils.decimal_utils import quantize_money, to_decimal, to_decimal128
 from app.utils.time_utils import now_ist, now_utc
@@ -112,6 +117,43 @@ async def place_bet(
     return bet
 
 
+def number_from_close(game_key: str, close) -> int:
+    """Winning two-digit number for a number game, given a closing price.
+    BTC → last two integer digits; NIFTY → the two fractional digits."""
+    if game_key == "btcNumber":
+        return price_resolver.btc_number_from_close(close)
+    return price_resolver.nifty_number_from_close(close)
+
+
+async def resolve_result(
+    game_key: str, day: str, cfg, result_dt
+) -> tuple[Decimal | None, int | None, str]:
+    """Resolve (close_price, result_number, source) for a number game's day.
+
+    Manual mode (`cfg.auto_result` False): read the super-admin's typed
+    `GameManualResult`. If none typed yet, return (None, None, "manual_pending")
+    so the settler WAITS — it must never silently fall back to the feed when
+    the admin has chosen to set the result by hand.
+
+    Auto mode (default): derive from the live broker close, exactly as before.
+    """
+    if not cfg.auto_result:
+        mr = await GameManualResult.find_one(
+            GameManualResult.game_key == game_key, GameManualResult.day == day
+        )
+        if mr is None:
+            return None, None, "manual_pending"
+        close = to_decimal(mr.close_price) if mr.close_price is not None else None
+        return close, int(mr.result_number), "manual"
+
+    if game_key == "btcNumber":
+        close = await price_resolver.resolve_btc_price_at(result_dt)
+    else:
+        close = await price_resolver.resolve_nifty_price_at(result_dt)
+    number = number_from_close(game_key, close) if close else None
+    return close, number, "result_time"
+
+
 async def declare_and_settle(game_key: str) -> int:
     settings = await GameSettings.load_singleton()
     cfg = settings.games.get(game_key)
@@ -121,14 +163,27 @@ async def declare_and_settle(game_key: str) -> int:
     pending = await NumberBet.find(
         NumberBet.game_key == game_key, NumberBet.status == GameBetStatus.PENDING
     ).to_list()
-    if not pending:
-        return 0
 
     now = now_ist()
     result_t = parse_hms(cfg.result_time)
     by_day: dict[str, list[NumberBet]] = {}
     for b in pending:
         by_day.setdefault(b.bet_date, []).append(b)
+
+    # Always DECLARE today's result at result_time, even with zero pending
+    # bets — the user side ("show at 3:45") reads the published GameResult, so
+    # it must exist whether or not anyone played. `bets` is then an empty list
+    # and the settle loop below is a no-op for it.
+    today = ist_day(now)
+    if today not in by_day:
+        result_dt_today = ist_datetime_for_day(today).replace(
+            hour=result_t.hour, minute=result_t.minute, second=result_t.second
+        )
+        if now >= result_dt_today + timedelta(seconds=_RESULT_GRACE_SEC):
+            by_day[today] = []
+
+    if not by_day:
+        return 0
 
     settled = 0
     for day, bets in by_day.items():
@@ -138,16 +193,16 @@ async def declare_and_settle(game_key: str) -> int:
         if now < result_dt + timedelta(seconds=_RESULT_GRACE_SEC):
             continue
 
-        if game_key == "btcNumber":
-            close = await price_resolver.resolve_btc_price_at(result_dt)
-            result_number = price_resolver.btc_number_from_close(close) if close else None
-        else:
-            close = await price_resolver.resolve_nifty_price_at(result_dt)
-            result_number = price_resolver.nifty_number_from_close(close) if close else None
-        if close is None or result_number is None:
-            continue  # retry next tick
+        close, result_number, source = await resolve_result(game_key, day, cfg, result_dt)
+        if result_number is None:
+            # Manual mode waiting for the admin, or the feed is briefly
+            # unavailable — retry next tick. Nothing is settled or published.
+            # (In manual mode a typed NUMBER is enough; `close` is only for
+            # display, so we key the wait on result_number, not close.)
+            continue
 
-        # Declared-guard row (unique on game_key/day/window=None).
+        # Declared-guard row (unique on game_key/day/window=None). In manual
+        # mode the admin may type only the number — store 0 close then.
         existing = await GameResult.find_one(
             GameResult.game_key == game_key, GameResult.day == day,
             GameResult.window_number == None,  # noqa: E711
@@ -156,8 +211,9 @@ async def declare_and_settle(game_key: str) -> int:
             try:
                 await GameResult(
                     game_key=game_key, day=day, window_number=None,
-                    close_price=to_decimal128(close), result=str(result_number),
-                    result_number=result_number, price_source="result_time",
+                    close_price=to_decimal128(close) if close is not None else to_decimal128(Decimal("0")),
+                    result=str(result_number),
+                    result_number=result_number, price_source=source,
                 ).insert()
             except Exception:
                 pass

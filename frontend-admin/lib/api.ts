@@ -227,6 +227,15 @@ export const AdminGamesAPI = {
     unwrap<any>(api.put(`/admin/games/settings/game/${gameId}`, body)),
   toggleGame: (gameId: string, enabled: boolean) =>
     unwrap<any>(api.patch(`/admin/games/settings/game/${gameId}/toggle`, { enabled })),
+  // Manual daily result override (number games)
+  manualResult: (gameId: string, day?: string) =>
+    unwrap<any>(api.get(`/admin/games/manual-result/${gameId}`, { params: day ? { day } : {} })),
+  setManualResult: (
+    gameId: string,
+    body: { close_price?: string; result_number?: number; day?: string },
+  ) => unwrap<any>(api.put(`/admin/games/manual-result/${gameId}`, body)),
+  clearManualResult: (gameId: string, day?: string) =>
+    unwrap<any>(api.delete(`/admin/games/manual-result/${gameId}`, { params: day ? { day } : {} })),
   toggleAll: (enabled: boolean) =>
     unwrap<any>(api.patch("/admin/games/settings/toggle-all", { enabled })),
   setMaintenance: (body: { maintenance_mode: boolean; maintenance_message?: string }) =>

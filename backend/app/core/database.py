@@ -93,6 +93,7 @@ def _document_models() -> list[type["Document"]]:
     from app.models.games.settings import GameSettings
     from app.models.games.bets import (
         BracketTrade,
+        GameManualResult,
         GameResult,
         JackpotBank,
         JackpotBid,
@@ -175,6 +176,7 @@ def _document_models() -> list[type["Document"]]:
         GamesWalletLedger,
         GameSettings,
         GameResult,
+        GameManualResult,
         UpDownWindowSettlement,
         UpDownBet,
         NumberBet,

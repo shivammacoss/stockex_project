@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Gamepad2, GitBranch, Power, Save, Wrench } from "lucide-react";
+import { Gamepad2, GitBranch, Power, Save, Wrench, Zap, Pencil, CheckCircle2, Lock } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -170,6 +170,9 @@ function GameCard({ gameKey, cfg }: { gameKey: string; cfg: any }) {
             </section>
           );
         })}
+        {(gameKey === "niftyNumber" || gameKey === "btcNumber") && (
+          <ResultControl gameKey={gameKey} autoResult={cfg?.auto_result !== false} />
+        )}
         <div className="flex justify-end pt-1">
           <Button size="sm" loading={save.isPending} onClick={() => save.mutate()}>
             <Save className="size-4" />
@@ -178,6 +181,165 @@ function GameCard({ gameKey, cfg }: { gameKey: string; cfg: any }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Derive the winning two-digit number from a typed closing price, the same
+ *  way the backend does: NIFTY → the two fractional digits (24072.75 → 75);
+ *  BTC → the integer part's last two digits (75242.89 → 42). */
+function deriveNumber(gameKey: string, priceStr: string): number | null {
+  const p = Number(priceStr);
+  if (!priceStr || !isFinite(p) || p <= 0) return null;
+  if (gameKey === "btcNumber") return Math.floor(p) % 100;
+  return Math.floor((p - Math.floor(p)) * 100 + 1e-6) % 100;
+}
+
+/** Per-game "Result Control" — the auto(Zerodha) ↔ manual switch plus the
+ *  admin-typed daily result, the live auto preview and the declared state.
+ *  Self-contained: owns its own query + mutations so a save here doesn't
+ *  disturb the rest of the game card. */
+function ResultControl({ gameKey, autoResult }: { gameKey: string; autoResult: boolean }) {
+  const qc = useQueryClient();
+  const label = GAME_LABELS[gameKey] || gameKey;
+  const { data } = useQuery({
+    queryKey: ["admin", "games", "manual-result", gameKey],
+    queryFn: () => AdminGamesAPI.manualResult(gameKey),
+    refetchInterval: 15000,
+  });
+
+  const [price, setPrice] = useState("");
+  useEffect(() => {
+    setPrice(data?.manual?.close_price ?? "");
+  }, [data?.manual?.close_price]);
+
+  const declared = data?.declared ?? null;
+  const auto = data?.auto_preview ?? null;
+  const derived = deriveNumber(gameKey, price);
+
+  const toggleAuto = useMutation({
+    mutationFn: (nextAuto: boolean) => AdminGamesAPI.updateGame(gameKey, { auto_result: nextAuto }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "games", "settings"] });
+      qc.invalidateQueries({ queryKey: ["admin", "games", "manual-result", gameKey] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Could not switch"),
+  });
+
+  const saveManual = useMutation({
+    mutationFn: () => AdminGamesAPI.setManualResult(gameKey, { close_price: price }),
+    onSuccess: (r: any) => {
+      toast.success(
+        r?.settled_now > 0
+          ? `Result #${r.result_number} saved — settled ${r.settled_now} bet(s)`
+          : `Result #${r?.result_number} saved`,
+      );
+      qc.invalidateQueries({ queryKey: ["admin", "games", "manual-result", gameKey] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Save failed"),
+  });
+
+  const clearManual = useMutation({
+    mutationFn: () => AdminGamesAPI.clearManualResult(gameKey),
+    onSuccess: () => {
+      setPrice("");
+      qc.invalidateQueries({ queryKey: ["admin", "games", "manual-result", gameKey] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Could not clear"),
+  });
+
+  return (
+    <section className="space-y-3 rounded-lg border border-atm/25 bg-atm/[0.03] p-3">
+      <div className="flex flex-col gap-2 border-b border-border pb-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-0.5">
+          <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+            <Zap className="size-3.5 text-atm" />
+            Result Control · {data?.result_time ?? "15:45:00"}
+          </h4>
+          <p className="text-[11px] text-muted-foreground">
+            ON = result comes automatically from the Zerodha close. OFF = you type the day&apos;s
+            result and it shows to users at result time.
+          </p>
+        </div>
+        {/* Auto (Zerodha) switch */}
+        <button
+          type="button"
+          disabled={toggleAuto.isPending}
+          onClick={() => toggleAuto.mutate(!autoResult)}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+            autoResult
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-atm/40 bg-atm/10 text-atm",
+          )}
+        >
+          <span className={cn("relative h-4 w-7 rounded-full transition-colors", autoResult ? "bg-primary" : "bg-atm")}>
+            <span className={cn("absolute top-0.5 size-3 rounded-full bg-white transition-all", autoResult ? "left-[14px]" : "left-0.5")} />
+          </span>
+          {autoResult ? "Auto (Zerodha)" : "Manual"}
+        </button>
+      </div>
+
+      {/* Live auto preview — always visible so the admin sees the Zerodha value */}
+      <div className="flex items-center justify-between rounded-md border border-border bg-background/60 px-2.5 py-1.5">
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Zap className="size-3 text-primary" /> Zerodha now
+        </span>
+        <span className="font-mono text-xs font-semibold">
+          {auto?.close_price ? `${auto.close_price} → #${auto.result_number}` : "—"}
+        </span>
+      </div>
+
+      {declared ? (
+        <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs">
+          <CheckCircle2 className="size-4 shrink-0 text-primary" />
+          <span>
+            Declared today: <span className="font-bold">#{declared.result_number}</span>
+            {declared.close_price && declared.close_price !== "0" ? ` @ ${declared.close_price}` : ""}
+            <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+              {declared.source === "manual" ? "manual" : "auto"}
+            </span>
+          </span>
+          <Lock className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+        </div>
+      ) : autoResult ? (
+        <p className="text-[11px] text-muted-foreground">
+          Auto mode — the winning number will be taken from the Zerodha close at result time. Switch
+          to <span className="font-semibold text-atm">Manual</span> to type it yourself.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1">
+              <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Pencil className="size-3" /> Closing price {gameKey === "niftyNumber" ? "(e.g. 24072.75)" : "(e.g. 65432.89)"}
+              </Label>
+              <Input
+                inputMode="decimal"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder={gameKey === "niftyNumber" ? "24072.75" : "65432.89"}
+              />
+            </div>
+            <div className="rounded-md border border-atm/30 bg-atm/10 px-3 py-2 text-center">
+              <div className="text-[9px] uppercase tracking-wide text-muted-foreground">Winning #</div>
+              <div className="font-mono text-lg font-bold leading-none text-atm">
+                {derived !== null ? String(derived).padStart(2, "0") : "—"}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            {data?.manual && (
+              <Button size="sm" variant="outline" loading={clearManual.isPending} onClick={() => clearManual.mutate()}>
+                Clear
+              </Button>
+            )}
+            <Button size="sm" loading={saveManual.isPending} disabled={derived === null} onClick={() => saveManual.mutate()}>
+              <Save className="size-4" /> Save result
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

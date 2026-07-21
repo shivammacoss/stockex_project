@@ -105,6 +105,184 @@ async def set_maintenance(payload: dict, _: SuperAdmin):
     return APIResponse(data={"maintenance_mode": s.maintenance_mode})
 
 
+# ── Manual daily result override (number games) ──────────────────────
+# The super-admin can turn a number game's `auto_result` OFF and type the
+# day's result by hand. These endpoints back the "Result Control" card. The
+# toggle itself saves through PUT /settings/game/{id} (auto_result is a
+# GameConfig field); here we manage the per-day typed value + expose what the
+# auto (Zerodha) result would be right now, side by side.
+_NUMBER_GAMES = {"niftyNumber", "btcNumber"}
+
+
+def _result_dt_for_today(cfg):
+    from app.services.games.common import ist_datetime_for_day, ist_day, parse_hms
+
+    t = parse_hms(cfg.result_time)
+    day = ist_day()
+    return day, ist_datetime_for_day(day).replace(hour=t.hour, minute=t.minute, second=t.second)
+
+
+async def _auto_preview(game_key: str, cfg) -> dict:
+    """What the AUTO (Zerodha) path would give right now — regardless of the
+    toggle — so the admin sees the live-derived result next to the manual one."""
+    from app.services.games import number_service, price_resolver
+
+    _, result_dt = _result_dt_for_today(cfg)
+    try:
+        if game_key == "btcNumber":
+            close = await price_resolver.resolve_btc_price_at(result_dt)
+        else:
+            close = await price_resolver.resolve_nifty_price_at(result_dt)
+    except Exception:
+        close = None
+    number = number_service.number_from_close(game_key, close) if close else None
+    return {"close_price": str(close) if close is not None else None, "result_number": number}
+
+
+@router.get("/manual-result/{game_id}", response_model=APIResponse[dict])
+async def get_manual_result(game_id: str, _: SuperAdmin, day: str | None = None):
+    from app.models.games.bets import GameManualResult, GameResult
+    from app.services.games.common import ist_day
+
+    key = ids.settings_key(game_id)
+    if key is None or key not in _NUMBER_GAMES:
+        raise HTTPException(status_code=404, detail="Manual result is only for number games")
+    s = await GameSettings.load_singleton()
+    cfg = s.games.get(key) or GameConfig()
+    d = day or ist_day()
+
+    mr = await GameManualResult.find_one(
+        GameManualResult.game_key == key, GameManualResult.day == d
+    )
+    declared = await GameResult.find_one(
+        GameResult.game_key == key, GameResult.day == d,
+        GameResult.window_number == None,  # noqa: E711
+    )
+    return APIResponse(
+        data={
+            "game": key,
+            "day": d,
+            "auto_result": bool(cfg.auto_result),
+            "result_time": cfg.result_time,
+            "manual": (
+                {
+                    "result_number": mr.result_number,
+                    "close_price": str(mr.close_price) if mr.close_price is not None else None,
+                    "set_at": mr.updated_at.isoformat() if getattr(mr, "updated_at", None) else None,
+                }
+                if mr
+                else None
+            ),
+            "auto_preview": await _auto_preview(key, cfg),
+            "declared": (
+                {
+                    "result_number": declared.result_number,
+                    "close_price": str(declared.close_price),
+                    "source": declared.price_source,
+                }
+                if declared
+                else None
+            ),
+        }
+    )
+
+
+@router.put("/manual-result/{game_id}", response_model=APIResponse[dict])
+async def set_manual_result(game_id: str, payload: dict, admin: SuperAdmin):
+    from app.models.games.bets import GameManualResult, GameResult
+    from app.services.games import number_service
+    from app.services.games.common import ist_day
+    from app.utils.decimal_utils import quantize_money, to_decimal, to_decimal128
+
+    key = ids.settings_key(game_id)
+    if key is None or key not in _NUMBER_GAMES:
+        raise HTTPException(status_code=404, detail="Manual result is only for number games")
+    d = str(payload.get("day") or ist_day())
+
+    # Refuse to change a result the settler has ALREADY published — that would
+    # desync the users who saw it (and re-paying settled bets is out of scope).
+    already = await GameResult.find_one(
+        GameResult.game_key == key, GameResult.day == d,
+        GameResult.window_number == None,  # noqa: E711
+    )
+    if already is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Result for {d} is already declared (#{already.result_number}) — it can't be changed.",
+        )
+
+    # Accept a closing price (primary) and/or a two-digit number. If a price is
+    # given, DERIVE the number from it so the two always agree.
+    close_raw = payload.get("close_price")
+    num_raw = payload.get("result_number")
+    close_dec = None
+    number: int | None = None
+    if close_raw not in (None, ""):
+        close_dec = quantize_money(to_decimal(close_raw))
+        number = number_service.number_from_close(key, close_dec)
+    elif num_raw not in (None, ""):
+        number = int(num_raw) % 100
+    if number is None:
+        raise HTTPException(status_code=422, detail="Provide a closing price or a winning number")
+
+    mr = await GameManualResult.find_one(
+        GameManualResult.game_key == key, GameManualResult.day == d
+    )
+    if mr is None:
+        mr = GameManualResult(
+            game_key=key, day=d, result_number=number,
+            close_price=to_decimal128(close_dec) if close_dec is not None else None,
+            set_by=admin.id,
+        )
+        await mr.insert()
+    else:
+        mr.result_number = number
+        mr.close_price = to_decimal128(close_dec) if close_dec is not None else None
+        mr.set_by = admin.id
+        await mr.save()
+
+    # If it's already past result_time today, publish immediately instead of
+    # waiting for the 30 s settlement tick.
+    settled = 0
+    s = await GameSettings.load_singleton()
+    cfg = s.games.get(key) or GameConfig()
+    if d == ist_day() and not cfg.auto_result:
+        try:
+            settled = await number_service.declare_and_settle(key)
+        except Exception:
+            settled = 0
+
+    return APIResponse(
+        data={"game": key, "day": d, "result_number": number,
+              "close_price": str(close_dec) if close_dec is not None else None,
+              "settled_now": settled},
+        message="Manual result saved",
+    )
+
+
+@router.delete("/manual-result/{game_id}", response_model=APIResponse[dict])
+async def clear_manual_result(game_id: str, _: SuperAdmin, day: str | None = None):
+    from app.models.games.bets import GameManualResult, GameResult
+    from app.services.games.common import ist_day
+
+    key = ids.settings_key(game_id)
+    if key is None or key not in _NUMBER_GAMES:
+        raise HTTPException(status_code=404, detail="Manual result is only for number games")
+    d = day or ist_day()
+    declared = await GameResult.find_one(
+        GameResult.game_key == key, GameResult.day == d,
+        GameResult.window_number == None,  # noqa: E711
+    )
+    if declared is not None:
+        raise HTTPException(status_code=409, detail="Already declared — can't clear.")
+    mr = await GameManualResult.find_one(
+        GameManualResult.game_key == key, GameManualResult.day == d
+    )
+    if mr is not None:
+        await mr.delete()
+    return APIResponse(data={"game": key, "day": d, "cleared": True})
+
+
 # ── Games → main withdrawal approvals ────────────────────────────────
 @router.get("/withdrawals", response_model=APIResponse[list])
 async def list_withdrawals(_: SuperAdmin, status: str = "PENDING"):

@@ -68,6 +68,39 @@ class GameResult(TimestampMixin):
         ]
 
 
+# ── Admin manual result override (number games) ──────────────────────────
+class GameManualResult(TimestampMixin):
+    """A super-admin-typed daily result for a number game.
+
+    Only consulted when the game's `auto_result` toggle is OFF (manual mode).
+    One row per (game_key, day). `close_price` is the price the admin typed
+    (e.g. NIFTY 24072.75); `result_number` is the winning two-digit number
+    derived from it (75). Storing both keeps the user display — which shows
+    the closing price AND the number — consistent with the auto path.
+
+    Settlement reads this instead of the Zerodha close. It is NOT the
+    published result on its own: the settler still writes the usual
+    `GameResult` row from it at result_time, so the existing user endpoints
+    and the "show at 3:45" gating work unchanged.
+    """
+
+    game_key: str
+    day: str  # IST "YYYY-MM-DD"
+    result_number: int
+    close_price: Money | None = None
+    set_by: PydanticObjectId | None = None
+
+    class Settings:
+        name = "game_manual_results"
+        indexes = [
+            IndexModel(
+                [("game_key", ASCENDING), ("day", ASCENDING)],
+                unique=True,
+                name="game_manual_result_unique_day",
+            ),
+        ]
+
+
 # ── Idempotency guard — the double-credit backstop ───────────────────────
 class UpDownWindowSettlement(TimestampMixin):
     """One row per (user, game, window, day). Unique index makes a window

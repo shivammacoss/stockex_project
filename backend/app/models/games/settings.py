@@ -78,6 +78,13 @@ class GameConfig(BaseModel):
     max_tickets_per_number: int = 2
     all_decimals: bool = False  # False → .00–.95 step 5 ; True → .00–.99
 
+    # Result source (number games). True (default) → the winning number is
+    # derived from the live broker/Zerodha close at result_time. False → the
+    # super-admin types the day's result manually (GameManualResult) and the
+    # settler waits for it instead of reading the feed. Surfaced as an "Auto
+    # result (Zerodha)" switch in the admin panel — ON = auto, OFF = manual.
+    auto_result: bool = True
+
     # Bracket
     bracket_gap: float = 20.0
     bracket_gap_type: str = "point"  # "point" | "percentage"
