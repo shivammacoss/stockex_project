@@ -306,11 +306,17 @@ function TerminalOptionChainPicker({
     enabled: !!activeToken && open,
     staleTime: 5 * 60_000,
   });
+  // On the Crypto wallet with no instrument selected yet, default the chain to
+  // BTC (the only crypto-options underlying in phase 1) so the picker opens on
+  // the crypto chain instead of falling back to NIFTY.
+  const walletParam = (searchParams?.get("wallet") ?? "").toUpperCase();
+  const activeSymbol = (activeInstrument as any)?.symbol ?? null;
+  const initialUnderlying = activeSymbol ?? (walletParam === "CRYPTO" ? "BTC" : null);
   return (
     <OptionChainPicker
       open={open}
       onOpenChange={onOpenChange}
-      initialUnderlying={(activeInstrument as any)?.symbol ?? null}
+      initialUnderlying={initialUnderlying}
       onPick={onPick}
     />
   );

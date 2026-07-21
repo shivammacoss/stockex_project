@@ -83,6 +83,7 @@ const BUCKETS: Bucket[] = [
   { key: "commodities", label: "Commodities", mode: "filter", segments: ["COMMODITIES"], adminRows: ["COMMODITIES"] },
   { key: "forex", label: "Forex", mode: "filter", segments: ["FOREX"], adminRows: ["FOREX"] },
   { key: "crypto", label: "Crypto", mode: "filter", segments: ["CRYPTO_PERPETUAL", "CRYPTO_SPOT", "CRYPTO_FUTURE"], adminRows: ["CRYPTO"] },
+  { key: "crypto_opt", label: "Crypto OPT", mode: "filter", segments: ["CRYPTO_OPTION_BUY", "CRYPTO_OPTION_SELL"], adminRows: ["CRYPTO_OPT"] },
 ];
 
 /**

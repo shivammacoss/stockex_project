@@ -69,7 +69,9 @@ export function TerminalAccountBar({ onOpenPicker }: { onOpenPicker: () => void 
   }
 
   const accent = WALLET_ACCENT[kind];
-  const showOptionChain = kind === "NSE_BSE";
+  // Option chain button: the NSE/BSE wallet (index/stock options) and the
+  // Crypto wallet (Binance BTC options, view-only phase 1).
+  const showOptionChain = kind === "NSE_BSE" || kind === "CRYPTO";
 
   return (
     <div className="flex items-center gap-2">

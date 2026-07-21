@@ -64,6 +64,7 @@ const BUCKETS: Bucket[] = [
   { key: "indices", label: "Indices", group: "asset", mode: "filter", segments: ["INDICES"], adminRows: ["INDICES"] },
   { key: "commodities", label: "Commodities", group: "asset", mode: "filter", segments: ["COMMODITIES"], adminRows: ["COMMODITIES"] },
   { key: "crypto", label: "Crypto", group: "asset", mode: "filter", segments: ["CRYPTO_PERPETUAL", "CRYPTO_SPOT", "CRYPTO_FUTURE"], adminRows: ["CRYPTO"] },
+  { key: "crypto_opt", label: "Crypto OPT", group: "asset", mode: "filter", segments: ["CRYPTO_OPTION_BUY", "CRYPTO_OPTION_SELL"], adminRows: ["CRYPTO_OPT"] },
 
   // NSE granular — managed (user adds instruments explicitly)
   { key: "nse_eq", label: "NSE EQ", group: "nse", mode: "filter", segments: ["NSE_EQUITY"], adminRows: ["NSE_EQ"], managed: true },
@@ -94,7 +95,7 @@ const WALLET_BUCKETS: Record<string, string[]> = {
   // not surface international Infoway indices/stocks, and "All" mixed segments.
   NSE_BSE: ["favorites", "nse_eq", "nse_fut", "nse_opt", "bse_eq", "bse_fut", "bse_opt"],
   MCX: ["favorites", "mcx_fut", "mcx_opt", "commodities"],
-  CRYPTO: ["favorites", "crypto"],
+  CRYPTO: ["favorites", "crypto", "crypto_opt"],
   FOREX: ["favorites", "forex"],
 };
 
