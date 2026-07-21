@@ -306,7 +306,11 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   // Strike-based option-SELL margin: strike × qty × rate (mirrors the backend
   // validator's strike_pct branch). Rate is the decimal from segment settings.
   const strikeMarginRate = Number(effSettings?.strike_margin_rate ?? 0);
-  const instrumentStrike = Number((instrument as any)?.strike ?? 0);
+  // Prefer the strike the settings endpoint resolved for THIS token (always
+  // present); fall back to the instrument object only if that's missing. The
+  // instrument passed into the panel from search/watchlist often lacks strike,
+  // which made the strike_pct margin preview fall through to ₹0.
+  const instrumentStrike = Number(effSettings?.strike ?? (instrument as any)?.strike ?? 0);
   const marginPerLot = useMemo(() => {
     // Strike-based option SELL: margin = strike × lot_size × rate (per lot).
     // Only on the SELL side; buying an option stays premium-based below.
@@ -1378,11 +1382,13 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
             <span className="font-tabular">
               {!effSettings
                 ? "Fixed"
-                : marginCalcMode === "fixed"
-                  ? "Fixed"
-                  : marginCalcMode === "times"
-                    ? `${Math.round(serverLeverage)}×`
-                    : `${(serverMarginPct * 100).toFixed(2)}%`}
+                : marginCalcMode === "strike_pct" && side === "SELL"
+                  ? `${(strikeMarginRate * 100).toFixed(2)}% strike`
+                  : marginCalcMode === "fixed"
+                    ? "Fixed"
+                    : marginCalcMode === "times"
+                      ? `${Math.round(serverLeverage)}×`
+                      : `${(serverMarginPct * 100).toFixed(2)}%`}
               {" · "}
               {formatINR(marginPerLot)}/lot
             </span>

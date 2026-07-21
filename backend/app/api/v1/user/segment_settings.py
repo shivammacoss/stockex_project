@@ -184,6 +184,14 @@ async def get_effective_for_instrument(
         "overnight_margin_percentage": s.get("overnight_margin_percentage"),
         "overnight_leverage": s.get("overnight_leverage"),
         "overnight_fixed_margin_per_lot": s.get("overnight_fixed_margin_per_lot"),
+        # Strike-based option-SELL margin (mode "strike_pct"): margin =
+        # strike × qty × rate. The rate is per-side/product-aware from the
+        # resolver; the strike comes from THIS instrument (the endpoint knows
+        # the token) so the OrderPanel doesn't depend on `instrument.strike`
+        # being present in whatever object opened the panel.
+        "strike_margin_rate": s.get("strike_margin_rate"),
+        "overnight_strike_margin_rate": s.get("overnight_strike_margin_rate"),
+        "strike": (lambda v: float(str(v)) if v is not None else None)(getattr(instrument, "strike", None)),
         # Commission preview
         "commission_type": s.get("commission_type"),
         "commission_value": s.get("commission_value"),
