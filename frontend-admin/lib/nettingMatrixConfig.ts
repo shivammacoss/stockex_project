@@ -93,10 +93,16 @@ export const CATEGORY_FIELDS: Record<string, FieldDef[]> = {
       label: "Opt Sell Mode",
       type: "select",
       optionOnly: true,
+      // "Strike %" = option-writing margin on the STRIKE notional:
+      //   margin = strike × qty × rate, where rate is the decimal typed in
+      //   Opt Sell Intraday / Overnight (0.03 = 3% of strike, 0.06 = 6%).
+      // Sell-only (buy stays premium-based). e.g. NIFTY 25000 × 65 lot ×
+      // 0.03 = ₹48,750 intraday margin per lot sold.
       options: [
         { v: "", l: "Inherit" },
         { v: "fixed", l: "Fixed" },
         { v: "times", l: "Times" },
+        { v: "strike_pct", l: "Strike %" },
       ],
     },
     { key: "optionSellIntraday", label: "Opt Sell Intraday", type: "number", optionOnly: true },

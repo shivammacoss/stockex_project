@@ -2202,7 +2202,11 @@ def _to_legacy_dict(
             margin_mode = side_mode
     elif is_option_sell:
         side_mode = pick("optionSellMarginCalcMode", None)
-        if side_mode in ("fixed", "times", "percent"):
+        # `strike_pct` is a SELL-only mode: option-writing margin computed on the
+        # STRIKE notional (strike × qty × rate), not the premium — the standard
+        # for option selling. The rate the admin types is a decimal fraction
+        # (0.03 intraday / 0.06 overnight → 3% / 6% of strike notional).
+        if side_mode in ("fixed", "times", "percent", "strike_pct"):
             margin_mode = side_mode
 
     # `Times` mode quotes a leverage multiplier (e.g. 700×), which is symmetric
@@ -2334,6 +2338,8 @@ def _to_legacy_dict(
     #           docs continue to resolve.
     fixed_margin_per_lot = 0.0
     overnight_fixed_margin_per_lot = 0.0
+    strike_margin_rate = 0.0
+    overnight_strike_margin_rate = 0.0
     if margin_mode == "times":
         # Times mode is SYMMETRIC by default — the leverage applies to BOTH
         # intraday and carry-forward (a broker doesn't quote "2x intraday but
@@ -2352,6 +2358,18 @@ def _to_legacy_dict(
         leverage = 1.0
         margin_pct = 0.0
         overnight_fixed_margin_per_lot = float(effective_overnight_pct or 0.0)
+        overnight_leverage = 1.0
+        overnight_margin_pct = 0.0
+    elif margin_mode == "strike_pct":
+        # Strike-based option-SELL margin: the validator computes
+        #   margin = strike × qty × strike_margin_rate
+        # `effective_margin_pct` here is the admin-typed decimal rate
+        # (product-aware: intraday 0.03 vs overnight 0.06). Zero out the
+        # legacy triple so any consumer that ignores strike_pct produces 0.
+        strike_margin_rate = float(effective_margin_pct or 0.0)
+        overnight_strike_margin_rate = float(effective_overnight_pct or 0.0)
+        leverage = 1.0
+        margin_pct = 0.0
         overnight_leverage = 1.0
         overnight_margin_pct = 0.0
     else:  # legacy "percent"
@@ -2459,6 +2477,12 @@ def _to_legacy_dict(
         # path entirely, so the configured value is the literal margin
         # locked per lot.
         "fixed_margin_per_lot": float(fixed_margin_per_lot),
+        # Strike-based option-SELL rate — non-zero only when mode ==
+        # "strike_pct". The validator computes margin = strike × qty × rate.
+        # Product-aware: this carries the intraday OR overnight rate for the
+        # order's product_type (the resolver already picked which).
+        "strike_margin_rate": float(strike_margin_rate),
+        "overnight_strike_margin_rate": float(overnight_strike_margin_rate),
         # ── Carry-forward (overnight) equivalents ─────────────────────
         # Computed in parallel with the intraday set above so the trade
         # panel can render both tiles ("Intraday ₹X" / "Carry-forward ₹Y")

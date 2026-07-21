@@ -303,7 +303,21 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   // a flat ₹/lot, the rest of the price × lot_size math is bypassed.
   const marginCalcMode = String(effSettings?.margin_calc_mode || "").toLowerCase();
   const fixedMarginPerLot = Number(effSettings?.fixed_margin_per_lot ?? 0);
+  // Strike-based option-SELL margin: strike × qty × rate (mirrors the backend
+  // validator's strike_pct branch). Rate is the decimal from segment settings.
+  const strikeMarginRate = Number(effSettings?.strike_margin_rate ?? 0);
+  const instrumentStrike = Number((instrument as any)?.strike ?? 0);
   const marginPerLot = useMemo(() => {
+    // Strike-based option SELL: margin = strike × lot_size × rate (per lot).
+    // Only on the SELL side; buying an option stays premium-based below.
+    if (
+      marginCalcMode === "strike_pct" &&
+      strikeMarginRate > 0 &&
+      side === "SELL" &&
+      instrumentStrike > 0
+    ) {
+      return +(instrumentStrike * lotSize * strikeMarginRate).toFixed(2);
+    }
     if (marginCalcMode === "fixed" && fixedMarginPerLot > 0) {
       // Flat ₹/lot — admin's configured number, charged once per lot
       // regardless of price/lot_size. Matches the backend validator's
@@ -314,7 +328,7 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
     // `refPrice` is the BUY/SELL close-side price (ask for BUY, bid for
     // SELL) so the displayed margin tracks the price the order fills at.
     return +(((lotSize * (refPrice || ltp || 0) * serverMarginPct) / serverLeverage) * fxMultiplier).toFixed(2);
-  }, [marginCalcMode, fixedMarginPerLot, lotSize, refPrice, ltp, serverMarginPct, serverLeverage, fxMultiplier]);
+  }, [marginCalcMode, strikeMarginRate, side, instrumentStrike, fixedMarginPerLot, lotSize, refPrice, ltp, serverMarginPct, serverLeverage, fxMultiplier]);
   const intradayMargin = +(marginPerLot * lots).toFixed(2);
   // Carry-forward margin uses the OVERNIGHT triple from segment settings
   // — same shape as the intraday calc but reads the `overnight_*` fields
@@ -324,12 +338,21 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   // it under-reported by ~7× and let users open positions they couldn't
   // afford to carry past the rollover.
   const ovnFixedPerLot = Number(effSettings?.overnight_fixed_margin_per_lot ?? 0);
+  const ovnStrikeRate = Number(effSettings?.overnight_strike_margin_rate ?? 0);
   const ovnLeverage = Number(effSettings?.overnight_leverage ?? 1) || 1;
   const ovnMarginPct =
     effSettings?.overnight_margin_percentage != null
       ? Number(effSettings.overnight_margin_percentage) / 100
       : 1;
   const carryforwardMargin = useMemo(() => {
+    if (
+      marginCalcMode === "strike_pct" &&
+      ovnStrikeRate > 0 &&
+      side === "SELL" &&
+      instrumentStrike > 0
+    ) {
+      return +(instrumentStrike * lotSize * ovnStrikeRate * lots).toFixed(2);
+    }
     if (marginCalcMode === "fixed" && ovnFixedPerLot > 0) {
       return +(ovnFixedPerLot * lots).toFixed(2);
     }
@@ -338,6 +361,9 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
     return +(perLotCarry * lots).toFixed(2);
   }, [
     marginCalcMode,
+    ovnStrikeRate,
+    side,
+    instrumentStrike,
     ovnFixedPerLot,
     ovnMarginPct,
     ovnLeverage,
