@@ -76,6 +76,11 @@ class SegmentType(StrEnum):
     CDS_OPTION_SELL = "CDS_OPTION_SELL"
     CRYPTO_SPOT = "CRYPTO_SPOT"
     CRYPTO_FUTURE = "CRYPTO_FUTURE"
+    # Crypto options (Binance European, USDT-settled). Split buy/sell like the
+    # NSE/MCX option segments so per-side lots & margin can be set. Both map to
+    # the single "CRYPTO_OPT" admin matrix row via _SEGMENT_NAME_MAP.
+    CRYPTO_OPTION_BUY = "CRYPTO_OPTION_BUY"
+    CRYPTO_OPTION_SELL = "CRYPTO_OPTION_SELL"
 
 
 ALL_SEGMENTS: tuple[SegmentType, ...] = tuple(SegmentType)

@@ -260,7 +260,7 @@ async def _resolve_super_admin_id() -> PydanticObjectId | None:
 # Admin matrix rows whose instruments don't settle daily — no separate
 # overnight margin exists. The resolver always reads the *Intraday* column
 # for these rows and the admin UI greys out the overnight cells.
-INTRADAY_ONLY_ADMIN_ROWS = frozenset({"FOREX", "STOCKS", "INDICES", "COMMODITIES", "CRYPTO"})
+INTRADAY_ONLY_ADMIN_ROWS = frozenset({"FOREX", "STOCKS", "INDICES", "COMMODITIES", "CRYPTO", "CRYPTO_OPT"})
 
 # Module-local debounce for "netting_eff:*" wipes. The admin Segment Matrix
 # fires N parallel PUTs (one per dirty segment); without this each call
@@ -331,18 +331,18 @@ SEGMENT_DEFAULTS: list[dict[str, Any]] = [
     {"name": "STOCKS", "displayName": "Stocks", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": False, "futureApplies": False},
     {"name": "INDICES", "displayName": "Indices", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": False, "futureApplies": False},
     {"name": "COMMODITIES", "displayName": "Commodities", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": False, "futureApplies": False},
-    # Single crypto row — covers spot, perpetual, dated futures and options.
-    # The user side only shows one "Crypto" asset-class chip, so the admin
-    # matrix mirrors that with one row rather than four sub-segments.
+    # Crypto SPOT/perpetual/dated-futures share one "Crypto" row (the user side
+    # shows one Crypto asset-class chip). Crypto OPTIONS get their own row so
+    # the admin can set option buy/sell lots + margin + strike caps separately.
     {"name": "CRYPTO", "displayName": "Crypto", "lotApplies": True, "qtyApplies": False, "optionApplies": False, "expiryHoldApplies": False, "futureApplies": False},
+    {"name": "CRYPTO_OPT", "displayName": "Crypto Option", "lotApplies": True, "qtyApplies": False, "optionApplies": True, "expiryHoldApplies": False, "futureApplies": False},
 ]
 
 # Segment names that were ever retired and need an idempotent cleanup on
-# startup. The two-row split (CRYPTO_PERPETUAL + CRYPTO_OPTIONS) was
-# collapsed into a single CRYPTO row, so the old names are retired here
-# to drop them along with any dangling script / per-user overrides on
-# the next boot.
-RETIRED_SEGMENT_NAMES: tuple[str, ...] = ("CRYPTO_PERPETUAL", "CRYPTO_OPTIONS")
+# startup. CRYPTO_PERPETUAL was collapsed into the single CRYPTO row. NOTE:
+# CRYPTO_OPTIONS was previously retired too, but crypto options are now a real
+# segment (row "CRYPTO_OPT") — do NOT list it here or the boot cleanup wipes it.
+RETIRED_SEGMENT_NAMES: tuple[str, ...] = ("CRYPTO_PERPETUAL",)
 
 
 # ── Seeding ─────────────────────────────────────────────────────────
@@ -364,6 +364,12 @@ async def seed_default_segments() -> int:
         if spec["name"].startswith("CRYPTO"):
             defaults["minLots"] = 0.001
             defaults["orderLots"] = 0.001
+        if spec["name"] == "CRYPTO_OPT":
+            # Phase 1 = view-only: the chain + live prices are visible but
+            # trading is OFF until the operator turns it on. `isActive` stays
+            # True so instruments still show; `tradingEnabled` False blocks new
+            # entries in the order validator.
+            defaults["tradingEnabled"] = False
         await NettingSegment(**spec, **defaults).insert()
         inserted += 1
     return inserted
@@ -2050,10 +2056,13 @@ _SEGMENT_NAME_MAP: dict[str, str] = {
     "CDS_FUTURE": "FOREX",
     "CDS_OPTION_BUY": "FOREX",
     "CDS_OPTION_SELL": "FOREX",
-    # Every crypto instrument resolves to the single CRYPTO admin row.
+    # Crypto spot/future/perpetual → the single CRYPTO row; crypto OPTIONS get
+    # their own CRYPTO_OPT row (option buy/sell lots + margin set separately).
     "CRYPTO_SPOT": "CRYPTO",
     "CRYPTO_FUTURE": "CRYPTO",
     "CRYPTO_PERPETUAL": "CRYPTO",
+    "CRYPTO_OPTION_BUY": "CRYPTO_OPT",
+    "CRYPTO_OPTION_SELL": "CRYPTO_OPT",
     # Infoway-fed international markets resolve to their own admin rows.
     # The instrument segment value already matches the admin row name —
     # we map them through explicitly so the resolver doesn't fall back

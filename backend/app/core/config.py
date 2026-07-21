@@ -179,6 +179,20 @@ class Settings(BaseSettings):
     BINANCE_WS_BASE: str = "wss://stream.binance.com:9443"
     BINANCE_SYMBOLS: str = "BTCUSDT,ETHUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,BNBUSDT"
 
+    # ── Binance crypto OPTIONS (European, USDT-settled) — eapi ──────────
+    # Phase 1 = view-only chain + live prices. Poll-based (one REST call for
+    # all marks + one for all tickers), no key. OFF by default; the operator
+    # flips BINANCE_OPTIONS_ENABLED=true to turn the feed on. Underlyings are
+    # the option "baseAsset" roots (BTC only for the first release). The mirror
+    # keeps only the nearest N expiries and strikes within ±X% of spot so the
+    # instrument universe stays small.
+    BINANCE_OPTIONS_ENABLED: bool = False
+    BINANCE_OPTIONS_EAPI_BASE: str = "https://eapi.binance.com"
+    BINANCE_OPTIONS_UNDERLYINGS: str = "BTC"
+    BINANCE_OPTIONS_POLL_SEC: float = 6.0
+    BINANCE_OPTIONS_MAX_EXPIRIES: int = 3
+    BINANCE_OPTIONS_STRIKE_PCT: float = 15.0  # keep strikes within ±15% of spot
+
     # ── Email / SMS ──────────────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

@@ -24,7 +24,7 @@ SEGMENT_LABELS: dict[str, str] = {
     "BSE_EQ": "BSE Equity", "BSE_FUT": "BSE Future", "BSE_OPT": "BSE Option",
     "MCX_FUT": "MCX Future", "MCX_OPT": "MCX Option",
     "FOREX": "Forex", "STOCKS": "Stocks", "INDICES": "Indices",
-    "COMMODITIES": "Commodities", "CRYPTO": "Crypto",
+    "COMMODITIES": "Commodities", "CRYPTO": "Crypto", "CRYPTO_OPT": "Crypto Option",
 }
 
 

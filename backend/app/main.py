@@ -392,6 +392,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
                 except Exception:
                     logger.exception("binance_auto_start_failed")
 
+            # Binance crypto OPTIONS feed (eapi) — view-only chain + prices.
+            # OFF unless BINANCE_OPTIONS_ENABLED; publishes into the same shared
+            # cache + `infoway:tick:*` channel and mirrors option instruments.
+            if settings.BINANCE_OPTIONS_ENABLED:
+                try:
+                    from app.services.binance_options_service import binance_options
+
+                    await binance_options.start()
+                    logger.info("binance_options_auto_started")
+                except Exception:
+                    logger.exception("binance_options_auto_start_failed")
+
             # Zerodha live WS pool — leader-only. The instrument CATALOG warm
             # already ran on EVERY worker in `_zerodha_boot` (search needs it
             # cluster-wide); here we only open the live WS connections.
@@ -1039,6 +1051,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         from app.services.binance_service import binance
 
         await binance.stop()
+    except Exception:
+        pass
+
+    # Stop Binance crypto options feed cleanly
+    try:
+        from app.services.binance_options_service import binance_options
+
+        await binance_options.stop()
     except Exception:
         pass
 

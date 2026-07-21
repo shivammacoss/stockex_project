@@ -303,6 +303,153 @@ def _norm_underlying(s: str) -> str:
     return _UNDERLYING_ALIASES.get(normed, normed)
 
 
+# ── Crypto options chain (Binance eapi mirror) ──────────────────────────
+def _crypto_option_root(und_key: str) -> str | None:
+    """Return the crypto option root (e.g. "BTC") if `und_key` names a crypto
+    underlying we have options for, else None. Accepts BTC / BTCUSD / BTCUSDT."""
+    from app.core.config import settings
+
+    roots = {
+        r.strip().upper()
+        for r in (settings.BINANCE_OPTIONS_UNDERLYINGS or "").split(",")
+        if r.strip()
+    }
+    if not roots:
+        return None
+    k = (und_key or "").upper().replace(" ", "")
+    for suffix in ("USDT", "USD"):
+        if k.endswith(suffix):
+            k = k[: -len(suffix)]
+            break
+    return k if k in roots else None
+
+
+async def _crypto_option_chain(user: CurrentUser, root: str, expiry: str | None) -> APIResponse:
+    """Build the crypto option chain from Mongo Instrument rows + live prices."""
+    from app.models._base import SegmentType
+    from app.models.instrument import Instrument
+    from app.services import market_data_service
+
+    rows = await Instrument.find(
+        Instrument.segment == SegmentType.CRYPTO_OPTION_BUY.value,
+        Instrument.is_active == True,  # noqa: E712
+    ).to_list()
+    # Keep only this root's contracts (symbol like "BTC-260925-145000-C").
+    rows = [r for r in rows if (r.symbol or "").upper().startswith(f"{root}-")]
+
+    # Distinct expiries (date) sorted ascending.
+    def _exp_date(r):
+        e = r.expiry
+        return e.date() if hasattr(e, "date") else e
+
+    expiries = sorted({_exp_date(r) for r in rows if r.expiry is not None})
+    expiry_iso = [d.isoformat() for d in expiries]
+
+    target = None
+    if expiry:
+        try:
+            target = datetime.strptime(expiry[:10], "%Y-%m-%d").date()
+        except Exception:
+            target = None
+    if target is None and expiries:
+        target = expiries[0]
+
+    # strike → {ce, pe} for the chosen expiry.
+    by_strike: dict[float, dict[str, Any]] = {}
+    legs: list[Instrument] = []
+    for r in rows:
+        if target is not None and _exp_date(r) != target:
+            continue
+        try:
+            strike = float(str(r.strike)) if r.strike is not None else None
+        except (TypeError, ValueError):
+            strike = None
+        if strike is None:
+            continue
+        side = "ce" if (r.option_type and r.option_type.value == "CE") else "pe"
+        cell = by_strike.setdefault(strike, {"strike": strike, "ce": None, "pe": None})
+        cell[side] = r
+        legs.append(r)
+
+    # Batch live quotes (mdlive/mdlast carry ltp/bid/ask + greeks per token).
+    quotes: dict[str, dict] = {}
+    if legs:
+        results = await asyncio.gather(
+            *[market_data_service.get_quote(l.token) for l in legs],
+            return_exceptions=True,
+        )
+        for leg, q in zip(legs, results):
+            if isinstance(q, dict):
+                quotes[leg.token] = q
+
+    def _leg_out(r: Instrument | None) -> dict[str, Any] | None:
+        if r is None:
+            return None
+        q = quotes.get(r.token) or {}
+        ltp = float(q.get("ltp") or 0)
+        return {
+            "token": r.token,
+            "symbol": r.symbol,
+            "exchange": "CRYPTO",
+            "ltp": ltp,
+            "bid": float(q.get("bid") or 0),
+            "ask": float(q.get("ask") or 0),
+            "change_pct": float(q.get("change_pct") or 0),
+            "volume": float(q.get("volume") or 0),
+            "delta": q.get("delta"),
+            "theta": q.get("theta"),
+            "iv": q.get("iv"),
+            "source": q.get("source") or ("last" if ltp > 0 else "none"),
+        }
+
+    enriched_rows = [
+        {"strike": cell["strike"], "ce": _leg_out(cell["ce"]), "pe": _leg_out(cell["pe"])}
+        for cell in sorted(by_strike.values(), key=lambda c: c["strike"])
+    ]
+
+    # ATM: strike where |CE − PE| is smallest (put-call parity proxy); else the
+    # strike nearest the live spot.
+    atm_strike = None
+    atm_spot = None
+    both = [r for r in enriched_rows if r["ce"] and r["pe"] and r["ce"]["ltp"] and r["pe"]["ltp"]]
+    if both:
+        best = min(both, key=lambda r: abs(r["ce"]["ltp"] - r["pe"]["ltp"]))
+        atm_strike = best["strike"]
+        atm_spot = best["strike"] + best["ce"]["ltp"] - best["pe"]["ltp"]
+    elif enriched_rows:
+        spot = 0.0
+        try:
+            sq = await market_data_service.get_quote(f"CRYPTO_{root}USD")
+            spot = float(sq.get("ltp") or 0)
+        except Exception:
+            spot = 0.0
+        if spot > 0:
+            atm_strike = min(enriched_rows, key=lambda r: abs(r["strike"] - spot))["strike"]
+            atm_spot = spot
+        else:
+            atm_strike = enriched_rows[len(enriched_rows) // 2]["strike"]
+
+    data_source = "live" if any(
+        (cell.get(side) or {}).get("source") == "binance_options"
+        for cell in enriched_rows for side in ("ce", "pe")
+    ) else ("last" if enriched_rows else "none")
+
+    return APIResponse(
+        data={
+            "underlying": root,
+            "expiries": expiry_iso,
+            "selected_expiry": target.isoformat() if target else None,
+            "atm_strike": atm_strike,
+            "atm_spot": atm_spot,
+            "rows": enriched_rows,
+            "data_source": data_source,
+            "data_source_error": None,
+            "market_open": True,  # crypto is 24×7
+            "is_crypto": True,
+        }
+    )
+
+
 @router.get("/config", response_model=APIResponse[dict])
 async def option_chain_config(user: CurrentUser):
     """Public option-chain settings consumed by the picker UI."""
@@ -330,6 +477,14 @@ async def option_chain(
     expiry: str | None = Query(default=None, description="ISO date; if omitted, nearest expiry"),
 ):
     und_key = _norm_underlying(underlying)
+
+    # ── Crypto options branch ──────────────────────────────────────────
+    # Crypto option data lives in Mongo (Binance eapi mirror), NOT the Zerodha
+    # CSV catalog, so it takes a separate, simpler path: strikes/expiries from
+    # the Instrument rows, live prices + greeks from get_quote (mdlive/mdlast).
+    _crypto_root = _crypto_option_root(und_key)
+    if _crypto_root is not None:
+        return await _crypto_option_chain(user, _crypto_root, expiry)
 
     # ── Response cache hit? Bail out fast (matches the picker's 2 s poll). ──
     # Cache key includes user.id so each user's per-symbol block set
