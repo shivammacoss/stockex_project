@@ -546,6 +546,23 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
                 )
             )
 
+            # Games live-price fan-out — co-located on the feed leader (only it
+            # has the fresh in-process NIFTY/BTC LTP). Writes them to Redis every
+            # 200 ms so the games /price endpoint returns a live value on EVERY
+            # worker, not just this one (otherwise a non-leader served a stale
+            # cache and the games price looked frozen for 3–4 s).
+            try:
+                from app.services.games import price_resolver as _games_pr
+
+                subtasks.append(
+                    _asyncio.create_task(
+                        _supervise("games_price_mirror", _games_pr.games_price_mirror_loop),
+                        name="games_price_mirror",
+                    )
+                )
+            except Exception:
+                logger.exception("games_price_mirror_start_failed")
+
             # Drive the tick fanout in the foreground until cancelled
             # (leadership lost / shutdown) or its own _running flag clears.
             await market_data_service.tick_loop(interval_sec=0.1)

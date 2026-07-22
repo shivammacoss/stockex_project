@@ -27,6 +27,40 @@ BINANCE_KLINES = "https://api.binance.com/api/v3/klines"
 # ── NIFTY ────────────────────────────────────────────────────────────
 _NIFTY_LAST_KEY = "games:nifty:last"
 _NIFTY_LAST_TTL = 259200  # 3 days — survives a weekend gap
+_BTC_LAST_KEY = "games:btc:last"
+
+
+async def games_price_mirror_loop(interval_sec: float = 0.2) -> None:
+    """LEADER-ONLY: fan the fresh NIFTY + BTC LTP out to Redis every ~200 ms.
+
+    NIFTY ticks ~9×/s but only the feed-leader worker has it in-process
+    (`get_ltp_instant`). The games `/price` endpoint round-robins across all 4
+    workers, so a non-leader served a STALE cached value → the games price
+    looked frozen for 3–4 s even though the feed was live. Writing the live
+    value to Redis here makes `nifty_ltp_display()` (which reads
+    `games:nifty:last`) return fresh on EVERY worker, so the 250 ms client poll
+    actually shows ~4 fresh updates/s."""
+    import asyncio
+
+    from app.core.redis_client import cache_set
+
+    logger.info("games_price_mirror_loop_started interval=%.2fs", interval_sec)
+    while True:
+        try:
+            n = await nifty_ltp()
+            if n and n > 0:
+                await cache_set(_NIFTY_LAST_KEY, str(n), ttl_sec=_NIFTY_LAST_TTL)
+            b = await btc_ltp()
+            if b and b > 0:
+                await cache_set(_BTC_LAST_KEY, str(b), ttl_sec=_NIFTY_LAST_TTL)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.debug("games_price_mirror_failed", exc_info=True)
+        try:
+            await asyncio.sleep(interval_sec)
+        except asyncio.CancelledError:
+            raise
 
 
 async def nifty_ltp() -> Decimal | None:

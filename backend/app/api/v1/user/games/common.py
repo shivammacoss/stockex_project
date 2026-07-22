@@ -100,12 +100,21 @@ async def klines(_: CurrentUser, asset: str = "btc", interval: str = "5m", limit
 @router.get("/price", response_model=APIResponse[dict])
 async def live_price(_: CurrentUser):
     """Live NIFTY + BTC price for the games UI (cheap; client polls ~3s)."""
+    from app.core.redis_client import cache_get
     from app.services.games import price_resolver
 
-    # Display resolvers keep the last-known price on screen even after market
-    # close / feed drop — the UI should never blank to "Waiting for feed".
-    nifty = await price_resolver.nifty_ltp_display()
-    btc = await price_resolver.btc_ltp()
+    # Prefer the feed-leader's fan-out key (refreshed every 200 ms by
+    # games_price_mirror_loop) so EVERY worker returns a live value — not just
+    # the leader. Fall back to the per-worker resolvers when the key is cold
+    # (leader loop not up yet / market closed) so the UI never blanks.
+    nifty = await cache_get(price_resolver._NIFTY_LAST_KEY)
+    if not nifty:
+        n = await price_resolver.nifty_ltp_display()
+        nifty = str(n) if n else None
+    btc = await cache_get(price_resolver._BTC_LAST_KEY)
+    if not btc:
+        b = await price_resolver.btc_ltp()
+        btc = str(b) if b else None
     return APIResponse(
         data={
             "nifty": str(nifty) if nifty else None,
