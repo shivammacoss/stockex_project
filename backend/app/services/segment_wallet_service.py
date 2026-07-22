@@ -251,8 +251,13 @@ async def _transferable(user_id, kind: str) -> Decimal:
     if kind == wallet_kinds.MAIN:
         mw = await wallet_service.get_or_create(user_id)
         return to_decimal(mw.available_balance)
+    # `available_balance` IS the free balance — block_margin already MOVES the
+    # locked amount out of available and into used_margin (see block_margin).
+    # Subtracting used_margin again here double-counted it, so a user with, say,
+    # ₹16,138 free + ₹1,012 locked could only transfer ₹15,126 (the locked part
+    # was withheld twice). Return available_balance directly, exactly like MAIN.
     w = await get_or_create(user_id, kind)
-    return sub(to_decimal(w.available_balance), to_decimal(w.used_margin))
+    return to_decimal(w.available_balance)
 
 
 async def transfer(
