@@ -300,7 +300,14 @@ export function GameScreen({ id }: { id: GameUiId }) {
                               {r.result}
                             </span>
                           </div>
-                          <span className="text-xs font-bold tabular-nums">{fmt2(num(r.close_price))}</span>
+                          <div className="flex flex-col items-end leading-tight">
+                            <span className="text-xs font-bold tabular-nums">{fmt2(num(r.close_price))}</span>
+                            {r.created_at && (
+                              <span className="text-[9px] tabular-nums text-muted-foreground">
+                                {new Date(r.created_at).toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false })}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
