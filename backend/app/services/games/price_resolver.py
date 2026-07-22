@@ -225,6 +225,34 @@ async def resolve_btc_window(
     return None
 
 
+# Canonical game key whose admin-typed manual result carries the day's OFFICIAL
+# NIFTY close for ALL nifty games (Number + Jackpot + Bracket). The super-admin
+# types it in the Number game's manual-result panel; one value fixes all three.
+_MANUAL_NIFTY_CLOSE_KEY = "niftyNumber"
+
+
+async def manual_nifty_close(ist_day: str) -> Decimal | None:
+    """Super-admin-typed official NIFTY close for `ist_day` (IST YYYY-MM-DD), or
+    None if none typed. Set via the Number game's admin manual-result panel and
+    SHARED by Number, Jackpot and Bracket so a single typed value settles all
+    three when the Zerodha feed is down at close (no authoritative close to auto-
+    resolve). Its mere presence signals operator intent — no toggle required."""
+    try:
+        from app.models.games.bets import GameManualResult
+
+        mr = await GameManualResult.find_one(
+            GameManualResult.game_key == _MANUAL_NIFTY_CLOSE_KEY,
+            GameManualResult.day == ist_day,
+        )
+        if mr is not None and mr.close_price is not None:
+            v = to_decimal(mr.close_price)
+            if v > 0:
+                return v
+    except Exception:
+        logger.debug("manual_nifty_close_read_failed", exc_info=True)
+    return None
+
+
 async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal | None:
     """NIFTY settlement price for a result that lands at / after market close.
 
@@ -282,6 +310,19 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
         except Exception:
             pass
         return val
+
+    # -1) ADMIN MANUAL OVERRIDE (feed-down safety). When the Zerodha feed is down
+    #     at close there is NO authoritative official close, so auto-resolution
+    #     would settle every nifty game on a STALE cached value (the exact bug the
+    #     operator hit: all 3 games settled at 23,991.25 while the feed was
+    #     disconnected). If the super-admin has typed the day's official close, it
+    #     WINS — for Number, Jackpot AND Bracket alike — over any pinned/quoted
+    #     auto value. Only while the market is closed; during hours the live LTP
+    #     below is correct.
+    if not is_market_open():
+        manual = await manual_nifty_close(ist_day)
+        if manual is not None and manual > 0:
+            return await _converge(quantize_money(manual), pin_day=True)
 
     # 0) Pinned official close for this day (set once from the REST quote below).
     if not is_market_open():
