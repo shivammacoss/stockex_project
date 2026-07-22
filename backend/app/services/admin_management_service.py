@@ -55,9 +55,14 @@ async def create_sub_admin(
     if brokerage_share_pct is not None and (brokerage_share_pct < 0 or brokerage_share_pct > 100):
         raise ValidationFailedError("brokerage_share_pct must be between 0 and 100")
     if is_fixed_brokerage:
-        if fixed_brokerage_unit not in ("per_lot", "per_crore"):
+        # The fixed rate + unit are set PER SEGMENT in the admin's Segment
+        # settings → Brokerage (the create form no longer takes a flat
+        # admin-level rate), so they're OPTIONAL here — only validate when
+        # explicitly provided. account2_service defaults a missing unit to
+        # per_crore.
+        if fixed_brokerage_unit is not None and fixed_brokerage_unit not in ("per_lot", "per_crore"):
             raise ValidationFailedError("fixed_brokerage_unit must be per_lot|per_crore")
-        if fixed_brokerage_rate is None or fixed_brokerage_rate < 0:
+        if fixed_brokerage_rate is not None and fixed_brokerage_rate < 0:
             raise ValidationFailedError("fixed_brokerage_rate must be >= 0")
 
     sa = await user_service.create_user(
@@ -77,8 +82,10 @@ async def create_sub_admin(
         sa.admin_brokerage_share_pct = to_decimal128(brokerage_share_pct)
     if is_fixed_brokerage:
         sa.is_fixed_brokerage = True
-        sa.fixed_brokerage_unit = fixed_brokerage_unit
-        sa.fixed_brokerage_rate = to_decimal128(fixed_brokerage_rate)
+        if fixed_brokerage_unit is not None:
+            sa.fixed_brokerage_unit = fixed_brokerage_unit
+        if fixed_brokerage_rate is not None:
+            sa.fixed_brokerage_rate = to_decimal128(fixed_brokerage_rate)
     await sa.save()
 
     # Snapshot the super-admin's current effective settings (segments
