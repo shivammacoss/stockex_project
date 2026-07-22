@@ -25,6 +25,22 @@ function num(v: any): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
+/** Clean "result time" for an up/down window — the exact IST boundary at which
+ *  the result was decided, i.e. the CLOSE of the outcome window (W+1). A bet on
+ *  window W settles on close(W+1); windows run back-to-back from `start_time`,
+ *  so that close = start_time + (W+1)·round. Shows HH:MM:SS on the grid
+ *  (e.g. 13:15:00) instead of the raw settlement timestamp with its grace
+ *  seconds (13:16:36). */
+function resultWindowTime(startTime: string | undefined, roundSec: number, windowNumber: number): string {
+  if (!startTime || !Number.isFinite(windowNumber)) return "—";
+  const [h, m, s] = startTime.split(":").map((x) => Number(x) || 0);
+  const total = h * 3600 + m * 60 + s + (windowNumber + 1) * roundSec;
+  const hh = Math.floor(total / 3600) % 24;
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(hh)}:${p(mm)}:${p(ss)}`;
+}
 /** Always render exactly 2 decimals so a whole number (61804) shows as
  *  "61,804.00" instead of "61,804" — keeps the OHLC columns aligned. */
 function fmt2(v: number | undefined | null): string {
@@ -302,11 +318,9 @@ export function GameScreen({ id }: { id: GameUiId }) {
                           </div>
                           <div className="flex flex-col items-end leading-tight">
                             <span className="text-xs font-bold tabular-nums">{fmt2(num(r.close_price))}</span>
-                            {r.created_at && (
-                              <span className="text-[9px] tabular-nums text-muted-foreground">
-                                {new Date(r.created_at).toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false })}
-                              </span>
-                            )}
+                            <span className="text-[9px] tabular-nums text-muted-foreground">
+                              {resultWindowTime(cfg?.start_time, roundSec, r.window_number)}
+                            </span>
                           </div>
                         </div>
                       );
