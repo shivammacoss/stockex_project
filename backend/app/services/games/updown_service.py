@@ -206,6 +206,14 @@ async def _get_or_declare_result(game_key: str, cfg, resolver, day: str, window:
     day_dt = ist_datetime_for_day(day)
     open_w, close_w = window_open_close_ist(day_dt, cfg.start_time, cfg.round_duration, window)
     open_n, close_n = window_open_close_ist(day_dt, cfg.start_time, cfg.round_duration, window + 1)
+    # Only windows that were actually BETTABLE get a published result. A window
+    # whose open is at/after end_time is past betting close (Nifty: the
+    # 15:00→15:15 window opens exactly at end_time 15:00) — nobody can bet in it,
+    # and its outcome is the post-close 15:30 clearing print (last-30-min VWAP),
+    # not a fair live 15-min move. Drop it so the results strip stops at the last
+    # bettable window (Nifty → last shown outcome is 15:15).
+    if cfg.end_time and open_w.time() >= parse_hms(cfg.end_time):
+        return None
     # Settle only AFTER the next window (W+1) has fully closed.
     if now < close_n + timedelta(seconds=_RESOLVE_GRACE_SEC):
         return None
