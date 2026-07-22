@@ -409,17 +409,18 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   const orderTypeApi: "MARKET" | "LIMIT" | "SL_M" =
     orderType === "SL-M" ? "SL_M" : (orderType as "MARKET" | "LIMIT");
 
-  // Displayed BUY/SELL = the spread-adjusted side prices (dispBid/dispAsk
-  // computed above). For spread segments these are mid ± half-spread; for
-  // everything else they're the raw feed bid/ask.
-  // No LTP fallback for the raw case — when the feed has no real bid/ask
-  // (illiquid options like deep-OTM GOLD150000CE, dead symbols) AND no
-  // broker spread is configured, the side stays at 0 and the panel renders
-  // "—" + disables that side. Falling back to LTP would show a fake price
-  // the user can't actually fill at. Position CLOSE paths still use LTP
-  // fallback — exits must always work.
-  const sellPrice = dispBid;
-  const buyPrice = dispAsk;
+  // Displayed BUY/SELL = the spread-adjusted side prices (dispBid/dispAsk).
+  // FALL BACK to the last-known price so trading works even when the market is
+  // closed / the live feed has no bid-ask — the operator wants users to trade
+  // at the last price immediately ("turant last price pe trade"), not wait for
+  // a fresh tick. The order carries this as expected_price and fills at it; the
+  // matching engine's zero-price guard still blocks a genuinely dead 0-price.
+  const lastRef = ltp > 0 ? ltp : Number(lastLtp || 0);
+  const sellPrice = dispBid > 0 ? dispBid : lastRef;
+  const buyPrice = dispAsk > 0 ? dispAsk : lastRef;
+  // True when we're using the last price because the live bid/ask is gone —
+  // drives an informational banner instead of the old "trading disabled".
+  const usingLastPrice = (side === "BUY" ? dispAsk : dispBid) <= 0 && lastRef > 0;
   const sidePriceMissing =
     (side === "BUY" && buyPrice <= 0) || (side === "SELL" && sellPrice <= 0);
 
@@ -1430,19 +1431,20 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
       </div>
 
       <div className="border-t border-border p-3">
+        {/* Trading at last price — live bid/ask gone (market closed / feed
+            drop) but we have a last price, so the order still goes through at
+            that price. Informational, NOT a block. */}
+        {!sidePriceMissing && usingLastPrice && (
+          <div className="mb-2 flex items-start gap-2 rounded-md border border-atm/40 bg-atm/10 px-2.5 py-1.5 text-[11px] text-atm">
+            <AlertTriangle className="mt-px size-3.5 shrink-0" />
+            <span>
+              Market closed / no live feed — trading at last price{" "}
+              <span className="font-semibold tabular-nums">{fmtPrice(lastRef)}</span>.
+            </span>
+          </div>
+        )}
         {sidePriceMissing &&
-          (lastLtp && lastLtp > 0 ? (
-            <div className="mb-2 flex items-start gap-2 rounded-md border border-atm/40 bg-atm/10 px-2.5 py-1.5 text-[11px] text-atm">
-              <AlertTriangle className="mt-px size-3.5 shrink-0" />
-              <span>
-                Market closed / no live feed — trading disabled. Last price{" "}
-                <span className="font-semibold tabular-nums">
-                  {fmtPrice(lastLtp)}
-                </span>{" "}
-                (for reference).
-              </span>
-            </div>
-          ) : priceGrace ? (
+          (priceGrace ? (
             // Still inside the post-switch grace — price is most likely just
             // warming up. Calm, no alarm.
             <div className="mb-2 flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">

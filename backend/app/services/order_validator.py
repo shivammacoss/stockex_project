@@ -966,7 +966,13 @@ async def validate(
     # "Close" button on the Position Management page silently 400'd with
     # `MarketClosedError` after-hours, leaving the admin with no way to
     # flatten a runaway position outside trading hours.
-    if not is_amo and not is_24x7 and not is_squareoff:
+    # When ALLOW_TRADE_AT_LAST_PRICE is on, opening orders skip the market-hours
+    # + live-tick gates entirely and fill at the last-known price (demo/challenge
+    # platform — tradeable 24×7). The matching engine's zero-price guard is the
+    # backstop against a genuinely dead 0-price.
+    from app.core.config import settings as _cfg
+    _allow_last_price = bool(getattr(_cfg, "ALLOW_TRADE_AT_LAST_PRICE", False))
+    if not is_amo and not is_24x7 and not is_squareoff and not _allow_last_price:
         ist = now_ist()
 
         # 24×5 (forex / metals / energy): closed only on weekends (Sat full-day;

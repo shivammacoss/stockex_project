@@ -186,6 +186,14 @@ class Settings(BaseSettings):
     # the option "baseAsset" roots (BTC only for the first release). The mirror
     # keeps only the nearest N expiries and strikes within ±X% of spot so the
     # instrument universe stays small.
+    # Allow opening trades at the LAST-KNOWN price even when the market is
+    # closed / the live feed has no fresh tick (a challenge/demo platform must
+    # be tradeable 24×7 at the last price — operator: "turant last price pe
+    # trade"). When True the order validator skips the market-hours + live-tick
+    # gates for opening orders; the matching engine still fills at the client's
+    # expected_price and its zero-price guard blocks a genuinely dead 0-price.
+    ALLOW_TRADE_AT_LAST_PRICE: bool = True
+
     BINANCE_OPTIONS_ENABLED: bool = False
     BINANCE_OPTIONS_EAPI_BASE: str = "https://eapi.binance.com"
     BINANCE_OPTIONS_UNDERLYINGS: str = "BTC"
