@@ -9,7 +9,7 @@ from datetime import timedelta
 from fastapi import APIRouter
 
 from app.core.database import healthcheck as db_health
-from app.core.dependencies import CurrentAdmin, scoped_user_ids
+from app.core.dependencies import CurrentAdmin, scoped_user_filter, scoped_user_ids
 from app.core.redis_client import healthcheck as redis_health
 from app.models.holding import Holding
 from app.models.order import Order, OrderStatus
@@ -49,10 +49,36 @@ async def stats(admin: CurrentAdmin):
     # sub-admin → users assigned to them). Platform-wide totals across pools
     # live on /api/v1/admin/management/settlements.
     scope = await scoped_user_ids(admin)
+
+    # Demo signups in this pool — counted SEPARATELY from real users. Their
+    # balance/trades are virtual, so they NEVER enter the money / P&L / trading
+    # stats (scoped_user_ids already excludes is_demo). This is a pure head-count
+    # of the demo accounts sitting under this admin / broker (by their picked
+    # broker), shown as its own card so the operator can see demo interest
+    # without polluting real numbers.
+    _pool = await scoped_user_filter(admin)
+    demo_users = await _safe(
+        User.find(
+            {
+                **_pool,
+                "role": {
+                    "$nin": [
+                        UserRole.SUPER_ADMIN.value,
+                        UserRole.ADMIN.value,
+                        UserRole.BROKER.value,
+                    ]
+                },
+                "is_demo": True,
+                "status": {"$ne": UserStatus.CLOSED.value},
+            }
+        ).count(),
+        0,
+    )
+
     if not scope:
         return APIResponse(
             data={
-                "users": {"total": 0, "active_today": 0},
+                "users": {"total": 0, "active_today": 0, "demo": demo_users},
                 "money": {"wallet_balance_total": 0.0, "margin_used_total": 0.0},
                 "trading": {
                     "open_positions": 0,
@@ -152,7 +178,11 @@ async def stats(admin: CurrentAdmin):
 
     return APIResponse(
         data={
-            "users": {"total": total_users, "active_today": active_users_today},
+            "users": {
+                "total": total_users,
+                "active_today": active_users_today,
+                "demo": demo_users,
+            },
             "money": {
                 "wallet_balance_total": round(total_balance, 2),
                 "margin_used_total": round(total_margin, 2),

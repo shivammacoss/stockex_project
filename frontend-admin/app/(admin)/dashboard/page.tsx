@@ -16,6 +16,7 @@ import {
   Link2,
   Copy,
   Check,
+  FlaskConical,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,7 @@ export default function AdminDashboardPage() {
   }> = [
     { label: "Total users", value: num(stats?.users?.total), hint: "Trading users (excl. demo)", icon: Users, tone: "indigo" },
     { label: "Active today", value: num(stats?.users?.active_today), hint: "Last 24h", icon: Activity, tone: "sky" },
+    { label: "Demo users", value: num(stats?.users?.demo), hint: "Signed up on demo (virtual)", icon: FlaskConical, tone: "violet" },
     { label: "Wallet balance", value: inr(stats?.money?.wallet_balance_total), title: formatINR(stats?.money?.wallet_balance_total), hint: "All users", icon: CircleDollarSign, tone: "emerald" },
     { label: "Margin used", value: inr(stats?.money?.margin_used_total), title: formatINR(stats?.money?.margin_used_total), hint: "Locked in trades", icon: Banknote, tone: "amber" },
     { label: "Today's volume", value: inr(stats?.trading?.today_volume), title: formatINR(stats?.trading?.today_volume), hint: "Turnover", icon: TrendingUp, tone: "violet" },
