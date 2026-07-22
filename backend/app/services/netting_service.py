@@ -2208,6 +2208,19 @@ def _to_legacy_dict(
         # (0.03 intraday / 0.06 overnight → 3% / 6% of strike notional).
         if side_mode in ("fixed", "times", "percent", "strike_pct"):
             margin_mode = side_mode
+        # Robustness: a Times leverage BELOW 1 is never valid — it clamps to 1×
+        # (= full premium margin), which nobody intends. For option SELLING a
+        # sub-1 rate is always meant as a strike-% margin. Operators repeatedly
+        # type the strike rate (0.03) while leaving the mode on Times, so treat
+        # "Times + sub-1 sell rate" as strike_pct automatically. This makes the
+        # strike-based sell margin work regardless of the exact dropdown value.
+        if margin_mode == "times":
+            _sell_rate = pick("optionSellIntraday", None)
+            try:
+                if _sell_rate is not None and 0 < float(_sell_rate) < 1:
+                    margin_mode = "strike_pct"
+            except (TypeError, ValueError):
+                pass
 
     # `Times` mode quotes a leverage multiplier (e.g. 700×), which is symmetric
     # across intraday and overnight — telling a user "you have 700× intraday
