@@ -383,15 +383,26 @@ async def create_demo_session(*, ip: str = "0.0.0.0", user_agent: str | None = N
     if user is None:
         raise AppError("Could not start demo session. Please try again.")
 
-    # Stamp the user's current session epoch into the access token, exactly
-    # like normal login / refresh / impersonation do. WITHOUT this the demo
-    # token carried no `ver` claim → defaulted to 0 at the session-epoch gate
-    # (dependencies.get_current_user). The instant the shared demo account's
-    # `token_version` was ever bumped above 0 (admin block/unblock, password
-    # reset, force_logout_user), EVERY fresh demo login 401'd on its very
-    # first /users/me (0 != N) → "Could not load profile" + 🪙0.00 wallet, and
-    # couldn't self-heal because the client's refresh short-circuits a
-    # not-yet-expiring token. Carrying the real `ver` keeps demo consistent.
+    return await mint_login_pair(user, ip=ip, user_agent=user_agent)
+
+
+async def mint_login_pair(
+    user: "User",  # noqa: F821 — forward ref, User imported lazily by callers
+    *,
+    ip: str = "0.0.0.0",
+    user_agent: str | None = None,
+    audience: str = "user",
+) -> TokenPair:
+    """Mint an access+refresh TokenPair for `user` and register the refresh JTI
+    (Redis allow-list). Shared by demo login and per-user demo signup — any flow
+    that needs an instant logged-in session without re-checking the password.
+
+    Stamps the user's current session epoch into the access token, exactly like
+    normal login / refresh / impersonation do. WITHOUT the `ver` claim the token
+    defaults to 0 at the session-epoch gate (dependencies.get_current_user); the
+    moment the account's `token_version` is ever bumped (admin block/unblock,
+    password reset, force_logout), a 0-`ver` token 401s on its first /users/me.
+    """
     access = create_access_token(
         user_id=user.id,
         role=user.role.value,
@@ -400,7 +411,7 @@ async def create_demo_session(*, ip: str = "0.0.0.0", user_agent: str | None = N
     refresh, jti = create_refresh_token(user_id=user.id, role=user.role.value)
     await cache_set(
         refresh_jti_key(str(user.id), jti),
-        {"user_id": str(user.id), "audience": "user", "ip": ip, "ua": user_agent},
+        {"user_id": str(user.id), "audience": audience, "ip": ip, "ua": user_agent},
         ttl_sec=settings.JWT_REFRESH_TTL_DAYS * 86400,
     )
     return TokenPair(

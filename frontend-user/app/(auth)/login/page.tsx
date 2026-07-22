@@ -99,18 +99,12 @@ function LoginPageInner() {
     defaultValues: { identifier: "", password: "", two_fa_code: "" },
   });
 
-  async function handleDemoLogin() {
+  function handleDemoLogin() {
+    // Demo is now a proper signup: collect name/mobile/email/password + broker
+    // on the register page (demo mode), create a PERSONAL demo account, then log
+    // in. No more instant shared-demo drop-in.
     setDemoLoading(true);
-    try {
-      const pair = await AuthAPI.demoLogin();
-      setSession(pair as any);
-      toast.success("Demo account ready — 🪙5,00,000 virtual balance");
-      router.push("/dashboard");
-    } catch {
-      toast.error("Could not start demo. Please try again.");
-    } finally {
-      setDemoLoading(false);
-    }
+    router.push("/register?demo=1");
   }
 
   async function onSubmit(values: FormValues) {
@@ -264,7 +258,7 @@ function LoginPageInner() {
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold leading-tight text-foreground">
               {demoLoading ? (
-                "Setting up demo…"
+                "Opening demo signup…"
               ) : (
                 <>
                   Try Demo — 🪙5,00,000
@@ -273,7 +267,7 @@ function LoginPageInner() {
               )}
             </span>
             <span className="hidden text-[11px] text-muted-foreground lg:block">
-              No signup · Instant · Risk-free
+              Quick signup · Risk-free · Switch to real anytime
             </span>
           </span>
           {!demoLoading && (

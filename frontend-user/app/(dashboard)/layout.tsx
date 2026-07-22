@@ -10,6 +10,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { UserWsBridge } from "@/components/common/UserWsBridge";
+import { DemoSwitchBanner } from "@/components/common/DemoSwitchBanner";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
 import { TermsGate } from "@/components/common/TermsGate";
 import { PagePrewarmer } from "@/components/common/PagePrewarmer";
@@ -77,7 +78,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <main className="flex-1 overflow-y-auto bg-background scrollbar-thin">
           {/* Bottom-nav adds ~3.5rem of fixed height on mobile, so add safe
               bottom padding to the scroll area to prevent content clipping. */}
-          <div className="mx-auto max-w-screen-2xl p-4 pb-24 md:p-6 md:pb-6">{children}</div>
+          <div className="mx-auto max-w-screen-2xl p-4 pb-24 md:p-6 md:pb-6">
+            <DemoSwitchBanner />
+            {children}
+          </div>
         </main>
         <StatusBar />
         <BottomNav />

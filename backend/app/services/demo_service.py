@@ -79,6 +79,82 @@ async def reset_global_demo() -> dict:
     return summary
 
 
+async def convert_demo_to_real(user: User) -> dict:
+    """Convert a PERSONAL demo account into a fresh REAL account.
+
+    Wipes every demo artefact — positions, orders, trades, holdings, settlements,
+    watchlists, per-segment wallets, wallet ledger, and all games data — and
+    zeroes the main wallet, then flips the account to LIVE. The login
+    credentials, broker and hierarchy are KEPT, so the user continues as a real
+    client with a ZERO balance (must deposit to trade). Safe to re-run.
+    """
+    if not getattr(user, "is_demo", False):
+        return {"converted": False, "reason": "not a demo account"}
+
+    uid = user.id
+
+    # 1) Wipe trading artefacts (same delete-by-user_id pattern as the demo reset).
+    from app.models.holding import Holding
+    from app.models.position_settlement import PositionSettlement
+    from app.models.watchlist import Watchlist
+
+    await Position.find(Position.user_id == uid).delete()
+    await Order.find(Order.user_id == uid).delete()
+    await Trade.find(Trade.user_id == uid).delete()
+    await WalletTransaction.find(WalletTransaction.user_id == uid).delete()
+    for _M in (Holding, PositionSettlement, Watchlist):
+        try:
+            await _M.find(_M.user_id == uid).delete()
+        except Exception:  # noqa: BLE001
+            logger.debug("convert_demo_wipe_failed model=%s", _M.__name__, exc_info=True)
+
+    # 2) Per-segment wallets — drop entirely; real trading re-creates them at 0.
+    try:
+        from app.models.segment_wallet import SegmentWallet
+
+        await SegmentWallet.find(SegmentWallet.user_id == uid).delete()
+    except Exception:  # noqa: BLE001
+        logger.debug("convert_demo_segwallet_wipe_failed", exc_info=True)
+
+    # 3) Games — wipe every bet + zero the (separate) games wallet.
+    try:
+        from app.models.games.bets import BracketTrade, JackpotBid, NumberBet, UpDownBet
+        from app.models.games.wallet import GamesWallet, GamesWalletLedger
+
+        for _M in (NumberBet, BracketTrade, JackpotBid, UpDownBet, GamesWalletLedger):
+            try:
+                await _M.find(_M.user_id == uid).delete()
+            except Exception:  # noqa: BLE001
+                logger.debug("convert_demo_game_wipe_failed model=%s", _M.__name__, exc_info=True)
+        gw = await GamesWallet.find_one(GamesWallet.user_id == uid)
+        if gw is not None:
+            gw.balance = _ZERO
+            gw.version = (getattr(gw, "version", 0) or 0) + 1
+            await gw.save()
+    except Exception:  # noqa: BLE001
+        logger.debug("convert_demo_games_wipe_failed", exc_info=True)
+
+    # 4) Zero the main wallet — a real account starts empty (must deposit).
+    wallet = await wallet_service.get_or_create(uid)
+    wallet.available_balance = _ZERO
+    wallet.used_margin = _ZERO
+    wallet.settlement_outstanding = _ZERO
+    if hasattr(wallet, "temporary_balance"):
+        wallet.temporary_balance = _ZERO
+    wallet.version = (wallet.version or 0) + 1
+    await wallet.save()
+
+    # 5) Flip to a real LIVE account (login + broker + hierarchy unchanged).
+    from app.models.user import AccountType
+
+    user.is_demo = False
+    user.account_type = AccountType.LIVE
+    await user.save()
+
+    logger.info("demo_converted_to_real user=%s", uid)
+    return {"converted": True}
+
+
 async def demo_reset_loop(*, interval_sec: float = 3600.0) -> None:
     """Reset the shared demo every 24h.
 

@@ -73,40 +73,48 @@ def _signup_host(request: Request) -> str:
     return (request.headers.get("host") or "").split(":", 1)[0].lower()
 
 
-@router.post(
-    "/register",
-    response_model=APIResponse[AuthUserOut],
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[rate_limit("auth")],
-)
-async def register(payload: RegisterRequest, request: Request):
-    # ── Broker selection (MANDATORY) ──────────────────────────────────
-    # The user explicitly picks WHICH broker they join under (searchable by
-    # city at signup). This is the AUTHORITATIVE hierarchy — it overrides the
-    # old host / referral-inherited attribution.
+async def _resolve_signup_placement(payload: RegisterRequest):
+    """Resolve (assigned_admin_id, assigned_broker_id, broker_ancestry,
+    signup_origin, referrer) for a self-signup.
+
+    A user-to-user referral places the new user in the REFERRER's pool (an
+    admin's user under that admin, a broker's user under that broker, …) —
+    copying the referrer's attribution verbatim covers all cases and takes
+    PRECEDENCE. Otherwise the explicitly-picked broker (searchable by city at
+    signup) is the AUTHORITATIVE hierarchy. Shared by real + demo signup so a
+    demo account already sits under the right broker, ready for conversion.
+    """
     from app.services import broker_search_service
 
-    # A user-to-user referral places the new user in the REFERRER's pool: an
-    # admin's user brings you under that admin, a broker's user under that
-    # broker, a sub-broker's user under that sub-broker. Copying the referrer's
-    # own attribution verbatim gets all three cases at once, since a client
-    # already carries the full chain. This takes PRECEDENCE over the picked
-    # broker — a referral link is itself the placement.
     referrer = await referral_service.resolve_referrer(payload.referral_code)
-
     if referrer is not None:
-        assigned_admin_id = referrer.assigned_admin_id
-        assigned_broker_id = referrer.assigned_broker_id
-        broker_ancestry = list(referrer.broker_ancestry or [])
-        signup_origin = "REFERRAL"
-    else:
-        broker = await broker_search_service.resolve_active_visible_broker(payload.broker_id or "")
-        if broker is None:
-            raise ValidationFailedError("Please choose a valid broker to sign up.")
-        assigned_admin_id = broker.assigned_admin_id
-        assigned_broker_id = broker.id
-        broker_ancestry = (broker.broker_ancestry or []) + [broker.id]
-        signup_origin = "BROKER_PICK"
+        return (
+            referrer.assigned_admin_id,
+            referrer.assigned_broker_id,
+            list(referrer.broker_ancestry or []),
+            "REFERRAL",
+            referrer,
+        )
+    broker = await broker_search_service.resolve_active_visible_broker(payload.broker_id or "")
+    if broker is None:
+        raise ValidationFailedError("Please choose a valid broker to sign up.")
+    return (
+        broker.assigned_admin_id,
+        broker.id,
+        (broker.broker_ancestry or []) + [broker.id],
+        "BROKER_PICK",
+        referrer,
+    )
+
+
+async def _create_signup_user(payload: RegisterRequest, *, is_demo: bool, request: Request):
+    """Create a self-signup client user (real or demo) under the resolved
+    broker, inherit the admin's pool auto-settlement default, link the referral,
+    and audit. Returns the persisted User. Funding + token minting are the
+    caller's job (real signup funds nothing; demo seeds virtual balance)."""
+    assigned_admin_id, assigned_broker_id, broker_ancestry, signup_origin, referrer = (
+        await _resolve_signup_placement(payload)
+    )
 
     user = await user_service.create_user(
         email=payload.email,
@@ -118,7 +126,15 @@ async def register(payload: RegisterRequest, request: Request):
         assigned_broker_id=assigned_broker_id,
         broker_ancestry=broker_ancestry,
         signup_origin=signup_origin,
+        is_demo=is_demo,
     )
+    # A personal demo account is flagged DEMO so it is hidden from admin views
+    # and blocked from deposits/withdrawals until it's converted to real.
+    if is_demo:
+        from app.models.user import AccountType
+
+        user.account_type = AccountType.DEMO
+        await user.save()
     # Inherit the owning admin's pool auto-settlement default — if the admin has
     # turned auto-settlement OFF for their pool, this new user is created OFF too
     # (negative balance + manual settlement), matching everyone else under them.
@@ -150,6 +166,17 @@ async def register(payload: RegisterRequest, request: Request):
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
+    return user
+
+
+@router.post(
+    "/register",
+    response_model=APIResponse[AuthUserOut],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("auth")],
+)
+async def register(payload: RegisterRequest, request: Request):
+    user = await _create_signup_user(payload, is_demo=False, request=request)
     return APIResponse(
         data=AuthUserOut(
             id=str(user.id),
@@ -354,3 +381,43 @@ async def demo_login(request: Request):
         user_agent=request.headers.get("user-agent"),
     )
     return APIResponse(data=pair, message="Demo account ready. 🪙5,00,000 virtual balance credited.")
+
+
+@router.post(
+    "/demo-register",
+    response_model=APIResponse[TokenPair],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("auth")],
+)
+async def demo_register(payload: RegisterRequest, request: Request):
+    """Create the user's OWN demo account (their name / mobile / email / password
+    + a chosen broker), pre-fund it with 🪙5,00,000 virtual money, and log in
+    immediately.
+
+    Unlike the shared ``/demo`` account, this is personal: its trades and balance
+    are private, and it can later be CONVERTED into a real account
+    (``POST /users/me/convert-to-real``) keeping the same login + broker while
+    wiping the demo trades and zeroing the balance.
+    """
+    from app.models.transaction import TransactionType
+    from app.services import wallet_service
+
+    user = await _create_signup_user(payload, is_demo=True, request=request)
+    await wallet_service.adjust(
+        user.id,
+        500_000,
+        transaction_type=TransactionType.BONUS,
+        narration="Demo account virtual credit",
+    )
+    # Re-fetch so the token pair's embedded user carries the DEMO flag/balance.
+    from app.models.user import User as _User
+
+    fresh = await _User.get(user.id) or user
+    pair = await auth_service.mint_login_pair(
+        fresh,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return APIResponse(
+        data=pair, message="Demo account ready. 🪙5,00,000 virtual balance credited."
+    )

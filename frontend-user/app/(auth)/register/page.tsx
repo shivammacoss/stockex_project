@@ -10,6 +10,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Check, Eye, EyeOff, X, User, Mail, Phone, Lock, Building2, MapPin } from "lucide-react";
 import { AuthAPI, ApiError, type BrokerOption } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
 import { BrokerPicker } from "@/components/common/BrokerPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,10 @@ function RegisterPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = (searchParams?.get("ref") || "").trim().toUpperCase();
+  // Demo signup mode (?demo=1 from the login "Try Demo" button): same form +
+  // broker pick, but creates a PERSONAL demo account and logs in immediately.
+  const demo = (searchParams?.get("demo") || "") === "1";
+  const setSession = useAuthStore((s) => s.setSession);
   // On a tenant custom domain (e.g. stockcafe.live) the URL has no ?ref=,
   // so fall back to the resolved brand's admin code. Belt-and-suspenders
   // alongside the backend's Origin/Referer detection — covers the case
@@ -123,14 +128,23 @@ function RegisterPageInner() {
       return;
     }
     try {
-      await AuthAPI.register({
+      const body = {
         full_name: values.full_name,
         email: values.email,
         mobile: values.mobile,
         password: values.password,
         broker_id: values.broker_id,
         referral_code: refCode || branding?.user_code || undefined,
-      });
+      };
+      if (demo) {
+        // Personal demo signup — create + log in instantly.
+        const pair = await AuthAPI.demoRegister(body);
+        setSession(pair as any);
+        toast.success("Demo account ready — 🪙5,00,000 virtual balance");
+        router.push("/dashboard");
+        return;
+      }
+      await AuthAPI.register(body);
       toast.success("Account created. Please sign in.");
       router.push(refCode ? `/login?ref=${encodeURIComponent(refCode)}` : "/login");
     } catch (err) {
@@ -148,11 +162,28 @@ function RegisterPageInner() {
       {/* Header — hidden on mobile (tab bar already says "Register"),
           visible on desktop where the tab bar is absent. */}
       <div className="hidden space-y-1.5 lg:block">
-        <h2 className="text-3xl font-bold tracking-tight">Create account</h2>
+        <h2 className="text-3xl font-bold tracking-tight">
+          {demo ? "Create demo account" : "Create account"}
+        </h2>
         <p className="text-sm text-muted-foreground">
-          Open your trading account in 60 seconds.
+          {demo
+            ? "Practice with 🪙5,00,000 virtual money — switch to a real account anytime."
+            : "Open your trading account in 60 seconds."}
         </p>
       </div>
+
+      {/* Demo banner — always visible (mobile too) so the user knows this signup
+          is a risk-free practice account. */}
+      {demo && (
+        <div className="flex items-start gap-2 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5">
+          <span className="text-base leading-none">🪙</span>
+          <span className="text-[11px] leading-snug text-muted-foreground">
+            <span className="font-bold text-foreground">Demo account</span> — pre-funded with{" "}
+            <span className="font-bold text-foreground">🪙5,00,000</span> virtual balance. No real
+            money. You can convert it to a real account anytime from your profile.
+          </span>
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3.5 sm:space-y-5">
@@ -359,7 +390,7 @@ function RegisterPageInner() {
           className="h-10 w-full rounded-xl border-0 bg-gradient-to-r from-[#16A34A] to-[#22C55E] text-sm font-semibold text-white shadow-lg shadow-green-500/30 transition-opacity hover:opacity-95 sm:h-12"
           loading={form.formState.isSubmitting}
         >
-          Create account
+          {demo ? "Start demo — 🪙5,00,000 free" : "Create account"}
         </Button>
       </form>
 

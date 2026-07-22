@@ -64,6 +64,40 @@ async def change_my_broker(payload: dict, user: CurrentUser):
     return APIResponse(data=await _me_out(user))
 
 
+@router.post("/me/convert-to-real", response_model=APIResponse[UserMeOut])
+async def convert_to_real(user: CurrentUser):
+    """Convert the logged-in DEMO account into a fresh REAL account.
+
+    Wipes all demo trades/positions/orders/holdings, per-segment wallets and
+    games data, and zeroes the balance — then flips the account to LIVE. Login
+    credentials and the chosen broker are kept, so the user carries on as a real
+    client with a ₹0 balance (deposit to start). 400 if not a demo account.
+    """
+    if not getattr(user, "is_demo", False):
+        raise HTTPException(status_code=400, detail="This is already a real account.")
+
+    from app.services import demo_service
+
+    res = await demo_service.convert_demo_to_real(user)
+    if not res.get("converted"):
+        raise HTTPException(status_code=400, detail="Could not convert this account.")
+    try:
+        await log_event(
+            action=AuditAction.UPDATE,
+            entity_type="User",
+            entity_id=user.id,
+            actor_id=user.id,
+            new_values={"account_type": "LIVE", "is_demo": False},
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    fresh = await User.get(user.id) or user
+    return APIResponse(
+        data=await _me_out(fresh),
+        message="Your account is now real. Balance is ₹0 — add funds to start trading.",
+    )
+
+
 @router.get("/me/branding", response_model=APIResponse[dict])
 async def get_my_branding(user: CurrentUser):
     """Return the branding payload for the logged-in user's

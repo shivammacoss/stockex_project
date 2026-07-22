@@ -322,6 +322,17 @@ export const AuthAPI = {
     // chain is inherited instead.
     broker_id?: string;
   }) => unwrap(api.post("/user/auth/register", body)),
+  // Personal demo signup — same fields as register (name/mobile/email/password
+  // + chosen broker), but creates the user's OWN demo account pre-funded with
+  // virtual money and logs in immediately (returns a full token pair).
+  demoRegister: (body: {
+    email: string;
+    mobile: string;
+    password: string;
+    full_name: string;
+    referral_code?: string;
+    broker_id?: string;
+  }) => unwrap<TokenPair>(api.post("/user/auth/demo-register", body)),
   logout: (refresh_token?: string) => unwrap(api.post("/user/auth/logout", { refresh_token })),
   refresh: (refresh_token: string) => unwrap<TokenPair>(api.post("/user/auth/refresh", { refresh_token })),
   forgotPassword: (identifier: string) => unwrap(api.post("/user/auth/forgot-password", { identifier })),
@@ -339,6 +350,9 @@ export const ProfileAPI = {
   me: () => unwrap<any>(api.get("/user/users/me")),
   update: (body: Record<string, unknown>) => unwrap<any>(api.put("/user/users/me", body)),
   changeBroker: (broker_id: string) => unwrap<any>(api.put("/user/users/me/broker", { broker_id })),
+  // Convert the logged-in demo account into a fresh real account (wipes demo
+  // trades + zeroes balance server-side). Returns the updated `me` object.
+  convertToReal: () => unwrap<any>(api.post("/user/users/me/convert-to-real")),
 };
 
 // Broker directory for the signup picker + profile broker-switch. PUBLIC (the
