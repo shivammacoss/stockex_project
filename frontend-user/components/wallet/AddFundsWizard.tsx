@@ -71,7 +71,7 @@ const PaytmMark = ({ size = 36 }: { size?: number }) => (
   <CircleMark bg="#ffffff" fg="#00b9f1" label="P" size={size} fontSize={size * 0.46} />
 );
 const BhimMark = ({ size = 36 }: { size?: number }) => (
-  <CircleMark bg="linear-gradient(135deg,#ee7d2f,#0f9d58)" label="₹" size={size} fontSize={size * 0.46} />
+  <CircleMark bg="linear-gradient(135deg,#ee7d2f,#0f9d58)" label="🪙" size={size} fontSize={size * 0.46} />
 );
 function SbiLogo({ className }: { className?: string }) {
   // Official-style SBI mark — light-blue keyhole circle + navy "SBI".
@@ -224,7 +224,7 @@ export function AddFundsWizard({
   const amount = Number(amtStr) || 0;
   const waUrl = buildWhatsappUrl(
     support.data?.whatsapp,
-    `Hi, I need help adding funds${amount > 0 ? ` (₹${amount})` : ""}.`,
+    `Hi, I need help adding funds${amount > 0 ? ` (🪙${amount})` : ""}.`,
   );
 
   if (!open) return null;
@@ -341,7 +341,7 @@ export function AddFundsWizard({
                   <ShieldCheck className="size-4 text-primary" /> Paying {payee}
                 </div>
                 <div className="mt-5 flex items-center justify-center gap-1">
-                  <span className="text-4xl font-semibold text-muted-foreground">₹</span>
+                  <span className="text-4xl font-semibold text-muted-foreground">🪙</span>
                   <input
                     autoFocus
                     value={amtStr}

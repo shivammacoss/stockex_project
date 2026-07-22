@@ -54,7 +54,7 @@ export function SettlementRequestsPanel() {
   });
 
   // Pool-wide auto-settlement switches (all default ON). OFF → that wallet goes
-  // NEGATIVE (mines) on a shortfall instead of auto-flooring at ₹0. "MAIN" is the
+  // NEGATIVE (mines) on a shortfall instead of auto-flooring at 🪙0. "MAIN" is the
   // cash wallet (bulk per-user); the segment wallets each have their own toggle.
   const { data: poolAuto } = useQuery({
     queryKey: ["admin", "pool-auto-settlement"],
@@ -76,7 +76,7 @@ export function SettlementRequestsPanel() {
     const next = !isOn(scope);
     const walletTxt = scope === "MAIN" ? "the MAIN cash wallet" : `the ${label} wallet`;
     const msg = next
-      ? `Turn AUTO-SETTLEMENT ON for ${walletTxt} — ALL your users?\n\nOn a shortfall it will auto-floor at ₹0 and book to settlement_outstanding.`
+      ? `Turn AUTO-SETTLEMENT ON for ${walletTxt} — ALL your users?\n\nOn a shortfall it will auto-floor at 🪙0 and book to settlement_outstanding.`
       : `Turn AUTO-SETTLEMENT OFF for ${walletTxt} — ALL your users?\n\nOn a shortfall it will be allowed to go NEGATIVE (mines) instead of flooring. Applies to all current + future users under you.`;
     if (!window.confirm(msg)) return;
     try {
@@ -102,8 +102,8 @@ export function SettlementRequestsPanel() {
     const ok = window.confirm(
       `Approve settlement request?\n\n` +
         `User: ${userCode}\n` +
-        `Shortfall: ₹${Number(amount).toFixed(2)}\n\n` +
-        `This will floor the user's available balance to ₹0 and book ` +
+        `Shortfall: 🪙${Number(amount).toFixed(2)}\n\n` +
+        `This will floor the user's available balance to 🪙0 and book ` +
         `the shortfall into settlement_outstanding. The user can resume ` +
         `opening new trades immediately after.`,
     );
@@ -111,7 +111,7 @@ export function SettlementRequestsPanel() {
     if (status === "PENDING") removeLocally(id);
     try {
       await PayinOutAPI.approveSettlement(id);
-      toast.success("Settlement approved + balance floored to ₹0");
+      toast.success("Settlement approved + balance floored to 🪙0");
       qc.invalidateQueries({ queryKey: ["admin", "settlement-requests"] });
       // User detail / wallet caches likely on screen elsewhere — refresh them too.
       qc.invalidateQueries({ queryKey: ["admin", "user"] });
@@ -247,7 +247,7 @@ export function SettlementRequestsPanel() {
           <div className="text-xs">
             <div className="text-sm font-semibold">Auto-settlement — per wallet</div>
             <div className="text-muted-foreground">
-              ON = that wallet auto-floors at ₹0 on a shortfall (books to settlement).
+              ON = that wallet auto-floors at 🪙0 on a shortfall (books to settlement).
               OFF = it&apos;s allowed to go <b>NEGATIVE (mines)</b>. Applies to ALL your
               users (current + future) for that wallet.
             </div>

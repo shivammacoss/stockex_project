@@ -372,7 +372,7 @@ export function OptionChainPicker({ open, onOpenChange, onPick, initialUnderlyin
                       {focusedUndLabel}
                     </span>
                     <span className="font-tabular text-sm font-semibold text-foreground">
-                      ₹{Number(atmSpot).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                      🪙{Number(atmSpot).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                     </span>
                   </div>
                 )}

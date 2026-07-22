@@ -26,7 +26,7 @@ import type { AdminUser } from "@/types";
 function inr(value: string | number | undefined | null): string {
   const n = Number(value ?? 0);
   if (!isFinite(n)) return "—";
-  return `₹ ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  return `🪙 ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 export default function BrokerDetailPage() {

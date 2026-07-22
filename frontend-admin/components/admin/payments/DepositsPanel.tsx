@@ -165,9 +165,9 @@ export function DepositsPanel() {
             <span>{formatINR(r.amount)}</span>
             <span
               className="text-[10px] text-amber-600 dark:text-amber-400"
-              title={`User has ₹${settlement.toFixed(2)} settlement on record (informational — not auto-recovered).`}
+              title={`User has 🪙${settlement.toFixed(2)} settlement on record (informational — not auto-recovered).`}
             >
-              ⓘ ₹{settlement.toFixed(0)} settlement
+              ⓘ 🪙{settlement.toFixed(0)} settlement
             </span>
           </div>
         );
@@ -489,9 +489,9 @@ function DepositMobileCard({
           {settlement > 0 && (
             <div
               className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400"
-              title={`User has ₹${settlement.toFixed(2)} settlement on record (informational).`}
+              title={`User has 🪙${settlement.toFixed(2)} settlement on record (informational).`}
             >
-              ⓘ ₹{settlement.toFixed(0)} settle
+              ⓘ 🪙{settlement.toFixed(0)} settle
             </div>
           )}
         </div>

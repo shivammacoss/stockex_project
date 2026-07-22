@@ -113,7 +113,7 @@ export default function DashboardPage() {
   const wallet = summary?.wallet ?? {};
   // Prefer the canonical pnl-summary value; fall back to the dashboard
   // payload only while the dedicated query is still loading so we don't
-  // flash ₹0 on first paint.
+  // flash 🪙0 on first paint.
   const todayPnl = Number(pnlSummary?.today_pnl ?? summary?.today_pnl ?? 0);
 
   const [hideBalance] = useState(false);

@@ -31,7 +31,7 @@ const SEGMENTS = [
     instruments: "All A-group + most B-group · 1,800+ scrips",
     hours: "Mon–Fri · 09:15 – 15:30 IST",
     lot: "1 share",
-    brokerage: "₹0 delivery (CNC) · ₹20 / order intraday (MIS)",
+    brokerage: "🪙0 delivery (CNC) · 🪙20 / order intraday (MIS)",
     statutory: "STT 0.1% delivery, 0.025% intraday sell · Exchange + GST + SEBI + stamp",
   },
   {
@@ -40,7 +40,7 @@ const SEGMENTS = [
     instruments: "All actively traded scrips · including SME",
     hours: "Mon–Fri · 09:15 – 15:30 IST",
     lot: "1 share",
-    brokerage: "₹0 delivery · ₹20 / order intraday",
+    brokerage: "🪙0 delivery · 🪙20 / order intraday",
     statutory: "Same as NSE cash · auto-routed via best-price logic when both segments are open",
   },
   {
@@ -49,7 +49,7 @@ const SEGMENTS = [
     instruments: "NIFTY, BANKNIFTY, FINNIFTY weekly + monthly · stock futures & options",
     hours: "Mon–Fri · 09:15 – 15:30 IST",
     lot: "Per SEBI lot-size circular (synced daily)",
-    brokerage: "₹20 / order flat — both futures and options",
+    brokerage: "🪙20 / order flat — both futures and options",
     statutory: "STT 0.02% on futures sell, 0.1% on options premium sell · Exchange + GST + SEBI + stamp",
   },
   {
@@ -58,7 +58,7 @@ const SEGMENTS = [
     instruments: "SENSEX, BANKEX options · select stock futures",
     hours: "Mon–Fri · 09:15 – 15:30 IST",
     lot: "Per SEBI lot-size circular",
-    brokerage: "₹20 / order flat",
+    brokerage: "🪙20 / order flat",
     statutory: "Same structure as NSE F&O",
   },
   {
@@ -67,7 +67,7 @@ const SEGMENTS = [
     instruments: "USD/INR · EUR/INR · GBP/INR · JPY/INR · cross-pairs",
     hours: "Mon–Fri · 09:00 – 17:00 IST",
     lot: "USDINR 1,000 base · others per exchange spec",
-    brokerage: "₹20 / order flat",
+    brokerage: "🪙20 / order flat",
     statutory: "Exchange + GST + SEBI + stamp (no STT on currency)",
   },
   {
@@ -76,7 +76,7 @@ const SEGMENTS = [
     instruments: "Gold, Silver, Crude Oil, Natural Gas, Copper, Zinc, Aluminium, Cotton, Mentha, Castor seed",
     hours: "Mon–Fri · 09:00 – 23:30 IST (agri 09:00–21:00)",
     lot: "Per MCX contract spec · synced daily",
-    brokerage: "₹20 / order flat",
+    brokerage: "🪙20 / order flat",
     statutory: "CTT on non-agri sell side · Exchange + GST + SEBI + stamp",
   },
   {
@@ -93,7 +93,7 @@ const SEGMENTS = [
     name: "Crypto (24×7)",
     instruments: "BTC, ETH, SOL, BNB, XRP, ADA, DOGE + 40 more · INR-settled",
     hours: "Always open · including Indian holidays",
-    lot: "Min order ₹100 notional",
+    lot: "Min order 🪙100 notional",
     brokerage: "0.10% per leg",
     statutory: "1% TDS as per Section 194S on sell side · 30% tax on net gain to be paid by you",
   },
@@ -103,7 +103,7 @@ const SEGMENTS = [
     instruments: "Gold (XAU/USD spot) · Silver (XAG/USD spot) · MCX gold mini",
     hours: "Mon–Fri · 24×5 spot · MCX 09:00 – 23:30 IST",
     lot: "Micro lot 0.01 spot · MCX mini 100 g",
-    brokerage: "Spread (spot) · ₹20 / order (MCX)",
+    brokerage: "Spread (spot) · 🪙20 / order (MCX)",
     statutory: "GST on broker margin · CTT on MCX sell",
   },
   {
@@ -112,7 +112,7 @@ const SEGMENTS = [
     instruments: "Brent Crude (spot) · WTI · Natural Gas (MCX + spot)",
     hours: "Mon–Fri · global; MCX 09:00 – 23:30 IST",
     lot: "Spot 0.01 · MCX per spec",
-    brokerage: "Spread (spot) · ₹20 / order (MCX)",
+    brokerage: "Spread (spot) · 🪙20 / order (MCX)",
     statutory: "GST + CTT (MCX sell)",
   },
   {
@@ -121,7 +121,7 @@ const SEGMENTS = [
     instruments: "All NSE/BSE-listed ETFs — equity, debt, gold, international, smart-beta",
     hours: "Mon–Fri · 09:15 – 15:30 IST",
     lot: "1 unit",
-    brokerage: "₹0 delivery · ₹20 / order intraday",
+    brokerage: "🪙0 delivery · 🪙20 / order intraday",
     statutory: "STT 0.001% delivery (lower than equity) + standard exchange charges",
   },
   {
@@ -129,8 +129,8 @@ const SEGMENTS = [
     name: "Mutual Funds (Direct)",
     instruments: "All AMCs · equity, debt, hybrid, index, ELSS · direct plans only",
     hours: "Order before 15:00 IST for same-day NAV",
-    lot: "Min as per scheme (typically ₹100 SIP, ₹500 lump sum)",
-    brokerage: "₹0 — we earn nothing on direct MF",
+    lot: "Min as per scheme (typically 🪙100 SIP, 🪙500 lump sum)",
+    brokerage: "🪙0 — we earn nothing on direct MF",
     statutory: "Standard exit-load + capital-gains tax per scheme",
   },
 ];

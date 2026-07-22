@@ -36,7 +36,7 @@ export function TopBar() {
 
   // Live wallet balance — drives the pill on the topbar.
   // `placeholderData` paints the last-known balance from localStorage so the
-  // pill never flashes ₹0 between login and the first /wallet/summary
+  // pill never flashes 🪙0 between login and the first /wallet/summary
   // response. We persist on every fresh fetch so the snapshot stays current
   // across refreshes/tabs.
   const { data: wallet, isLoading: walletLoading } = useQuery({
@@ -87,7 +87,7 @@ export function TopBar() {
 
       {/* Wallet balance pill — always visible, click → /wallet. While the
           first /wallet/summary is still loading and we have no cached
-          snapshot to fall back on, show a dim ellipsis instead of "₹0" so
+          snapshot to fall back on, show a dim ellipsis instead of "🪙0" so
           the user doesn't briefly think their wallet is empty. */}
       <Link
         href="/wallet"
@@ -103,7 +103,7 @@ export function TopBar() {
             !hasBalance && walletLoading && "text-muted-foreground/60",
           )}
         >
-          {hasBalance ? formatINR(balance) : walletLoading ? "₹ —" : formatINR(balance)}
+          {hasBalance ? formatINR(balance) : walletLoading ? "🪙 —" : formatINR(balance)}
         </span>
       </Link>
 

@@ -100,7 +100,7 @@ export function WalletStrip({
   const equity = bal + openUnrl;
   const free = equity - margin;
 
-  // Margin Level chip removed per user request — a residual ₹0.02 left
+  // Margin Level chip removed per user request — a residual 🪙0.02 left
   // over from a closed position made the ratio explode into a nonsense
   // "40,005,950%" display whenever no real exposure was open. Bal /
   // Equity / Margin / Free + Open P/L convey all the info admins and

@@ -227,7 +227,7 @@ export default function AdminUsersPage() {
         const v = Number(r.wallet?.settlement_outstanding ?? 0);
         return v > 0 ? (
           <span className="text-sm font-semibold tabular-nums text-destructive">
-            ₹{v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            🪙{v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
@@ -407,7 +407,7 @@ function MoneyCell({ value, muted }: { value: number; muted?: boolean }) {
         muted ? "text-foreground/90" : ""
       }`}
     >
-      ₹{value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      🪙{value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </span>
   );
 }
@@ -424,12 +424,12 @@ function PnlCell({ value }: { value: number | null }) {
   if (value === 0) {
     return (
       <span className="text-sm font-semibold tabular-nums text-muted-foreground">
-        ₹0.00
+        🪙0.00
       </span>
     );
   }
   const positive = value > 0;
-  const formatted = `₹${Math.abs(value).toLocaleString("en-IN", {
+  const formatted = `🪙${Math.abs(value).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -476,7 +476,7 @@ function EquityCell({
         : "text-foreground/90";
   return (
     <span className={`text-sm font-semibold tabular-nums ${tone}`}>
-      ₹{equity.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      🪙{equity.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </span>
   );
 }
@@ -588,7 +588,7 @@ function UserMobileCard({
         <div className="mt-2 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
           <span>Settlement outstanding</span>
           <span className="font-semibold tabular-nums">
-            ₹{settlement.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            🪙{settlement.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
       )}
@@ -639,7 +639,7 @@ function MoneyTile({
   const display =
     value == null
       ? "—"
-      : `₹${value.toLocaleString("en-IN", {
+      : `🪙${value.toLocaleString("en-IN", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })}`;

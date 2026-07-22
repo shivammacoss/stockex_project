@@ -278,7 +278,7 @@ export default function FeaturesPage() {
         <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-10 text-center sm:p-14">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">See it on your screen.</h2>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            Open a free account, fund ₹100, place a token order on the smallest
+            Open a free account, fund 🪙100, place a token order on the smallest
             NSE lot. The fastest way to evaluate a broker is to actually trade
             on it.
           </p>

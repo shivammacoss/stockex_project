@@ -53,7 +53,7 @@ export const CATEGORY_FIELDS: Record<string, FieldDef[]> = {
     { key: "perOrderQty", label: "Per Order Qty", type: "number" },
     { key: "maxQtyPerScript", label: "Max Qty/Script", type: "number" },
   ],
-  value: [{ key: "maxValue", label: "Max margin value (₹)", type: "number" }],
+  value: [{ key: "maxValue", label: "Max margin value (🪙)", type: "number" }],
   fixedMargin: [
     {
       key: "marginCalcMode",
@@ -125,9 +125,9 @@ export const CATEGORY_FIELDS: Record<string, FieldDef[]> = {
         { v: "per_crore", l: "Per Crore" },
       ],
     },
-    { key: "commission", label: "Commission (₹)", type: "number", notForOption: true },
-    { key: "optionBuyCommission", label: "Buy Brokerage (₹)", type: "number", optionOnly: true },
-    { key: "optionSellCommission", label: "Sell Brokerage (₹)", type: "number", optionOnly: true },
+    { key: "commission", label: "Commission (🪙)", type: "number", notForOption: true },
+    { key: "optionBuyCommission", label: "Buy Brokerage (🪙)", type: "number", optionOnly: true },
+    { key: "optionSellCommission", label: "Sell Brokerage (🪙)", type: "number", optionOnly: true },
     {
       key: "chargeOn",
       label: "Charge On",

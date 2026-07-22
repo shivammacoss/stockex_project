@@ -11,7 +11,7 @@ import {
 export const metadata: Metadata = {
   title: "IB Management — Introducing Broker Program | StockEx",
   description:
-    "Refer traders to StockEx and earn recurring commission. A real-time dashboard, multi-tier tracking, and on-time monthly payouts in ₹.",
+    "Refer traders to StockEx and earn recurring commission. A real-time dashboard, multi-tier tracking, and on-time monthly payouts in 🪙.",
 };
 
 const FEATURES = [
@@ -46,7 +46,7 @@ export default function IbManagementPage() {
       <MpPageHero
         eyebrow="IB Management"
         title="Refer traders. Earn recurring commission."
-        lead="The StockEx Introducing Broker program pays you for every trader you bring on — with a real-time dashboard, multi-tier tracking, and on-time monthly payouts in ₹."
+        lead="The StockEx Introducing Broker program pays you for every trader you bring on — with a real-time dashboard, multi-tier tracking, and on-time monthly payouts in 🪙."
       >
         <MpButton href="/register" size="lg">
           Become an IB

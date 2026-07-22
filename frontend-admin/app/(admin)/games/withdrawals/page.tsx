@@ -46,7 +46,7 @@ export default function GamesWithdrawalsPage() {
           {(data || []).map((r: any) => (
             <div key={r.id} className="flex items-center justify-between border-b border-border/60 py-3 last:border-0">
               <div className="min-w-0">
-                <div className="font-semibold tabular-nums">₹{Number(r.amount).toLocaleString("en-IN")}</div>
+                <div className="font-semibold tabular-nums">🪙{Number(r.amount).toLocaleString("en-IN")}</div>
                 <div className="text-xs text-muted-foreground">
                   User {r.user_id} · {new Date(r.created_at).toLocaleString("en-IN")}
                 </div>

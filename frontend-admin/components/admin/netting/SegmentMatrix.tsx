@@ -62,7 +62,7 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
   // → Times, else Fixed) that handles unset rows correctly. If we
   // pre-stage "fixed" here, an admin who edits `intradayMargin` from
   // default 100 → 700 expecting Times leverage will silently get
-  // "Fixed · ₹100/lot" because Save commits both the staged
+  // "Fixed · 🪙100/lot" because Save commits both the staged
   // "marginCalcMode=fixed" AND keeps intradayMargin at 100 (the change
   // they thought they made never got typed in). Leave null alone — the
   // admin's explicit dropdown click is the only way to commit a mode.

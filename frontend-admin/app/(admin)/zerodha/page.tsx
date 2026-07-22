@@ -730,7 +730,7 @@ export default function ZerodhaConnectPage() {
                 ok={!!diag.restQuote?.ok}
                 detail={
                   diag.restQuote?.ok
-                    ? `OK · ${diag.restQuote?.key} → LTP ₹${
+                    ? `OK · ${diag.restQuote?.key} → LTP 🪙${
                         diag.restQuote?.sample?.last_price ?? "—"
                       }`
                     : diag.restQuote?.error || "No quote returned"

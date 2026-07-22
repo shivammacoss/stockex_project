@@ -100,7 +100,7 @@ export function UserActionMenu({ user, onChange }: Props) {
         transaction_type: kind === "addFund" ? "ADJUSTMENT" : "ADJUSTMENT",
       });
       toast.success(
-        kind === "addFund" ? `Credited ₹${num} to ${user.user_code}` : `Debited ₹${num} from ${user.user_code}`
+        kind === "addFund" ? `Credited 🪙${num} to ${user.user_code}` : `Debited 🪙${num} from ${user.user_code}`
       );
       refresh();
       close();
@@ -514,7 +514,7 @@ function AmountDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Amount (₹)</Label>
+            <Label>Amount (🪙)</Label>
             <Input
               type="number"
               inputMode="decimal"
@@ -556,8 +556,8 @@ function AmountDialog({
 
 function _fmtINR(n: number | string | null | undefined): string {
   const v = Number(n ?? 0);
-  if (!Number.isFinite(v)) return "₹0.00";
-  return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (!Number.isFinite(v)) return "🪙0.00";
+  return `🪙${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function _pnlClass(n: number | string | null | undefined): string {

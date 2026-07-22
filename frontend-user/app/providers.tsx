@@ -76,7 +76,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // This is the "feel-fast like the APK" change: on every app open / reload,
   // the last-known data for every page (portfolio balance, positions, market
   // overview, orders, …) is rehydrated from localStorage and painted INSTANTLY
-  // — no blank / ₹0 flash while the network round-trips. Each query then
+  // — no blank / 🪙0 flash while the network round-trips. Each query then
   // refetches in the background per its own staleTime / refetchInterval, so
   // the cached value is replaced with fresh data a moment later (exactly how
   // the APK's MMKV cache behaves). Survives a full browser/app close because

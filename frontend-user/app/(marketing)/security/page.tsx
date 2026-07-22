@@ -124,7 +124,7 @@ export default function SecurityPage() {
             <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Six layers between an attacker and your trades.</h2>
             <p className="mt-3 text-muted-foreground">
               Every one is optional except the first two. We strongly recommend
-              all six for any account with more than ₹5 lakh on it.
+              all six for any account with more than 🪙5 lakh on it.
             </p>
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

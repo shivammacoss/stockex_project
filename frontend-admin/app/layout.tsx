@@ -43,8 +43,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // translate="no" + .notranslate stops Chrome's auto-translate prompt
-    // from rewriting financial labels (operator flagged: "₹ Margin used"
-    // was becoming "₹ Marja usada" in Spanish locale Chrome and the
+    // from rewriting financial labels (operator flagged: "🪙 Margin used"
+    // was becoming "🪙 Marja usada" in Spanish locale Chrome and the
     // numbers got reformatted incorrectly).
     <html lang="en" translate="no" className="notranslate" suppressHydrationWarning>
       <head>
@@ -52,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             mobile/desktop browser where the <html> attribute alone is
             ignored. Operator pain: refreshing the admin Position page
             on mobile Chrome / Edge / Yandex was triggering the "Translate
-            page?" prompt which would rewrite ₹ amounts and BUY/SELL
+            page?" prompt which would rewrite 🪙 amounts and BUY/SELL
             labels into Hindi/Marathi, breaking SOPs and screen-shares.
             The four <meta>s below opt out of every major translation
             engine; `notranslate` on body adds a second DOM-level hint

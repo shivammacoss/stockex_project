@@ -31,7 +31,7 @@ interface Props {
 
 function formatINR(v: unknown): string {
   const n = Number(v ?? 0);
-  return `₹${n.toLocaleString("en-IN", {
+  return `🪙${n.toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -161,7 +161,7 @@ export function LedgerSheet({ open, onClose, user }: Props) {
           </div>
           <div className="grid grid-cols-1 gap-2">
             <div>
-              <Label htmlFor="adjust-amount">Amount (₹)</Label>
+              <Label htmlFor="adjust-amount">Amount (🪙)</Label>
               <Input id="adjust-amount" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
             </div>
             <div>

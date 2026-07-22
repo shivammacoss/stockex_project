@@ -90,7 +90,7 @@ export default function SettlementsPage() {
       align: "right",
       render: (r) => (
         <span className={Number(r.gross_user_loss_inr) > 0 ? "text-red-500" : "text-muted-foreground"}>
-          ₹ {inr(r.gross_user_loss_inr)}
+          🪙 {inr(r.gross_user_loss_inr)}
         </span>
       ),
     },
@@ -100,7 +100,7 @@ export default function SettlementsPage() {
       align: "right",
       render: (r) => (
         <span className={Number(r.gross_user_profit_inr) > 0 ? "text-emerald-500" : "text-muted-foreground"}>
-          ₹ {inr(r.gross_user_profit_inr)}
+          🪙 {inr(r.gross_user_profit_inr)}
         </span>
       ),
     },
@@ -108,7 +108,7 @@ export default function SettlementsPage() {
       key: "total_brokerage_inr",
       header: "Brokerage",
       align: "right",
-      render: (r) => `₹ ${inr(r.total_brokerage_inr)}`,
+      render: (r) => `🪙 ${inr(r.total_brokerage_inr)}`,
     },
     {
       key: "net_house_pnl_inr",
@@ -116,7 +116,7 @@ export default function SettlementsPage() {
       align: "right",
       render: (r) => (
         <span className={Number(r.net_house_pnl_inr) >= 0 ? "text-emerald-500" : "text-red-500"}>
-          ₹ {inr(r.net_house_pnl_inr)}
+          🪙 {inr(r.net_house_pnl_inr)}
         </span>
       ),
     },
@@ -130,7 +130,7 @@ export default function SettlementsPage() {
       key: "sub_admin_share_inr",
       header: "Sub-admin share",
       align: "right",
-      render: (r) => `₹ ${inr(r.sub_admin_share_inr)}`,
+      render: (r) => `🪙 ${inr(r.sub_admin_share_inr)}`,
     },
     {
       key: "status",
@@ -205,12 +205,12 @@ export default function SettlementsPage() {
           <SummaryCard label="Total users" value={String(totals?.user_count ?? 0)} />
           <SummaryCard
             label="Net house P&L"
-            value={`₹ ${inr(totals?.net_house_pnl_inr)}`}
+            value={`🪙 ${inr(totals?.net_house_pnl_inr)}`}
             tone={Number(totals?.net_house_pnl_inr ?? 0) >= 0 ? "good" : "bad"}
           />
           <SummaryCard
             label="Total sub-admin payout"
-            value={`₹ ${inr(totals?.sub_admin_share_inr)}`}
+            value={`🪙 ${inr(totals?.sub_admin_share_inr)}`}
           />
         </div>
       )}

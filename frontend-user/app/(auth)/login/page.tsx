@@ -104,7 +104,7 @@ function LoginPageInner() {
     try {
       const pair = await AuthAPI.demoLogin();
       setSession(pair as any);
-      toast.success("Demo account ready — ₹5,00,000 virtual balance");
+      toast.success("Demo account ready — 🪙5,00,000 virtual balance");
       router.push("/dashboard");
     } catch {
       toast.error("Could not start demo. Please try again.");
@@ -267,7 +267,7 @@ function LoginPageInner() {
                 "Setting up demo…"
               ) : (
                 <>
-                  Try Demo — ₹5,00,000
+                  Try Demo — 🪙5,00,000
                   <span className="hidden lg:inline"> virtual</span>
                 </>
               )}

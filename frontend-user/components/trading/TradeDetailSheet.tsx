@@ -444,14 +444,14 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
 
   // INR formatter for the wallet KPI grid — user feedback was that the
   // abbreviated "K / L / Cr" suffixes hid the exact figure ("4.47 L" is
-  // less actionable than "₹4,47,000.00" when sizing a position). We now
+  // less actionable than "🪙4,47,000.00" when sizing a position). We now
   // render the full Indian-grouped number everywhere and let the card
   // width handle overflow (auto-shrink via `truncate`/CSS clamp).
   function formatINRCompact(value: number | null | undefined): string {
     // Whole rupees only (drop paise) so the full number fits the slim 3-up
-    // margin cards without truncating — ₹2,23,160 instead of ₹2,23,160.00.
+    // margin cards without truncating — 🪙2,23,160 instead of 🪙2,23,160.00.
     const n = Math.round(Number(value ?? 0));
-    return `${n < 0 ? "-" : ""}₹${Math.abs(n).toLocaleString("en-IN")}`;
+    return `${n < 0 ? "-" : ""}🪙${Math.abs(n).toLocaleString("en-IN")}`;
   }
 
   const expiryShort = useMemo(() => {
@@ -477,7 +477,7 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
     // pinned at its initial value for the sheet's whole lifetime — reading
     // `sideQuote` here sent the ASK along with a SELL order. The backend
     // honours an expected_price within 1% (the spread is ~0.15%), so the
-    // SELL filled at the BUY price: entry == exit, P&L ₹0 bar charges.
+    // SELL filled at the BUY price: entry == exit, P&L 🪙0 bar charges.
     const actionQuote = action === "BUY" ? buyPrice : sellPrice;
     // Force-commit any pending lot input — the user can tap BUY/SELL
     // without first blurring the lot field on mobile, in which case

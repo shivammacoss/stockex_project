@@ -90,7 +90,7 @@ export default function FundRequestsPage() {
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <Label className="text-xs">Amount (₹)</Label>
+                  <Label className="text-xs">Amount (🪙)</Label>
                   <Input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" inputMode="decimal" />
                 </div>
                 <div>
@@ -127,7 +127,7 @@ export default function FundRequestsPage() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <Label className="text-xs">Amount (₹)</Label>
+                <Label className="text-xs">Amount (🪙)</Label>
                 <Input value={xferAmount} onChange={(e) => setXferAmount(e.target.value)} placeholder="0.00" inputMode="decimal" />
               </div>
               <div>

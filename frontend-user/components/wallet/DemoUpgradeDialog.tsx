@@ -27,7 +27,7 @@ export function DemoUpgradeDialog({ open, onClose }: DemoUpgradeDialogProps) {
           </div>
           <DialogTitle className="text-lg">Demo Account</DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
-            You&apos;re trading with <span className="font-semibold text-foreground">₹1,00,000 virtual money</span>.
+            You&apos;re trading with <span className="font-semibold text-foreground">🪙1,00,000 virtual money</span>.
             Deposits and withdrawals are not available on demo accounts.
           </DialogDescription>
         </DialogHeader>

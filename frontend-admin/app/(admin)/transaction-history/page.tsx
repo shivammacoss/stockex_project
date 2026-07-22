@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 
 function inr(n: number) {
   const v = Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `₹${v}`;
+  return `🪙${v}`;
 }
 
 export default function TransactionHistoryPage() {

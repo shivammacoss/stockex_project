@@ -821,7 +821,7 @@ export default function TradingTerminalPage() {
               the Positions tab header + per-row rows show. Otherwise the
               footer polls /positions/pnl-summary (mid-LTP) and shows a
               different number than the rows (close-side) — wide-spread
-              instruments like XPTUSD made the gap obvious (₹5k off). */}
+              instruments like XPTUSD made the gap obvious (🪙5k off). */}
           <WalletStrip className="mt-2" openPnL={totalPnL} walletKind={activeWalletKind} />
         </div>
       </section>

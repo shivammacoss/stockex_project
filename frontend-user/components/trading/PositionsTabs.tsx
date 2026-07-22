@@ -808,7 +808,7 @@ function PositionRow({
   // mark (derivedPnl therefore agrees). Fall back to derived only for a
   // freshly-placed position whose server P/L hasn't landed yet (still 0).
   // The old "larger magnitude wins" rule wrongly surfaced a stale LTP-based
-  // loss on thin contracts (SILVERM showed ₹-11,621 vs the real ₹-4,535).
+  // loss on thin contracts (SILVERM showed 🪙-11,621 vs the real 🪙-4,535).
   const displayPnl = serverPnl !== 0 ? serverPnl : derivedPnl;
   return (
     <Row
@@ -988,7 +988,7 @@ function SideBadge({ side }: { side: "BUY" | "SELL" }) {
 /** P/L cell for the History tab — what would this trade be worth right now
  *  if the user marked-to-market against the live LTP. Coloured green when
  *  positive, red when negative. Source-currency (USD for crypto/forex/CDS,
- *  ₹ otherwise) so it lines up with the price columns in the same row. */
+ *  🪙 otherwise) so it lines up with the price columns in the same row. */
 function HistoryPnl({
   pnl,
   segment,

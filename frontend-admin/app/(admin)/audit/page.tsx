@@ -594,7 +594,7 @@ const KIND_LABELS: Record<string, string> = {
 function fmtMoney(v: any): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return String(v ?? "");
-  return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "🪙" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** "Name (CODE)" for a row's actor/target. Falls back to the code, the

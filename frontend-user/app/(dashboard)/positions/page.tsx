@@ -37,7 +37,7 @@ type TabKey =
   | "cancelled"
   | "rejected";
 
-/** Bare-number price formatter — no ₹ / $ prefix on any instrument
+/** Bare-number price formatter — no 🪙 / $ prefix on any instrument
  *  price (LTP / bid / ask / avg_price / close). Forex pairs render with
  *  4 decimals, everything else with 2. `quote` is still accepted for
  *  call-site compatibility but ignored (the previous USD/INR branch is
@@ -173,7 +173,7 @@ function fmtQty(q: any): string {
 // settings — MCX FUT 70× / NSE OPT 100% / Fixed-per-lot, whatever the
 // admin matrix said). The old client-side `intraday × 1.4` heuristic
 // was a guess that matched NSE equity but was wildly wrong on MCX
-// (operator's CRUDEOIL row showed ₹2,648 instead of ₹13,511).
+// (operator's CRUDEOIL row showed 🪙2,648 instead of 🪙13,511).
 // Falls back to the locked intraday margin if the backend hasn't
 // stamped a value yet (stale cached payloads from before the upgrade).
 function holdingMarginFor(row: any): number {
@@ -1745,10 +1745,10 @@ function WalletStatusStrip({
   // overnight. To roll into NRML the user needs `cfRequired` locked; the
   // intraday `used` margin is released and re-locked, so the funds that can
   // meet it are the FULL balance (available + used). If the balance already
-  // covers cfRequired the user needs to add nothing → ₹0 (green); otherwise
+  // covers cfRequired the user needs to add nothing → 🪙0 (green); otherwise
   // it's the deposit they must top up → red.
-  //   balance = ₹12,687, cfRequired = ₹7,500 → extra needed ₹0 (affordable)
-  //   balance = ₹5,000,  cfRequired = ₹7,500 → extra needed ₹2,500
+  //   balance = 🪙12,687, cfRequired = 🪙7,500 → extra needed 🪙0 (affordable)
+  //   balance = 🪙5,000,  cfRequired = 🪙7,500 → extra needed 🪙2,500
   // (Earlier this showed `cfRequired - used` = the additional margin that
   // would be blocked at rollover, but that read as a scary red number even
   // when the wallet could easily afford the carry — operator flagged it as
@@ -2808,7 +2808,7 @@ function PendingOrderCard({
         <div className="shrink-0 text-right">
           {orderType === "LIMIT" && (
             <div className="font-tabular text-sm font-semibold tabular-nums">
-              ₹{price.toFixed(2)}
+              🪙{price.toFixed(2)}
               <span className="ml-1 text-[10px] font-normal uppercase text-muted-foreground">
                 limit
               </span>
@@ -2816,7 +2816,7 @@ function PendingOrderCard({
           )}
           {(orderType === "SL_M" || orderType === "SL") && (
             <div className="font-tabular text-sm font-semibold tabular-nums">
-              ₹{trigger.toFixed(2)}
+              🪙{trigger.toFixed(2)}
               <span className="ml-1 text-[10px] font-normal uppercase text-muted-foreground">
                 trigger
               </span>

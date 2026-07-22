@@ -71,7 +71,7 @@ export function TransferDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="tx-amount">Amount (₹)</Label>
+            <Label htmlFor="tx-amount">Amount (🪙)</Label>
             <Input
               id="tx-amount"
               type="number"

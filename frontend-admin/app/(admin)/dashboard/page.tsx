@@ -126,10 +126,10 @@ export default function AdminDashboardPage() {
   const ready = !!stats;
   const num = (v: number | null | undefined): string => (ready ? formatNumber(v ?? 0) : "—");
   // Compact Indian-style K/L/Cr formatting on the tiles — a 200 px card
-  // couldn't fit ₹7,42,50,67,910.40, which was wrapping onto a second line
+  // couldn't fit 🪙7,42,50,67,910.40, which was wrapping onto a second line
   // and overlapping the icon. Risk-monitor table further down still uses
   // the full `formatINR` because it has its own column width budget.
-  const inr = (v: number | null | undefined): string => (ready ? formatINRCompact(v) : "₹ —");
+  const inr = (v: number | null | undefined): string => (ready ? formatINRCompact(v) : "🪙 —");
 
   // Each tile gets a `tone` to drive a soft gradient + coloured icon
   // badge. We keep the palette deliberately tasteful: an emerald house

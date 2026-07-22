@@ -22,8 +22,8 @@ interface Props {
   close?: number;
   /** Live USD/INR rate from the quote feed. Used to convert USD-quoted
    *  margin into INR for display — without this the panel shows the USD
-   *  number with a ₹ symbol, which makes a $4737 gold lot look like it
-   *  needs ₹4,737 when it actually needs ~₹3,93,000. Defaults to 1 so
+   *  number with a 🪙 symbol, which makes a $4737 gold lot look like it
+   *  needs 🪙4,737 when it actually needs ~🪙3,93,000. Defaults to 1 so
    *  INR-quoted instruments work as-is. */
   fxRate?: number;
   /** Last-known price for DISPLAY when the live feed is down / market
@@ -300,7 +300,7 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   const isUsdSeg = false;
   const fxMultiplier = 1;
   // Admin's margin-mode dropdown — "fixed" means the configured value is
-  // a flat ₹/lot, the rest of the price × lot_size math is bypassed.
+  // a flat 🪙/lot, the rest of the price × lot_size math is bypassed.
   const marginCalcMode = String(effSettings?.margin_calc_mode || "").toLowerCase();
   const fixedMarginPerLot = Number(effSettings?.fixed_margin_per_lot ?? 0);
   // Strike-based option-SELL margin: strike × qty × rate (mirrors the backend
@@ -309,7 +309,7 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   // Prefer the strike the settings endpoint resolved for THIS token (always
   // present); fall back to the instrument object only if that's missing. The
   // instrument passed into the panel from search/watchlist often lacks strike,
-  // which made the strike_pct margin preview fall through to ₹0.
+  // which made the strike_pct margin preview fall through to 🪙0.
   const instrumentStrike = Number(effSettings?.strike ?? (instrument as any)?.strike ?? 0);
   const marginPerLot = useMemo(() => {
     // Strike-based option SELL: margin = strike × lot_size × rate (per lot).
@@ -323,7 +323,7 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
       return +(instrumentStrike * lotSize * strikeMarginRate).toFixed(2);
     }
     if (marginCalcMode === "fixed" && fixedMarginPerLot > 0) {
-      // Flat ₹/lot — admin's configured number, charged once per lot
+      // Flat 🪙/lot — admin's configured number, charged once per lot
       // regardless of price/lot_size. Matches the backend validator's
       // fixed-mode short-circuit in order_validator.py.
       return +fixedMarginPerLot.toFixed(2);
@@ -336,7 +336,7 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   const intradayMargin = +(marginPerLot * lots).toFixed(2);
   // Carry-forward margin uses the OVERNIGHT triple from segment settings
   // — same shape as the intraday calc but reads the `overnight_*` fields
-  // the admin matrix exposes (Fixed ₹/lot OR Times-leverage OR legacy
+  // the admin matrix exposes (Fixed 🪙/lot OR Times-leverage OR legacy
   // percent). The old `intradayMargin × 1.4` heuristic was only right
   // for NSE equity tiers; on MCX FUT with Intraday=500× / Overnight=70×
   // it under-reported by ~7× and let users open positions they couldn't
@@ -379,10 +379,10 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
   ]);
   // `notional` is in the instrument's quote currency. For USD-quoted segments
   // (crypto / forex / spot metals / energy) that's dollars; for Indian segments
-  // it's already rupees. The breakdown tile renders everything with ₹, so we
+  // it's already rupees. The breakdown tile renders everything with 🪙, so we
   // convert USD → INR before display. Without this the Total value just shows
-  // the USD number with a ₹ symbol — making an $80k BTC notional look like
-  // ₹80k when it's actually ~₹66.8 lakh.
+  // the USD number with a 🪙 symbol — making an $80k BTC notional look like
+  // 🪙80k when it's actually ~🪙66.8 lakh.
   const notionalInr = isUsdSeg ? notional * fxMultiplier : notional;
   const totalValue = notionalInr;
 
@@ -691,14 +691,14 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
       if (slNum > 0) {
         if (side === "BUY" && slNum >= _slTpRef) {
           toast.error(
-            `Stop Loss ₹${slNum} must be BELOW entry ₹${fmtPrice(_slTpRef)} for a BUY order.`,
+            `Stop Loss 🪙${slNum} must be BELOW entry 🪙${fmtPrice(_slTpRef)} for a BUY order.`,
             { duration: 5000 },
           );
           return;
         }
         if (side === "SELL" && slNum <= _slTpRef) {
           toast.error(
-            `Stop Loss ₹${slNum} must be ABOVE entry ₹${fmtPrice(_slTpRef)} for a SELL order.`,
+            `Stop Loss 🪙${slNum} must be ABOVE entry 🪙${fmtPrice(_slTpRef)} for a SELL order.`,
             { duration: 5000 },
           );
           return;
@@ -707,14 +707,14 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
       if (tpNum > 0) {
         if (side === "BUY" && tpNum <= _slTpRef) {
           toast.error(
-            `Target ₹${tpNum} must be ABOVE entry ₹${fmtPrice(_slTpRef)} for a BUY order.`,
+            `Target 🪙${tpNum} must be ABOVE entry 🪙${fmtPrice(_slTpRef)} for a BUY order.`,
             { duration: 5000 },
           );
           return;
         }
         if (side === "SELL" && tpNum >= _slTpRef) {
           toast.error(
-            `Target ₹${tpNum} must be BELOW entry ₹${fmtPrice(_slTpRef)} for a SELL order.`,
+            `Target 🪙${tpNum} must be BELOW entry 🪙${fmtPrice(_slTpRef)} for a SELL order.`,
             { duration: 5000 },
           );
           return;
@@ -728,14 +728,14 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
         if (dayHigh > 0 && dayLow > 0) {
           if (side === "BUY" && tpNum <= dayHigh) {
             toast.error(
-              `Target ₹${tpNum} is inside today's range (Low ₹${fmtPrice(dayLow)} – High ₹${fmtPrice(dayHigh)}). A BUY target must be ABOVE the day High ₹${fmtPrice(dayHigh)}.`,
+              `Target 🪙${tpNum} is inside today's range (Low 🪙${fmtPrice(dayLow)} – High 🪙${fmtPrice(dayHigh)}). A BUY target must be ABOVE the day High 🪙${fmtPrice(dayHigh)}.`,
               { duration: 6000 },
             );
             return;
           }
           if (side === "SELL" && tpNum >= dayLow) {
             toast.error(
-              `Target ₹${tpNum} is inside today's range (Low ₹${fmtPrice(dayLow)} – High ₹${fmtPrice(dayHigh)}). A SELL target must be BELOW the day Low ₹${fmtPrice(dayLow)}.`,
+              `Target 🪙${tpNum} is inside today's range (Low 🪙${fmtPrice(dayLow)} – High 🪙${fmtPrice(dayHigh)}). A SELL target must be BELOW the day Low 🪙${fmtPrice(dayLow)}.`,
               { duration: 6000 },
             );
             return;
@@ -748,14 +748,14 @@ export function OrderPanel({ instrument, ltp, bid, ask, open, high, low, close, 
         const _lower = _roundPx(_slTpRef * (1 - limitAwayPct / 100));
         if (slNum > 0 && slNum > _lower && slNum < _upper) {
           toast.error(
-            `Stop Loss ₹${slNum} is too close to entry ₹${fmtPrice(_slTpRef)}. Must be at least ${limitAwayPct}% away (≤ ₹${fmtPrice(_lower)}).`,
+            `Stop Loss 🪙${slNum} is too close to entry 🪙${fmtPrice(_slTpRef)}. Must be at least ${limitAwayPct}% away (≤ 🪙${fmtPrice(_lower)}).`,
             { duration: 6000 },
           );
           return;
         }
         if (tpNum > 0 && tpNum > _lower && tpNum < _upper) {
           toast.error(
-            `Target ₹${tpNum} is too close to entry ₹${fmtPrice(_slTpRef)}. Must be at least ${limitAwayPct}% away (≥ ₹${fmtPrice(_upper)}).`,
+            `Target 🪙${tpNum} is too close to entry 🪙${fmtPrice(_slTpRef)}. Must be at least ${limitAwayPct}% away (≥ 🪙${fmtPrice(_upper)}).`,
             { duration: 6000 },
           );
           return;

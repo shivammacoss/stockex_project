@@ -393,7 +393,7 @@ export function GameScreen({ id }: { id: GameUiId }) {
               <p className="rounded-md bg-muted/40 px-2 py-1.5 text-center text-[10px] leading-snug text-muted-foreground">
                 Predicting the <b className="text-foreground">next</b> 15-min move · result at next window&apos;s close vs this window&apos;s close.
               </p>
-              <p className="text-center text-[10px] text-muted-foreground">Min {minTickets} · Max {maxTickets} · 1 Tkt = ₹{ticketPrice}</p>
+              <p className="text-center text-[10px] text-muted-foreground">Min {minTickets} · Max {maxTickets} · 1 Tkt = 🪙{ticketPrice}</p>
             </CardContent>
           </Card>
         </div>

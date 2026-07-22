@@ -197,7 +197,7 @@ export function OrderForm({ instrument, ltp }: Props) {
 
         {orderType !== "MARKET" && (
           <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Price (₹)</Label>
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Price (🪙)</Label>
             <Input
               type="number"
               step="0.05"
@@ -209,7 +209,7 @@ export function OrderForm({ instrument, ltp }: Props) {
         )}
         {(orderType === "SL" || orderType === "SL_M") && (
           <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Trigger price (₹)</Label>
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Trigger price (🪙)</Label>
             <Input
               type="number"
               step="0.05"

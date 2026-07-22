@@ -17,11 +17,16 @@ const numFmt = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
 });
 
+// Platform currency symbol — StockEx Coins. The whole app runs in coins now,
+// so every money value renders with the coin icon in place of ₹. Kept as a
+// single constant so the symbol can be swapped in ONE place.
+export const COIN = "🪙";
+
 export function formatINR(value: number | string | null | undefined, opts?: { withSymbol?: boolean }) {
-  if (value === null || value === undefined || value === "") return opts?.withSymbol === false ? "0.00" : "₹ 0.00";
+  if (value === null || value === undefined || value === "") return opts?.withSymbol === false ? "0.00" : `${COIN} 0.00`;
   const n = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(n)) return opts?.withSymbol === false ? "0.00" : "₹ 0.00";
-  return opts?.withSymbol === false ? numFmt.format(n) : inrFmt.format(n).replace("₹", "₹ ");
+  if (!Number.isFinite(n)) return opts?.withSymbol === false ? "0.00" : `${COIN} 0.00`;
+  return opts?.withSymbol === false ? numFmt.format(n) : `${COIN} ${numFmt.format(n)}`;
 }
 
 export function formatNumber(value: number | string | null | undefined, fractionDigits = 2) {

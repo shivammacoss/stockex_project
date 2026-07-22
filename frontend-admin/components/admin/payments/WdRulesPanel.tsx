@@ -177,15 +177,15 @@ function WdRuleCard({
       <CardContent className="space-y-3 text-xs">
         <div className="grid grid-cols-2 gap-2">
           <RuleInput
-            label="Min amount (₹)"
+            label="Min amount (🪙)"
             value={form.min_amount}
-            hint={inheritHint(rule, "min_amount", `₹${rule.effective.min_amount ?? 0}`)}
+            hint={inheritHint(rule, "min_amount", `🪙${rule.effective.min_amount ?? 0}`)}
             onChange={(v) => setForm((f) => ({ ...f, min_amount: v }))}
           />
           <RuleInput
-            label="Max amount (₹)"
+            label="Max amount (🪙)"
             value={form.max_amount}
-            hint={inheritHint(rule, "max_amount", `₹${rule.effective.max_amount ?? 0}`)}
+            hint={inheritHint(rule, "max_amount", `🪙${rule.effective.max_amount ?? 0}`)}
             onChange={(v) => setForm((f) => ({ ...f, max_amount: v }))}
           />
         </div>

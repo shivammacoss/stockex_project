@@ -41,13 +41,13 @@ export default function GamesEarningsPage() {
               <div className="min-w-0">
                 <div className="font-semibold">{r.full_name} <span className="text-xs text-muted-foreground">· {r.user_code} · {r.role}</span></div>
                 <div className="text-xs text-muted-foreground">
-                  Earned ₹{Number(r.temporary_total_earned).toLocaleString("en-IN")} · Released ₹{Number(r.temporary_total_released).toLocaleString("en-IN")}
+                  Earned 🪙{Number(r.temporary_total_earned).toLocaleString("en-IN")} · Released 🪙{Number(r.temporary_total_released).toLocaleString("en-IN")}
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Held</div>
-                  <div className="font-bold tabular-nums text-primary">₹{Number(r.temporary_balance).toLocaleString("en-IN")}</div>
+                  <div className="font-bold tabular-nums text-primary">🪙{Number(r.temporary_balance).toLocaleString("en-IN")}</div>
                 </div>
                 <Button
                   size="sm"

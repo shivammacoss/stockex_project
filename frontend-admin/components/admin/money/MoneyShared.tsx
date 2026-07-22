@@ -114,7 +114,7 @@ export function MoneyFilterBar({
   );
 }
 
-// ── KPI tile (auto-shrink + clip so crore-scale ₹ never overflows) ──────────
+// ── KPI tile (auto-shrink + clip so crore-scale 🪙 never overflows) ──────────
 export type Tone = "in" | "out" | "settled" | "net" | "muted";
 
 function toneClasses(tone: Tone, value: number): { ring: string; text: string } {
@@ -134,7 +134,7 @@ function toneClasses(tone: Tone, value: number): { ring: string; text: string } 
   }
 }
 
-/** Font auto-shrinks as the string grows (crore-scale ₹ ≈ 17 chars). */
+/** Font auto-shrinks as the string grows (crore-scale 🪙 ≈ 17 chars). */
 function fitFontClass(s: string): string {
   const n = s.length;
   if (n <= 10) return "text-[26px] leading-7";

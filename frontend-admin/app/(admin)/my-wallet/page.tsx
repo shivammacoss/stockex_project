@@ -217,7 +217,7 @@ function KuberBalanceCard() {
       icon={<Vault className="size-5" />}
       label="Kuber pool"
       value={formatINR(data?.kuber_balance ?? 0)}
-      hint="Distributable house pool (₹100 cr cap)"
+      hint="Distributable house pool (🪙100 cr cap)"
       accent
     />
   );
@@ -241,7 +241,7 @@ function KuberControls() {
 
   const bootstrap = useMutation({
     mutationFn: () => AdminKuberAPI.bootstrap(),
-    onSuccess: () => { toast.success("Kuber pool topped up to ₹100 cr"); refresh(); },
+    onSuccess: () => { toast.success("Kuber pool topped up to 🪙100 cr"); refresh(); },
     onError: (e: any) => toast.error(e?.message || "Failed"),
   });
   const transfer = useMutation({
@@ -286,7 +286,7 @@ function KuberControls() {
               <ArrowLeftRight className="size-4" /> Kuber → Main
             </Button>
             <Button size="sm" loading={bootstrap.isPending} onClick={() => bootstrap.mutate()}>
-              <RefreshCw className="size-4" /> Top up to ₹100 cr
+              <RefreshCw className="size-4" /> Top up to 🪙100 cr
             </Button>
           </div>
         </div>

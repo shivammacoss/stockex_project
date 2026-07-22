@@ -208,7 +208,7 @@ export function HeroAnimation() {
         <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-background/70 px-2.5 py-1 text-[10px] font-semibold text-foreground backdrop-blur">
           <IndianRupee className="size-3 text-primary" />
           Margin used
-          <span className="font-tabular text-primary">₹ 1,24,580</span>
+          <span className="font-tabular text-primary">🪙 1,24,580</span>
         </div>
       </div>
       <div className="pointer-events-none absolute bottom-[16%] right-[8%] mp-float mp-float-delay-3">

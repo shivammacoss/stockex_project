@@ -348,7 +348,7 @@ function Account2View({ dateParams }: { dateParams: { from_date?: string; to_dat
       data?.viewer_role
     ] || "children";
   const fmt = (v: any) =>
-    `₹${Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `🪙${Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const num = (v: any) => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
   if (isLoading)
@@ -451,7 +451,7 @@ function Account2ChildCard({ r, fmt, num }: { r: any; fmt: (v: any) => string; n
                   <tr key={s.segment} className="border-t border-border/50">
                     <td className="px-3 py-1.5 font-medium">{s.segment_label}</td>
                     <td className="whitespace-nowrap px-3 py-1.5">
-                      ₹{num(s.rate)}{" "}
+                      🪙{num(s.rate)}{" "}
                       <span className="text-muted-foreground">/{s.unit === "per_lot" ? "lot" : "crore"}</span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-right font-tabular tabular-nums">{num(s.volume)}</td>
@@ -1245,7 +1245,7 @@ function UserPnlCard({
           ) : null}
         </div>
         <div className={`shrink-0 text-right text-sm font-semibold tabular-nums ${pnlColor(u.total_pnl)}`}>
-          ₹{fmtMoney(u.total_pnl)}
+          🪙{fmtMoney(u.total_pnl)}
           <div className="text-[9px] font-normal uppercase tracking-wider text-muted-foreground">Total PNL</div>
         </div>
       </div>
@@ -1253,20 +1253,20 @@ function UserPnlCard({
       <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-muted/20 p-2 text-[11px]">
         <div>
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Net PNL</div>
-          <div className={`mt-0.5 font-semibold tabular-nums ${pnlColor(u.net_pnl)}`}>₹{fmtMoney(u.net_pnl)}</div>
+          <div className={`mt-0.5 font-semibold tabular-nums ${pnlColor(u.net_pnl)}`}>🪙{fmtMoney(u.net_pnl)}</div>
         </div>
         <div>
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Net BKG</div>
-          <div className="mt-0.5 font-semibold tabular-nums">₹{fmtMoney(u.net_bkg)}</div>
+          <div className="mt-0.5 font-semibold tabular-nums">🪙{fmtMoney(u.net_bkg)}</div>
         </div>
         <div>
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Settlement</div>
-          <div className="mt-0.5 font-semibold tabular-nums">₹{fmtMoney(u.settlement)}</div>
+          <div className="mt-0.5 font-semibold tabular-nums">🪙{fmtMoney(u.settlement)}</div>
         </div>
         <div>
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total − Settle</div>
           <div className={`mt-0.5 font-semibold tabular-nums ${pnlColor(u.pnl_minus_settlement ?? "0")}`}>
-            ₹{fmtMoney(u.pnl_minus_settlement ?? "0")}
+            🪙{fmtMoney(u.pnl_minus_settlement ?? "0")}
           </div>
         </div>
       </div>

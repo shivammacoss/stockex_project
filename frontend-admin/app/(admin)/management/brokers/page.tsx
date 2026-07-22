@@ -723,7 +723,7 @@ function CreateBrokerDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Opening fund (₹)</Label>
+              <Label>Opening fund (🪙)</Label>
               <Input
                 type="number"
                 min={0}

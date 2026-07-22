@@ -13,14 +13,14 @@ import {
   userNotificationsEnabled,
 } from "@/lib/notify-sound";
 
-/** Format an INR amount string ("1500.00" → "₹1,500.00"). Defensive
+/** Format an INR amount string ("1500.00" → "🪙1,500.00"). Defensive
  *  against junk values — falls back to the raw string if Number() can't
  *  parse it. */
 function fmtINR(raw: string | number | undefined | null): string {
   if (raw === undefined || raw === null || raw === "") return "";
   const n = Number(raw);
   if (!Number.isFinite(n)) return String(raw);
-  return `₹${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `🪙${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** Translate a wallet-event `reason` + signed amount into a toast title +

@@ -15,20 +15,20 @@ export const metadata: Metadata = {
 };
 
 const BROKERAGE: [string, string][] = [
-  ["Equity Delivery", "₹0 — free"],
-  ["Equity Intraday", "₹20 or 0.03% per order (whichever is lower)"],
-  ["Equity Futures", "₹20 or 0.03% per order (whichever is lower)"],
-  ["Equity Options", "₹20 flat per order"],
-  ["Commodity (MCX)", "₹20 or 0.03% per order (whichever is lower)"],
-  ["Currency F&O", "₹20 or 0.03% per order (whichever is lower)"],
-  ["Direct Mutual Funds", "₹0 — free"],
-  ["IPO Application (UPI)", "₹0 — free"],
+  ["Equity Delivery", "🪙0 — free"],
+  ["Equity Intraday", "🪙20 or 0.03% per order (whichever is lower)"],
+  ["Equity Futures", "🪙20 or 0.03% per order (whichever is lower)"],
+  ["Equity Options", "🪙20 flat per order"],
+  ["Commodity (MCX)", "🪙20 or 0.03% per order (whichever is lower)"],
+  ["Currency F&O", "🪙20 or 0.03% per order (whichever is lower)"],
+  ["Direct Mutual Funds", "🪙0 — free"],
+  ["IPO Application (UPI)", "🪙0 — free"],
 ];
 
 const ACCOUNT = [
-  { title: "Account Opening", value: "₹0", note: "Open a Demat & trading account online, free." },
+  { title: "Account Opening", value: "🪙0", note: "Open a Demat & trading account online, free." },
   { title: "Maintenance (AMC)", value: "Low yearly", note: "A small annual demat maintenance charge applies." },
-  { title: "Funding", value: "₹0 fees", note: "Add funds via UPI or Net Banking with no deposit fees." },
+  { title: "Funding", value: "🪙0 fees", note: "Add funds via UPI or Net Banking with no deposit fees." },
 ];
 
 const INCLUDED = [

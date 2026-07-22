@@ -78,8 +78,8 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
   const avgExitFormula =
     exits.length > 1 && avgExitPrice !== null
       ? `(${exits
-          .map((e) => `${e.volume}×₹${e.price.toFixed(2)}`)
-          .join(" + ")}) ÷ ${totalExitVol} = ₹${avgExitPrice.toFixed(2)}`
+          .map((e) => `${e.volume}×🪙${e.price.toFixed(2)}`)
+          .join(" + ")}) ÷ ${totalExitVol} = 🪙${avgExitPrice.toFixed(2)}`
       : null;
 
   // ── P/L to display ────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                     Avg Entry
                   </div>
                   <div className="mt-0.5 text-sm font-semibold tabular-nums">
-                    ₹{data.avg_entry.toFixed(2)}
+                    🪙{data.avg_entry.toFixed(2)}
                   </div>
                 </div>
 
@@ -166,7 +166,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                       </div>
                       <div className="mt-0.5 text-sm font-semibold tabular-nums">
                         {avgExitPrice !== null
-                          ? `₹${avgExitPrice.toFixed(2)}`
+                          ? `🪙${avgExitPrice.toFixed(2)}`
                           : "—"}
                       </div>
                     </>
@@ -176,7 +176,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                         Current
                       </div>
                       <div className="mt-0.5 text-sm font-semibold tabular-nums">
-                        ₹{data.current_price.toFixed(2)}
+                        🪙{data.current_price.toFixed(2)}
                       </div>
                     </>
                   )}
@@ -205,7 +205,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                 <div className="mt-2 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
                   Avg Entry{" "}
                   <span className="font-medium text-foreground">
-                    ₹{data.avg_entry.toFixed(2)}
+                    🪙{data.avg_entry.toFixed(2)}
                   </span>{" "}
                   →{" "}
                   {data.side === "BUY" ? (
@@ -213,7 +213,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                       <>
                         Avg Exit{" "}
                         <span className="font-medium text-emerald-500">
-                          ₹{avgExitPrice.toFixed(2)}
+                          🪙{avgExitPrice.toFixed(2)}
                         </span>{" "}
                         <span className="text-emerald-500">
                           (exits above entry avg → net profit)
@@ -223,7 +223,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                       <>
                         Avg Exit{" "}
                         <span className="font-medium text-red-500">
-                          ₹{avgExitPrice.toFixed(2)}
+                          🪙{avgExitPrice.toFixed(2)}
                         </span>{" "}
                         <span className="text-red-500">
                           (exits below entry avg → net loss)
@@ -234,7 +234,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                     <>
                       Avg Exit{" "}
                       <span className="font-medium text-emerald-500">
-                        ₹{avgExitPrice.toFixed(2)}
+                        🪙{avgExitPrice.toFixed(2)}
                       </span>{" "}
                       <span className="text-emerald-500">
                         (exits below entry avg → net profit)
@@ -244,7 +244,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                     <>
                       Avg Exit{" "}
                       <span className="font-medium text-red-500">
-                        ₹{avgExitPrice.toFixed(2)}
+                        🪙{avgExitPrice.toFixed(2)}
                       </span>{" "}
                       <span className="text-red-500">
                         (exits above entry avg → net loss)
@@ -311,7 +311,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                             {e.volume}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            ₹{e.price.toFixed(2)}
+                            🪙{e.price.toFixed(2)}
                           </td>
                           <td
                             className={cn(
@@ -335,7 +335,7 @@ export function NettingEntriesDialog({ positionId, onClose }: Props) {
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
                             {avgExitPrice !== null
-                              ? `₹${avgExitPrice.toFixed(2)} avg`
+                              ? `🪙${avgExitPrice.toFixed(2)} avg`
                               : "—"}
                           </td>
                           <td

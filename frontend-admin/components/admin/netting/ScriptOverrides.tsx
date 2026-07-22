@@ -494,7 +494,7 @@ export function ScriptOverrides({ categoryId }: { categoryId: string }) {
                           dirty={edits[s.id]?.[f.key] !== undefined}
                           inheritPlaceholder
                           // Show the segment (global) default this symbol
-                          // inherits — "inherit (₹X)" instead of bare
+                          // inherits — "inherit (🪙X)" instead of bare
                           // "inherit" — so the admin sees the value actually
                           // in effect before overriding it.
                           inheritValue={segRow ? (segRow as any)[f.key] : undefined}

@@ -30,10 +30,10 @@ type GroupKey = "core" | "commission";
 // and can be added later). Numbers are edited as strings then coerced on save.
 const GAME_FIELDS: { key: string; label: string; group: GroupKey; type?: "bool" }[] = [
   { key: "win_multiplier", label: "Win multiplier", group: "core" },
-  { key: "ticket_price", label: "Ticket price (₹)", group: "core" },
+  { key: "ticket_price", label: "Ticket price (🪙)", group: "core" },
   { key: "min_tickets", label: "Min tickets", group: "core" },
   { key: "max_tickets", label: "Max tickets", group: "core" },
-  { key: "fixed_profit", label: "Winning amount (₹, number games)", group: "core" },
+  { key: "fixed_profit", label: "Winning amount (🪙, number games)", group: "core" },
   { key: "top_winners", label: "Top winners (jackpot)", group: "core" },
   // Number-game per-user limits (super-admin controls how much a user can play).
   { key: "bets_per_day", label: "Numbers a user can play / day (number game)", group: "core" },
@@ -63,7 +63,7 @@ const FIELD_GROUPS: { key: GroupKey; title: string; hint: string; icon: typeof G
   {
     key: "commission",
     title: "Commission & referral — % of winning amount",
-    hint: "On every win, each level gets its % of the FULL winning amount (payout/prize — NOT win − stake), funded from the house. e.g. ₹600 ticket → ₹1000 win → Sub-broker gets [Sub-broker%] of ₹1000, Admin gets [Admin%] of ₹1000, referral [Referrer%] of ₹1000.",
+    hint: "On every win, each level gets its % of the FULL winning amount (payout/prize — NOT win − stake), funded from the house. e.g. 🪙600 ticket → 🪙1000 win → Sub-broker gets [Sub-broker%] of 🪙1000, Admin gets [Admin%] of 🪙1000, referral [Referrer%] of 🪙1000.",
     icon: GitBranch,
   },
 ];

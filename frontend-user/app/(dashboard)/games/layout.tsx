@@ -29,7 +29,7 @@ export default function GamesLayout({ children }: { children: React.ReactNode })
 
         <div className="flex items-center gap-2 sm:ml-auto">
           {/* Coin balance — amber/atm coin accent so ◉ reads as a real
-              "coins" balance, not just another ₹ figure. */}
+              "coins" balance, not just another 🪙 figure. */}
           <div className="flex flex-1 items-center gap-2.5 rounded-xl border border-atm/30 bg-atm/5 px-3 py-1.5 sm:flex-none">
             <span className="grid size-8 shrink-0 place-items-center rounded-full bg-atm/15 text-atm ring-1 ring-inset ring-atm/30">
               <Coins className="size-4" />

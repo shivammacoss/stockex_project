@@ -29,7 +29,7 @@ import { cn, formatINR, pnlColor } from "@/lib/utils";
 import { OwnerBadge } from "@/components/admin/OwnerBadge";
 import { useAdminAuthStore } from "@/stores/authStore";
 
-/** Bare grouped-number price — no ₹ / $ prefix on any instrument price
+/** Bare grouped-number price — no 🪙 / $ prefix on any instrument price
  *  (avg / LTP / close). `quote` accepted for call-site compatibility but
  *  ignored. Forex pairs render with 4 decimals, everything else 2. */
 function fmtFeedPrice(value: string | number | null | undefined, _quote?: string) {
@@ -555,7 +555,7 @@ function AdminPositionsInner() {
         Number(p.opening_quantity ?? p.quantity ?? 0),
       )} qty\n` +
       `  • ${direction.charAt(0).toUpperCase() + direction.slice(1)} ` +
-      `₹${Math.abs(realized).toFixed(2)} on the user's wallet (REVERSAL)\n` +
+      `🪙${Math.abs(realized).toFixed(2)} on the user's wallet (REVERSAL)\n` +
       `  • Re-block the margin\n` +
       `\nUse only to undo a wrong close (false stop-out, misclick).`;
     if (!window.confirm(msg)) return;
@@ -783,9 +783,9 @@ function AdminPositionsInner() {
       //
       // Previously this column quietly displayed net by subtracting
       // charges, which confused operators who reconciled the row
-      // (e.g. open 317.85 → close 324.15 × 60 lots = ₹378 gross, but
-      // the column showed ₹258 because we'd already netted out
-      // ₹120 of brokerage). Showing gross here keeps the column's
+      // (e.g. open 317.85 → close 324.15 × 60 lots = 🪙378 gross, but
+      // the column showed 🪙258 because we'd already netted out
+      // 🪙120 of brokerage). Showing gross here keeps the column's
       // name honest and lets the new Net P&L column carry the
       // final figure.
       render: (r: any) => {

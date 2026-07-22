@@ -191,10 +191,10 @@ export default function NewUserPage() {
                 Self.
               </p>
             </Field>
-            <Field label="Initial balance (₹)">
+            <Field label="Initial balance (🪙)">
               <Input type="number" step="0.01" {...form.register("initial_balance")} />
             </Field>
-            <Field label="Credit limit (₹)">
+            <Field label="Credit limit (🪙)">
               <Input type="number" step="0.01" {...form.register("credit_limit")} />
             </Field>
             <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
@@ -209,7 +209,7 @@ export default function NewUserPage() {
                   Demo Account
                 </label>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Demo accounts are invisible in all admin views (accounts, payments, orders). Virtual balance of ₹1,00,000 is auto-credited if initial balance is 0. Trades &amp; data auto-purge after 7 days.
+                  Demo accounts are invisible in all admin views (accounts, payments, orders). Virtual balance of 🪙1,00,000 is auto-credited if initial balance is 0. Trades &amp; data auto-purge after 7 days.
                 </p>
               </div>
             </div>

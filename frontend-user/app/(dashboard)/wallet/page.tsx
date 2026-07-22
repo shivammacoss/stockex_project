@@ -541,7 +541,7 @@ export default function WalletPage() {
             {/* ─ Right: amount + UTR + screenshot ────────── */}
             <div className="space-y-3">
               <SectionLabel num={2} title="Confirm your payment" />
-              <Field label="Amount (₹)">
+              <Field label="Amount (🪙)">
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -561,7 +561,7 @@ export default function WalletPage() {
                     onClick={() => setDep((d) => ({ ...d, amount: String(v) }))}
                     className="rounded-full border border-border bg-muted/30 px-3 py-1 text-[11px] font-medium hover:border-primary/40 hover:bg-primary/5"
                   >
-                    +₹{v.toLocaleString("en-IN")}
+                    +🪙{v.toLocaleString("en-IN")}
                   </button>
                 ))}
               </div>
@@ -671,7 +671,7 @@ export default function WalletPage() {
               (day + time window + mandatory-remark typically matter). */}
           <WdRulesBanner kind="withdrawal" className="mb-2" />
           <div className="space-y-3">
-            <Field label="Amount (₹)">
+            <Field label="Amount (🪙)">
               <Input
                 type="number"
                 value={wd.amount}
@@ -799,7 +799,7 @@ export default function WalletPage() {
                 size={256}
               />
               <div className="text-xs text-muted-foreground">
-                Open any UPI app and scan{qrPreview.amount ? ` — ₹${qrPreview.amount} pre-filled` : ""}.
+                Open any UPI app and scan{qrPreview.amount ? ` — 🪙${qrPreview.amount} pre-filled` : ""}.
               </div>
               <div className="font-mono text-[11px] text-primary">{qrPreview.upiId}</div>
             </div>

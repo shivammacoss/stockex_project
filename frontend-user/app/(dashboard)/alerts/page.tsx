@@ -124,7 +124,7 @@ export default function AlertsPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Target price (₹)</Label>
+                  <Label>Target price (🪙)</Label>
                   <Input type="number" step="0.05" value={target} onChange={(e) => setTarget(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">

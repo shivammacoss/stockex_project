@@ -743,7 +743,7 @@ function PlatformChargeCard() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[11px] font-medium text-muted-foreground">Amount per user / day (₹)</label>
+          <label className="text-[11px] font-medium text-muted-foreground">Amount per user / day (🪙)</label>
           <div className="flex gap-2">
             <Input
               value={amount}
@@ -771,7 +771,7 @@ function PlatformChargeCard() {
 }
 
 /* ── Per-admin ZERO-BALANCE AUTO-CLOSE (ADMIN / SUPER_ADMIN) ───────────────
- * When on, a user of this admin whose whole balance has been ₹0 for ≥7 days
+ * When on, a user of this admin whose whole balance has been 🪙0 for ≥7 days
  * (and holds no open position) is soft-closed (status CLOSED, recoverable). */
 function ZeroBalanceAutocloseCard() {
   const admin = useAdminAuthStore((s) => s.admin);
@@ -819,7 +819,7 @@ function ZeroBalanceAutocloseCard() {
           <UserX className="size-4 text-primary" /> Zero-balance auto-close
         </CardTitle>
         <CardDescription>
-          A user with ₹0 balance for 7 days is automatically closed (blocked,
+          A user with 🪙0 balance for 7 days is automatically closed (blocked,
           recoverable — not deleted). Off by default.
         </CardDescription>
       </CardHeader>
@@ -850,7 +850,7 @@ function ZeroBalanceAutocloseCard() {
           </button>
         </div>
         <ul className="space-y-1 text-[11px] text-muted-foreground">
-          <li>· "₹0" = main + all segment wallets empty, no open position.</li>
+          <li>· "🪙0" = main + all segment wallets empty, no open position.</li>
           <li>· 7-day clock resets the moment any money returns.</li>
           <li>· Closed = login blocked; you can reactivate anytime (data kept).</li>
         </ul>

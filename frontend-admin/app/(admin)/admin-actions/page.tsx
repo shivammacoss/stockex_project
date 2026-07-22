@@ -64,13 +64,13 @@ function money(x: any): string {
   if (x == null || x === "") return "—";
   const n = Number(x);
   if (!Number.isFinite(n)) return "—";
-  return `${n < 0 ? "-" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  return `${n < 0 ? "-" : ""}🪙${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 function price(x: any): string {
   if (x == null || x === "") return "—";
   const n = Number(x);
   if (!Number.isFinite(n)) return "—";
-  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 4 })}`;
+  return `🪙${n.toLocaleString("en-IN", { maximumFractionDigits: 4 })}`;
 }
 function plain(x: any): string {
   if (x == null || x === "") return "—";

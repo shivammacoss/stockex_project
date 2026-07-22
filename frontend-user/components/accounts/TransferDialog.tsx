@@ -137,7 +137,7 @@ export function TransferDialog({
             <Pick value={to} onChange={pickTo} exclude={from} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="amt" className="text-xs">Amount (₹)</Label>
+            <Label htmlFor="amt" className="text-xs">Amount (🪙)</Label>
             <Input id="amt" type="number" inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
           {involvesGames && (

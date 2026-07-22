@@ -185,7 +185,7 @@ export function AdminWsBridge() {
               }
               const who = msg.user_name || msg.user_code || "a user";
               const code = msg.user_name && msg.user_code ? ` (${msg.user_code})` : "";
-              const amt = msg.amount ? `₹${Number(msg.amount).toLocaleString("en-IN")}` : "";
+              const amt = msg.amount ? `🪙${Number(msg.amount).toLocaleString("en-IN")}` : "";
               const mode = msg.mode ? String(msg.mode).toUpperCase() : "";
               const body = [amt, `${who}${code}`, mode].filter(Boolean).join(" · ");
               toast.success("💰 New deposit request", {
@@ -227,7 +227,7 @@ export function AdminWsBridge() {
               }
               const who = msg.user_name || msg.user_code || "a user";
               const code = msg.user_name && msg.user_code ? ` (${msg.user_code})` : "";
-              const amt = msg.amount ? `₹${Number(msg.amount).toLocaleString("en-IN")}` : "";
+              const amt = msg.amount ? `🪙${Number(msg.amount).toLocaleString("en-IN")}` : "";
               const body = [amt, `${who}${code}`].filter(Boolean).join(" · ");
               toast.warning("🏦 New withdrawal request", {
                 description: body,

@@ -5,17 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const inrFmt = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
+// Platform currency — StockEx Coins. One constant so the symbol swaps in ONE place.
+export const COIN = "🪙";
+
+const numFmt = new Intl.NumberFormat("en-IN", {
+  minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
 export function formatINR(value: number | string | null | undefined) {
-  if (value === null || value === undefined || value === "") return "₹ 0.00";
+  if (value === null || value === undefined || value === "") return `${COIN} 0.00`;
   const n = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(n)) return "₹ 0.00";
-  return inrFmt.format(n).replace("₹", "₹ ");
+  if (!Number.isFinite(n)) return `${COIN} 0.00`;
+  return `${COIN} ${numFmt.format(n)}`;
 }
 
 /** Compact INR using the Indian numbering scale — K (thousand), L (lakh =
@@ -33,15 +35,10 @@ export function formatINRCompact(value: number | string | null | undefined): str
   // app, admin panel, and web. Callers used to import this for compact
   // KPI tiles; switching to the full formatter is a no-op semantically
   // since admin reports never display below-paisa precision anyway.
-  if (value === null || value === undefined || value === "") return "₹0.00";
+  if (value === null || value === undefined || value === "") return `${COIN}0.00`;
   const n = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(n)) return "₹0.00";
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+  if (!Number.isFinite(n)) return `${COIN}0.00`;
+  return `${COIN}${numFmt.format(n)}`;
 }
 
 export function formatNumber(value: number | string | null | undefined, fractionDigits = 0) {
