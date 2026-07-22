@@ -145,7 +145,11 @@ async def declare_and_settle() -> int:
     # result time; resolve once at the latest expiry. None → retry next tick
     # (the minute candle may not be published yet), never settle at a bogus price.
     result_dt = max(t.expires_at for t in due)
-    ltp = await price_resolver.resolve_nifty_price_at(result_dt)
+    # strict=True → resolve against the OFFICIAL NSE close only (same value the
+    # Number & Jackpot games use), never the last-traded historical candle which
+    # can differ by a few points and flip a bracket that sits near a band edge.
+    # None → retry next tick (never settle at a divergent/bogus price).
+    ltp = await price_resolver.resolve_nifty_price_at(result_dt, strict=True)
     if ltp is None or ltp <= 0:
         return 0
 

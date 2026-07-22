@@ -127,7 +127,13 @@ async def declare_and_settle(game_key: str) -> int:
         if game_key == "btcJackpot":
             locked = await price_resolver.resolve_btc_price_at(result_dt)
         else:
-            locked = await price_resolver.resolve_nifty_price_at(result_dt)
+            # strict=True → lock ONLY the official NSE close (the REST-quote
+            # weighted-average clearing value), exactly like the Number game.
+            # Without it the jackpot could lock the last-TRADED historical candle
+            # (e.g. 24,081.10) while Number locked the official close (24,072.75)
+            # for the SAME day — the two games then disagreed on the day's price.
+            # None → wait/retry rather than lock a divergent value.
+            locked = await price_resolver.resolve_nifty_price_at(result_dt, strict=True)
         if locked is None or locked <= 0:
             continue  # retry next tick
 
