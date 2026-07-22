@@ -117,6 +117,32 @@ async def leaderboard(game_id: str, user: CurrentUser, limit: int = 20):
     )
 
 
+@router.get("/last-5-days/{game_id}", response_model=APIResponse[list])
+async def last_5_days(game_id: str, user: CurrentUser):
+    """Last 5 declared daily results for a jackpot game — the settlement close
+    (`locked_price`) plus that day's winning bid, for the "Last 5 days results"
+    strip. Mirrors the Number game's history strip."""
+    key = ids.settings_key(game_id)
+    banks = await JackpotBank.find(
+        JackpotBank.game_key == key, JackpotBank.result_declared == True  # noqa: E712
+    ).sort("-bet_date").limit(5).to_list()
+    out = []
+    for b in banks:
+        winner = await JackpotBid.find_one(
+            JackpotBid.game_key == key, JackpotBid.bet_date == b.bet_date, JackpotBid.rank == 1
+        )
+        out.append(
+            {
+                "day": b.bet_date,
+                "close_price": str(b.locked_price) if b.locked_price is not None else None,
+                "bids_count": b.bids_count,
+                "winner_predicted": str(winner.predicted_price) if winner else None,
+                "winner_prize": str(winner.prize) if winner else None,
+            }
+        )
+    return APIResponse(data=out)
+
+
 @router.get("/history/{game_id}", response_model=APIResponse[list])
 async def history(game_id: str, user: CurrentUser, limit: int = 50):
     key = ids.settings_key(game_id)

@@ -555,6 +555,8 @@ export const GamesAPI = {
     unwrap<any>(api.get(`/user/games/jackpot/leaderboard/${gameId}`, { params: { limit } })),
   jackpotHistory: (gameId: string, limit = 50) =>
     unwrap<any[]>(api.get(`/user/games/jackpot/history/${gameId}`, { params: { limit } })),
+  jackpotLast5: (gameId: string) =>
+    unwrap<any[]>(api.get(`/user/games/jackpot/last-5-days/${gameId}`)),
 };
 
 export const LedgerAPI = {

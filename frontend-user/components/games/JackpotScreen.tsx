@@ -15,6 +15,14 @@ import { isBiddingOpen, secondsUntilIst, formatDurationHuman } from "@/lib/games
 import { useGameConfig, useGamesWallet, useGamesPrice } from "@/components/games/useGames";
 import { Countdown, GameHowTo, GameStatePill, StatChip, LiveDot, LivePrice } from "@/components/games/bits";
 
+/** "2026-07-21" → "21 Jul" for the results strip. */
+function fmtJpDay(day: string): string {
+  const m = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const p = (day || "").split("-");
+  if (p.length !== 3) return day;
+  return `${Number(p[2])} ${m[Number(p[1]) - 1] ?? ""}`;
+}
+
 export function JackpotScreen({ id }: { id: GameUiId }) {
   const meta = GAME_META[id];
   const cfg = useGameConfig(id);
@@ -43,6 +51,12 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
     queryKey: ["games", "bets", "jackpot-today", id],
     queryFn: () => GamesAPI.jackpotToday(id),
     refetchInterval: 6000,
+  });
+  // Last 5 declared daily results (settlement close + that day's winner).
+  const { data: last5 } = useQuery({
+    queryKey: ["games", "jackpot-last5", id],
+    queryFn: () => GamesAPI.jackpotLast5(id),
+    refetchInterval: 60000,
   });
 
   const locked = !!board?.official;
@@ -145,6 +159,34 @@ export function JackpotScreen({ id }: { id: GameUiId }) {
         <StatChip label="Ticket price" value={formatINR(ticket)} />
         <StatChip label="Winners share" value={String(cfg?.top_winners ?? 20)} />
       </div>
+
+      {/* Last 5 days results — the daily settlement close + that day's winner */}
+      {last5 && last5.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="size-4 text-atm" /> Last 5 days results
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+              {last5.slice(0, 5).map((r: any, i: number) => (
+                <div key={i} className="rounded-xl border border-border/60 bg-muted/20 p-3 text-center">
+                  <div className="text-[11px] font-medium text-muted-foreground">{fmtJpDay(r.day)}</div>
+                  <div className="mt-1 text-xl font-bold tabular-nums text-atm">
+                    {r.close_price ? Number(r.close_price).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    {r.winner_predicted
+                      ? `Winner ${Number(r.winner_predicted).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
+                      : `${r.bids_count ?? 0} bids`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Leaderboard + bid — stacked (bid first) on phone, side-by-side on tablet+ */}
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
