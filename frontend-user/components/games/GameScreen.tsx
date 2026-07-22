@@ -53,7 +53,7 @@ export function GameScreen({ id }: { id: GameUiId }) {
   const asset: "btc" | "nifty" = meta.asset === "BTC" ? "btc" : "nifty";
   const cfg = useGameConfig(id);
   const { data: wallet } = useGamesWallet();
-  const { data: price } = useGamesPrice(1000);
+  const { data: price } = useGamesPrice(250);
   const qc = useQueryClient();
 
   const [prediction, setPrediction] = useState<"UP" | "DOWN" | null>(null);

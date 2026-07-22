@@ -17,7 +17,7 @@ export function NumberScreen({ id }: { id: GameUiId }) {
   const meta = GAME_META[id];
   const cfg = useGameConfig(id);
   const { data: wallet } = useGamesWallet();
-  const { data: price } = useGamesPrice(1000);
+  const { data: price } = useGamesPrice(250);
   const qc = useQueryClient();
   const [selected, setSelected] = useState<number[]>([]);
   const [qty, setQty] = useState(1);

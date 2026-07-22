@@ -20,7 +20,7 @@ const QUICK_TICKETS = [1, 2, 5, 10];
 export function BracketScreen({ id }: { id: GameUiId }) {
   const cfg = useGameConfig(id);
   const { data: wallet } = useGamesWallet();
-  const { data: price } = useGamesPrice(1000);
+  const { data: price } = useGamesPrice(250);
   const qc = useQueryClient();
   // Direction is stored internally as BUY (up) / SELL (down) — the API contract
   // is unchanged — but shown to the user as UP / DOWN to remove confusion.
