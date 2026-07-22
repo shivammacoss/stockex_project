@@ -365,14 +365,20 @@ async def create_withdrawal(payload: WithdrawalCreate, user: CurrentUser):
     from app.utils.decimal_utils import to_decimal
 
     wallet = await Wallet.find_one(Wallet.user_id == user.id)
-    if wallet:
-        avail = to_decimal(wallet.available_balance)
-        req_amt = to_decimal(payload.amount)
-        if avail < req_amt:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient balance: available ₹{avail:,.2f}, requested ₹{req_amt:,.2f}",
-            )
+    # `available_balance` already EXCLUDES margin locked in open trades
+    # (block_margin moves cash available → used_margin), so this is the
+    # true free/withdrawable amount — the used margin can never be withdrawn.
+    # A missing wallet means zero balance → reject (don't skip the gate).
+    avail = to_decimal(wallet.available_balance) if wallet else to_decimal(0)
+    req_amt = to_decimal(payload.amount)
+    if avail < req_amt:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"You can withdraw at most ₹{avail:,.2f} (free balance). "
+                f"Margin locked in open trades can't be withdrawn."
+            ),
+        )
 
     b = payload.bank or {}
     upi_id = (b.get("upi_id") or "").strip()

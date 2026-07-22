@@ -100,6 +100,12 @@ export default function WalletPage() {
     // 8 s felt like the wallet was frozen after a deposit was approved.
     refetchInterval: 3000,
   });
+
+  // Withdrawable = FREE balance only. Margin locked in open trades
+  // (`used_margin`) is NOT withdrawable — the backend rejects it too, this
+  // just makes it clear on the form and caps the input.
+  const usedMargin = Math.max(0, Number(summary?.used_margin ?? 0));
+  const withdrawable = Math.max(0, Number(summary?.available_balance ?? summary?.free ?? 0));
   const { data: txns } = useQuery({
     queryKey: ["wallet-txns"],
     queryFn: () => WalletAPI.transactions(50),
@@ -238,6 +244,13 @@ export default function WalletPage() {
   async function submitWithdrawal() {
     if (wdSubmitting) return; // guard against double / triple clicks
     if (!wd.amount || Number(wd.amount) <= 0) return toast.error("Amount required");
+    if (Number(wd.amount) > withdrawable + 0.001) {
+      return toast.error(
+        usedMargin > 0
+          ? `You can withdraw at most ${formatINR(withdrawable)} — ${formatINR(usedMargin)} is locked as margin in open trades.`
+          : `You can withdraw at most ${formatINR(withdrawable)}.`,
+      );
+    }
 
     const bank: Record<string, string> = {};
     if (wd.mode === "UPI") {
@@ -665,6 +678,30 @@ export default function WalletPage() {
                 onChange={(e) => setWd((d) => ({ ...d, amount: e.target.value }))}
                 className="h-11 text-lg font-semibold"
               />
+              <div className="mt-1 flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">
+                  Available to withdraw:{" "}
+                  <span className="font-semibold text-foreground">{formatINR(withdrawable)}</span>
+                  {usedMargin > 0 && (
+                    <span className="ml-1 text-amber-600 dark:text-amber-400">
+                      ({formatINR(usedMargin)} locked in trades)
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setWd((d) => ({ ...d, amount: withdrawable > 0 ? String(withdrawable) : "" }))}
+                  className="font-semibold text-primary hover:opacity-80"
+                  disabled={withdrawable <= 0}
+                >
+                  Max
+                </button>
+              </div>
+              {Number(wd.amount) > withdrawable + 0.001 && (
+                <p className="mt-1 text-[11px] text-destructive">
+                  Exceeds your free balance. Margin locked in open trades can&apos;t be withdrawn.
+                </p>
+              )}
             </Field>
 
             {/* Mode toggle */}
@@ -737,7 +774,10 @@ export default function WalletPage() {
             <Button variant="outline" onClick={() => setWithdrawOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={submitWithdrawal} disabled={wdSubmitting}>
+            <Button
+              onClick={submitWithdrawal}
+              disabled={wdSubmitting || !wd.amount || Number(wd.amount) <= 0 || Number(wd.amount) > withdrawable + 0.001}
+            >
               {wdSubmitting ? "Requesting…" : "Request withdrawal"}
             </Button>
           </DialogFooter>
