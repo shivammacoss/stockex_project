@@ -149,7 +149,10 @@ async def resolve_result(
     if game_key == "btcNumber":
         close = await price_resolver.resolve_btc_price_at(result_dt)
     else:
-        close = await price_resolver.resolve_nifty_price_at(result_dt)
+        # STRICT: the winning digit must match the OFFICIAL close exactly, so
+        # never settle on a last-traded candle or a stale cached value — wait
+        # for the real official close (or use the manual-result override).
+        close = await price_resolver.resolve_nifty_price_at(result_dt, strict=True)
     number = number_from_close(game_key, close) if close else None
     return close, number, "result_time"
 

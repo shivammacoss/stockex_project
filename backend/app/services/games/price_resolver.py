@@ -191,8 +191,17 @@ async def resolve_btc_window(
     return None
 
 
-async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
+async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal | None:
     """NIFTY settlement price for a result that lands at / after market close.
+
+    ``strict`` (used by the Number game): accept ONLY the authoritative official
+    close — the pinned value or the post-close REST quote. Do NOT fall back to
+    the last-traded historical candle (its DECIMALS differ from the official
+    close, so the winning digit would be wrong) or the stale display cache (a
+    flaky feed at result time otherwise settles on YESTERDAY's number — the
+    07-14/07-15 duplicate bug). When the official close isn't available yet,
+    return None so settlement WAITS (retries next tick) rather than declaring a
+    wrong number. Non-strict callers (bracket / live spot) keep every fallback.
 
     Uses Zerodha's OFFICIAL closing candle — the last 1-minute historical candle
     of the session (15:29→15:30) — which is the authoritative daily close the
@@ -276,6 +285,11 @@ async def resolve_nifty_price_at(dt: datetime) -> Decimal | None:
             return await _converge(quantize_money(qltp), pin_day=True)
     except Exception:
         logger.debug("nifty_price_at_quote_failed", exc_info=True)
+
+    # STRICT (Number game): no last-traded / stale fallbacks — a wrong winning
+    # digit is worse than a delayed result. Wait for the real official close.
+    if strict:
+        return None
 
     # 3) Fallback — last historical minute candle (last-traded close). Only used
     #    if the REST quote is unavailable (cold worker / API hiccup).
