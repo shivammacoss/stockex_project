@@ -297,6 +297,8 @@ export const AdminFundAPI = {
     unwrap<any>(api.post(`/admin/fund/members/${memberId}/deduct`, { amount, description })),
   createRequest: (amount: number, reason?: string) =>
     unwrap<any>(api.post("/admin/fund/requests", { amount, reason })),
+  transferToAdmin: (target: string, amount: number, description?: string) =>
+    unwrap<any>(api.post("/admin/fund/transfer", { target, amount, description })),
   incoming: (status = "PENDING") =>
     unwrap<any[]>(api.get("/admin/fund/requests/incoming", { params: { status } })),
   mine: () => unwrap<any[]>(api.get("/admin/fund/requests/mine")),

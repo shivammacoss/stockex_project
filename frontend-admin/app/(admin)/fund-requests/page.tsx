@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, X, Send, Inbox, HandCoins } from "lucide-react";
+import { Check, X, Send, Inbox, HandCoins, ArrowRightLeft } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,23 @@ export default function FundRequestsPage() {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["admin", "fund", "incoming"] });
     qc.invalidateQueries({ queryKey: ["admin", "fund", "mine"] });
+    qc.invalidateQueries({ queryKey: ["admin", "me", "wallet"] });
   };
+
+  // Peer transfer — send my own float to another admin by their ID/code.
+  const [xferTarget, setXferTarget] = useState("");
+  const [xferAmount, setXferAmount] = useState("");
+  const [xferNote, setXferNote] = useState("");
+  const transfer = useMutation({
+    mutationFn: () => AdminFundAPI.transferToAdmin(xferTarget.trim(), Number(xferAmount), xferNote),
+    onSuccess: (r: any) => {
+      toast.success(`Sent ${formatINR(Number(xferAmount))} to ${r?.to_code || xferTarget}`);
+      setXferTarget(""); setXferAmount(""); setXferNote(""); refresh();
+    },
+    onError: (e: any) => toast.error(e?.message || "Transfer failed"),
+  });
+  const xferAmt = Number(xferAmount);
+  const validXfer = xferTarget.trim().length > 0 && Number.isFinite(xferAmt) && xferAmt > 0;
 
   const create = useMutation({
     mutationFn: () => AdminFundAPI.createRequest(Number(amount), reason),
@@ -88,6 +104,48 @@ export default function FundRequestsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Send funds to ANOTHER admin by ID — peer transfer from own float */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="size-4 text-primary" /> Send to another admin
+            </CardTitle>
+            <CardDescription>
+              Transfer from your own balance to any admin by their ID (e.g. ADM… / BRK…). Settles instantly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label className="text-xs">Recipient admin ID</Label>
+              <Input
+                value={xferTarget}
+                onChange={(e) => setXferTarget(e.target.value)}
+                placeholder="ADM55199697"
+                className="font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs">Amount (₹)</Label>
+                <Input value={xferAmount} onChange={(e) => setXferAmount(e.target.value)} placeholder="0.00" inputMode="decimal" />
+              </div>
+              <div>
+                <Label className="text-xs">Note</Label>
+                <Input value={xferNote} onChange={(e) => setXferNote(e.target.value)} placeholder="Optional" />
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="border-primary/40 text-primary hover:bg-primary/10"
+              disabled={!validXfer || transfer.isPending}
+              loading={transfer.isPending}
+              onClick={() => transfer.mutate()}
+            >
+              <ArrowRightLeft className="size-4" /> Send funds
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Incoming requests to approve */}
         <Card className={cn(isSuper && "lg:col-span-2")}>

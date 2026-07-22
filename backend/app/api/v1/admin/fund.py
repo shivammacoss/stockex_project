@@ -30,6 +30,12 @@ class FundRequestBody(BaseModel):
     reason: str | None = None
 
 
+class PeerTransferBody(BaseModel):
+    target: str  # recipient admin's user_code (ADM…/BRK…) or id
+    amount: float
+    description: str | None = None
+
+
 class ResolveBody(BaseModel):
     approve: bool
     remarks: str | None = None
@@ -59,6 +65,18 @@ async def deduct_funds(member_id: str, body: AmountBody, admin: CurrentAdmin):
     except Exception as e:
         raise _http(e)
     return APIResponse(data=data, message="Funds deducted")
+
+
+@router.post("/transfer", response_model=APIResponse[dict])
+async def transfer_to_admin(body: PeerTransferBody, admin: CurrentAdmin):
+    """Peer transfer — send my own float to ANOTHER admin by their ID/code."""
+    try:
+        data = await admin_fund_service.transfer_to_admin(
+            admin, body.target, body.amount, body.description or ""
+        )
+    except Exception as e:
+        raise _http(e)
+    return APIResponse(data=data, message=f"Sent ₹{body.amount:,.2f} to {data.get('to_code')}")
 
 
 @router.post("/requests", response_model=APIResponse[dict])

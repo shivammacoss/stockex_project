@@ -124,6 +124,61 @@ async def deduct_funds(actor: User, child_id, amount, description: str = "") -> 
     return {"ok": True, "amount": str(amt)}
 
 
+# ── Peer transfer (admin → ANY admin by id/code) ───────────────────────
+async def _resolve_admin_target(target: str) -> User:
+    """Resolve an admin-tier user by user_code (ADM…/BRK…) or ObjectId."""
+    t = (target or "").strip()
+    if not t:
+        raise ValidationFailedError("Enter the recipient admin's ID")
+    user = await User.find_one(User.user_code == t)
+    if user is None:
+        try:
+            user = await User.get(PydanticObjectId(t))
+        except Exception:
+            user = None
+    if user is None or not _is_admin_tier(user):
+        raise NotFoundError(f"No admin found with ID '{t}'")
+    return user
+
+
+async def transfer_to_admin(actor: User, target: str, amount, description: str = "") -> dict:
+    """Peer transfer: an admin sends part of their OWN float to ANY other admin
+    identified by ID/code — no parent-child link required. Settles immediately.
+    Safe by construction: the sender can only move money they actually hold
+    (their Wallet.available_balance), so there's no way to pull from someone else.
+    """
+    amt = quantize_money(to_decimal(amount))
+    if amt <= ZERO:
+        raise ValidationFailedError("amount must be positive")
+    if not _is_admin_tier(actor):
+        raise ValidationFailedError("Only admin-tier accounts can transfer funds")
+    tgt = await _resolve_admin_target(target)
+    if tgt.id == actor.id:
+        raise ValidationFailedError("You can't transfer funds to yourself")
+
+    aw = await wallet_service.get_or_create(actor.id)
+    if to_decimal(aw.available_balance) < amt:
+        raise InsufficientFundsError(
+            f"Insufficient balance: ₹{to_decimal(aw.available_balance):,.2f} available, ₹{amt:,.2f} needed"
+        )
+    await wallet_service.adjust(
+        actor.id, -amt, transaction_type=TransactionType.ADMIN_TRANSFER,
+        narration=description or f"Transfer to {tgt.user_code}",
+        reference_type="ADMIN_PEER_TRANSFER", actor_id=actor.id,
+    )
+    await wallet_service.adjust(
+        tgt.id, amt, transaction_type=TransactionType.ADMIN_DEPOSIT,
+        narration=description or f"Transfer from {actor.user_code}",
+        reference_type="ADMIN_PEER_TRANSFER", actor_id=actor.id,
+    )
+    logger.info("admin_peer_transfer from=%s to=%s amount=%s", actor.user_code, tgt.user_code, amt)
+    return {
+        "ok": True, "amount": str(amt),
+        "to_code": tgt.user_code, "to_name": tgt.full_name,
+        "to_role": tgt.role.value if hasattr(tgt.role, "value") else str(tgt.role),
+    }
+
+
 # ── Admin float ↔ user funding (SA→admin allocation caps user deposits) ─
 # The admin's spendable ceiling IS their own Wallet.available_balance (one
 # shared float, same pool the inter-admin transfers above draw from). When a
