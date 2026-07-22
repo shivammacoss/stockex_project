@@ -48,7 +48,40 @@ logger = logging.getLogger(__name__)
 
 # Seconds after a window's close before we resolve it (lets the authoritative
 # candle finalise).
-_RESOLVE_GRACE_SEC = 8
+# Wait this long after a window closes before resolving its candle. The
+# Zerodha 15m historical candle can still shift by a rupee or two in the first
+# few seconds after close (late-arriving ticks / consolidation); 90 s lets it
+# settle so the FIRST resolution is already the finalized value.
+_RESOLVE_GRACE_SEC = 90
+
+
+async def _resolve_window_pinned(resolver, game_key: str, day: str, window: int, open_dt, close_dt):
+    """Resolve a window's (open, close, source), PINNED per (game, day, window).
+
+    A window's close is needed twice — as the OUTCOME of window W-1 and as the
+    REFERENCE of window W — and the two settlements happen ~15 min apart. If the
+    Zerodha candle shifts by a rupee between those two fetches, W-1 and W would
+    disagree on the shared boundary and a tiny move could settle in opposite
+    directions. Pinning the first resolution (3-day TTL) makes both reads
+    identical, so adjacent results are always consistent."""
+    from app.core.redis_client import cache_get, cache_set
+
+    key = f"games:updown:wclose:{game_key}:{day}:{window}"
+    try:
+        pinned = await cache_get(key)
+        if isinstance(pinned, dict) and pinned.get("o") and pinned.get("c"):
+            return to_decimal(pinned["o"]), to_decimal(pinned["c"]), pinned.get("s", "pinned")
+    except Exception:
+        pass
+    res = await resolver(open_dt, close_dt)
+    if res is None:
+        return None
+    o, c, src = res
+    try:
+        await cache_set(key, {"o": str(o), "c": str(c), "s": src}, ttl_sec=259200)  # 3 days
+    except Exception:
+        pass
+    return o, c, src
 
 
 def _resolver_for(game_key: str):
@@ -176,8 +209,10 @@ async def _get_or_declare_result(game_key: str, cfg, resolver, day: str, window:
     # Settle only AFTER the next window (W+1) has fully closed.
     if now < close_n + timedelta(seconds=_RESOLVE_GRACE_SEC):
         return None
-    ref = await resolver(open_w, close_w)      # (open, close, source) of W
-    fin = await resolver(open_n, close_n)      # (open, close, source) of W+1
+    # Pinned per window so the shared boundary close(W+1) is IDENTICAL whether
+    # read here (as W's outcome) or later when settling W+1 (as its reference).
+    ref = await _resolve_window_pinned(resolver, game_key, day, window, open_w, close_w)
+    fin = await _resolve_window_pinned(resolver, game_key, day, window + 1, open_n, close_n)
     if ref is None or fin is None:
         return None  # price unavailable — retry next tick
     ref_price = ref[1]      # close of window W (the reference)
