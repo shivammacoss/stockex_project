@@ -88,13 +88,21 @@ export default function SettlementsPage() {
       key: "gross_user_loss_inr",
       header: "User loss",
       align: "right",
-      render: (r) => `₹ ${inr(r.gross_user_loss_inr)}`,
+      render: (r) => (
+        <span className={Number(r.gross_user_loss_inr) > 0 ? "text-red-500" : "text-muted-foreground"}>
+          ₹ {inr(r.gross_user_loss_inr)}
+        </span>
+      ),
     },
     {
       key: "gross_user_profit_inr",
       header: "User profit",
       align: "right",
-      render: (r) => `₹ ${inr(r.gross_user_profit_inr)}`,
+      render: (r) => (
+        <span className={Number(r.gross_user_profit_inr) > 0 ? "text-emerald-500" : "text-muted-foreground"}>
+          ₹ {inr(r.gross_user_profit_inr)}
+        </span>
+      ),
     },
     {
       key: "total_brokerage_inr",
