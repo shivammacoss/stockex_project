@@ -123,10 +123,10 @@ async def _entity_pool_ids(
 #   "Bogus 0-price fill reversal …"
 #       Written when the operator runs the fix_bogus_proceeds_credits
 #       recovery script (or its inline variant) to undo a trade booked
-#       at ₹0 due to a Zerodha feed flatline. The credit is a
+#       at 🪙0 due to a Zerodha feed flatline. The credit is a
 #       correction restoring the pre-bug wallet state, not new money.
-#       Operator hit this on CL62329114 — two ₹8,63,120 reversal rows
-#       inflated the per-week Add Fund total to ~₹17 lakh.
+#       Operator hit this on CL62329114 — two 🪙8,63,120 reversal rows
+#       inflated the per-week Add Fund total to ~🪙17 lakh.
 #   "Reversal …" (generic)
 #       Catch-all for any future correction script that prefixes its
 #       narration with the word. Cheap to include; missing it would

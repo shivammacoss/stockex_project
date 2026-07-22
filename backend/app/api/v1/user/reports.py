@@ -38,7 +38,7 @@ async def _pnl_payload(user, from_date: datetime | None, to_date: datetime | Non
     # fills and net of brokerage. The OLD formula (Σ sell_value − Σ buy_value)
     # was WRONG whenever buy_qty ≠ sell_qty (open / partially-open / reopened
     # positions): the unmatched opening leg's WHOLE notional surfaced as a
-    # phantom loss. CL29519361 SENSEX (1240 bought / 1040 sold) read −₹1.55 Cr
+    # phantom loss. CL29519361 SENSEX (1240 bought / 1040 sold) read −🪙1.55 Cr
     # instead of its real realised. Summing pnl_inr makes this report agree
     # with the admin Position-mgmt + Accounts cards (which use the same field),
     # so every page finally shows the same number.
@@ -100,7 +100,7 @@ async def _pnl_payload(user, from_date: datetime | None, to_date: datetime | Non
         # APK-facing field names — match the PnlReport TypeScript schema in
         # setupfx-ind_apk/src/features/reports/api/reports.api.ts. Without
         # these the mobile P&L screen reads `undefined` for every total
-        # and renders all ₹0.00 even when trades exist.
+        # and renders all 🪙0.00 even when trades exist.
         "rows": [
             {
                 "symbol": r["symbol"],

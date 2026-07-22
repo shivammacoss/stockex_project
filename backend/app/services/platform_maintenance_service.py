@@ -10,13 +10,13 @@ User doc: see `platform_charge_*` / `zero_balance_autoclose_enabled`):
      owning admin's MAIN wallet. Idempotent per day via `last_platform_charge_day`
      (self-heals across restarts / multiple ticks). Users who can't cover the
      full fee are charged only what they have (never driven negative, never a
-     settlement-outstanding debt) — a bare ₹0 wallet is simply skipped.
+     settlement-outstanding debt) — a bare 🪙0 wallet is simply skipped.
 
   2. ZERO-BALANCE AUTO-CLOSE — when an admin enables it, any of that admin's
-     users whose ENTIRE balance (main + every segment wallet) has sat at ₹0 for
+     users whose ENTIRE balance (main + every segment wallet) has sat at 🪙0 for
      ≥ 7 consecutive days, with no open positions, is SOFT-closed
      (status → CLOSED — recoverable, NOT hard-deleted). `zero_balance_since`
-     records when ₹0 was first observed and is cleared the instant any money
+     records when 🪙0 was first observed and is cleared the instant any money
      returns, so the 7-day clock only runs while genuinely empty.
 
 Wired into the FastAPI lifespan as a single leader-only loop
@@ -117,7 +117,7 @@ async def run_platform_charge_sweep() -> int:
                         actor_id=admin.id,
                     )
                     charged += 1
-                # Stamp the day even on a ₹0 take so a broke user isn't
+                # Stamp the day even on a 🪙0 take so a broke user isn't
                 # re-probed every tick; next day it retries.
                 await User.get_motor_collection().update_one(
                     {"_id": u.id}, {"$set": {"last_platform_charge_day": today, "updated_at": now_utc()}}

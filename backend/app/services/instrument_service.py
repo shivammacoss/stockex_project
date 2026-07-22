@@ -311,8 +311,8 @@ async def _mirror_from_zerodha(token: str, existing: "Instrument | None" = None)
         # BSE_OPTION_SELL / BSE_FUTURE — segments the admin never configured —
         # so any strike NOT in the main seed (created on the fly when a user
         # opened it) landed in the wrong segment and resolved a wrong/default
-        # margin (operator-caught: BANKEX26JUN66900CE got ₹50 instead of the
-        # ₹7,000 its BFO_OPTION sibling got). Keep this in lock-step with the
+        # margin (operator-caught: BANKEX26JUN66900CE got 🪙50 instead of the
+        # 🪙7,000 its BFO_OPTION sibling got). Keep this in lock-step with the
         # seed so on-the-fly strikes get the SAME segment → SAME margin.
         "BFO": {
             "CE": "BFO_OPTION",

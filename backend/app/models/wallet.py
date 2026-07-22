@@ -53,7 +53,7 @@ class Wallet(TimestampMixin):
 
     # ── Kuber wallet (SUPER_ADMIN-only house pool) ──────────────────────
     # Mirrors D:\Stockex's Admin.kuberWallet. A distributable pool (capped at
-    # ₹100 cr) SEPARATE from the SA's personal `available_balance`, used to
+    # 🪙100 cr) SEPARATE from the SA's personal `available_balance`, used to
     # fund downstream franchise / patti payouts. When the SA funds an admin's
     # share, part comes from `kuber_balance` (pooled) and part from
     # `available_balance` (personal), per the funding plan. Meaningful ONLY on

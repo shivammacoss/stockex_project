@@ -25,13 +25,13 @@ def _opt_type_from_symbol(symbol: str | None) -> str | None:
     """Derive option type (CE/PE) from a trading symbol suffix.
 
     The netting resolver only applies the admin's per-side option overrides
-    (Opt Buy / Opt Sell mode + Fixed ₹-per-lot / % values) when it KNOWS the
+    (Opt Buy / Opt Sell mode + Fixed 🪙-per-lot / % values) when it KNOWS the
     leg is an option — i.e. when `option_type` ∈ {"CE","PE"}. The Position's
     `InstrumentRef` snapshot carries no option_type field, so we recover it
     from the symbol the same way the matching engine does. Passing this into
     `get_effective_settings` makes the Used/Holding margin on the positions
     page honour the Opt Sell/Buy Fixed setting instead of silently falling
-    back to the generic segment Times/% (the ₹795.80-vs-Fixed-15000 bug).
+    back to the generic segment Times/% (the 🪙795.80-vs-Fixed-15000 bug).
     """
     s = (symbol or "").upper()
     # Option symbols end in the strike + CE/PE, so the char right before the
@@ -187,8 +187,8 @@ def _pos(p: Position) -> dict:
     # M2M against a zero price.  `(0 - 8631) × 300 = -25,90,007` is
     # what dashboards rendered before this guard — pure phantom loss.
     # When the price is unusable, surface unrealized = 0 so the card
-    # reads "₹0.00 · LTP 0.00" and the trader knows the feed is dead
-    # rather than panicking at a ₹-25 lakh M2M.
+    # reads "🪙0.00 · LTP 0.00" and the trader knows the feed is dead
+    # rather than panicking at a 🪙-25 lakh M2M.
     _stale_feed = ltp_native is None or ltp_native <= 0
     if is_usd:
         unrealized_pnl_inr = (
@@ -257,7 +257,7 @@ def _pos(p: Position) -> dict:
         # Snapshot of SL/TP captured at close-time. apply_fill wipes
         # `stop_loss` / `target` on full close so they don't leak into
         # reopens, but the user-facing Closed tab wants to surface
-        # "Trade had SL ₹X, TP ₹Y" — these copies hold that info.
+        # "Trade had SL 🪙X, TP 🪙Y" — these copies hold that info.
         "close_stop_loss": str(p.close_stop_loss) if getattr(p, "close_stop_loss", None) is not None else None,
         "close_target": str(p.close_target) if getattr(p, "close_target", None) is not None else None,
         "status": p.status.value,
@@ -592,7 +592,7 @@ async def squareoff(
         # close). The stored `unrealized_pnl` lags the feed, AND the plain
         # last-traded LTP can sit ABOVE the bid — both made a losing long read
         # as break-even/profit, so the PROFIT hold wrongly gated a LOSS trade
-        # (06-Jun: CRUDEOIL long −₹200 blocked with "profitable trade …").
+        # (06-Jun: CRUDEOIL long −🪙200 blocked with "profitable trade …").
         cur_pnl = 0.0
         try:
             _ltp = await market_data_service.get_ltp(p.instrument.token)
@@ -752,14 +752,14 @@ async def update_sl_tp(position_id: str, payload: dict, user: CurrentUser):
         # 1. Directional check
         if sl_val is not None:
             if _side == "BUY" and sl_val >= _ref:
-                raise HTTPException(status_code=400, detail=f"Stop Loss ₹{sl_val} must be BELOW current price ₹{_ref:.2f} for a BUY position.")
+                raise HTTPException(status_code=400, detail=f"Stop Loss 🪙{sl_val} must be BELOW current price 🪙{_ref:.2f} for a BUY position.")
             if _side == "SELL" and sl_val <= _ref:
-                raise HTTPException(status_code=400, detail=f"Stop Loss ₹{sl_val} must be ABOVE current price ₹{_ref:.2f} for a SELL position.")
+                raise HTTPException(status_code=400, detail=f"Stop Loss 🪙{sl_val} must be ABOVE current price 🪙{_ref:.2f} for a SELL position.")
         if tp_val is not None:
             if _side == "BUY" and tp_val <= _ref:
-                raise HTTPException(status_code=400, detail=f"Target ₹{tp_val} must be ABOVE current price ₹{_ref:.2f} for a BUY position.")
+                raise HTTPException(status_code=400, detail=f"Target 🪙{tp_val} must be ABOVE current price 🪙{_ref:.2f} for a BUY position.")
             if _side == "SELL" and tp_val >= _ref:
-                raise HTTPException(status_code=400, detail=f"Target ₹{tp_val} must be BELOW current price ₹{_ref:.2f} for a SELL position.")
+                raise HTTPException(status_code=400, detail=f"Target 🪙{tp_val} must be BELOW current price 🪙{_ref:.2f} for a SELL position.")
 
         # 2. Limit-away min-distance check
         if _limit_pct > 0:
@@ -768,12 +768,12 @@ async def update_sl_tp(position_id: str, payload: dict, user: CurrentUser):
             if sl_val is not None and _lower < sl_val < _upper:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Stop Loss ₹{sl_val} is too close to current price ₹{_ref:.2f}. Must be at least {_limit_pct:.0f}% away (≤ ₹{_lower:.2f}).",
+                    detail=f"Stop Loss 🪙{sl_val} is too close to current price 🪙{_ref:.2f}. Must be at least {_limit_pct:.0f}% away (≤ 🪙{_lower:.2f}).",
                 )
             if tp_val is not None and _lower < tp_val < _upper:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Target ₹{tp_val} is too close to current price ₹{_ref:.2f}. Must be at least {_limit_pct:.0f}% away (≥ ₹{_upper:.2f}).",
+                    detail=f"Target 🪙{tp_val} is too close to current price 🪙{_ref:.2f}. Must be at least {_limit_pct:.0f}% away (≥ 🪙{_upper:.2f}).",
                 )
 
     if "stop_loss" in payload:
@@ -870,8 +870,8 @@ async def list_active_trades(user: CurrentUser):
     # (segment, product_type, symbol, action) so each Active-tab card can
     # show the REAL carry-forward margin instead of the old `used × 1.4`
     # heuristic. Operator-flagged 22-May: TCS card on Active tab read
-    # ₹1,127 (805.28 × 1.4) while the trade dialog correctly showed
-    # ₹5,752 from segment-settings — two different numbers for the same
+    # 🪙1,127 (805.28 × 1.4) while the trade dialog correctly showed
+    # 🪙5,752 from segment-settings — two different numbers for the same
     # position. Resolver cache (5 min) makes repeat calls cheap even
     # with dozens of positions.
     ovn_settings_by_key: dict[tuple[str, str, str, str], dict] = {}
@@ -1052,7 +1052,7 @@ async def list_active_trades(user: CurrentUser):
         # it across each still-open same-side trade proportional to
         # this trade's remaining qty. Without this the frontend's
         # `r.margin_used / r.margin` keys both fall through to 0 and
-        # the Used / Holding columns render as "₹0.00" for every row.
+        # the Used / Holding columns render as "🪙0.00" for every row.
         pos_total_qty = abs(float(p.quantity)) or 1.0
         pos_margin = float(str(p.margin_used or 0))
         trade_share = qty / pos_total_qty if pos_total_qty > 0 else 0.0
@@ -1086,13 +1086,13 @@ async def list_active_trades(user: CurrentUser):
                 ovn_lev = float(s.get("overnight_leverage") or 1.0) or 1.0
                 holding_native = trade_notional * ovn_pct / ovn_lev
             # USD → INR same as the order validator does. Skip for
-            # fixed mode where ₹/lot is already admin-entered in INR.
+            # fixed mode where 🪙/lot is already admin-entered in INR.
             if is_usd and not (mode == "fixed" and ovn_fixed > 0):
                 holding_native *= fx
             holding_margin_inr = round(holding_native, 2)
         except Exception:
             # Resolver hiccup — fall back to the locked intraday margin
-            # so the card never shows ₹0 / NaN, but DON'T multiply by
+            # so the card never shows 🪙0 / NaN, but DON'T multiply by
             # 1.4 (the bug this commit is fixing).
             holding_margin_inr = used_margin_inr
 

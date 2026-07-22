@@ -92,7 +92,7 @@ async def place_bet(
 
     await wallet_service.atomic_games_wallet_debit(
         user_id, amt, game_key=GAME_KEY,
-        description=f"Bracket · {pred.value} · ₹{amt}",
+        description=f"Bracket · {pred.value} · 🪙{amt}",
         meta={"kind": "BET", "prediction": pred.value},
     )
     await wallet_service.house_settle(amt, game_key=GAME_KEY, narration="Games stake in · bracket")

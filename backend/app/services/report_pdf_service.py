@@ -41,13 +41,13 @@ BUY = rl_colors.HexColor("#0F766E")
 SELL = rl_colors.HexColor("#DC2626")
 
 
-# ── Font with Indian Rupee (₹, U+20B9) glyph support ─────────────────
+# ── Font with Indian Rupee (🪙, U+20B9) glyph support ─────────────────
 # ReportLab's built-in PDF fonts (Helvetica / Times / Courier) are Type 1
 # fonts with the WinAnsi encoding — they predate Unicode and have NO
-# glyph for ₹. Renders show up as a black square (■), which is exactly
+# glyph for 🪙. Renders show up as a black square (■), which is exactly
 # what the user reported in the P&L PDF.
 #
-# Fix: register a TrueType font that DOES carry ₹, and route every
+# Fix: register a TrueType font that DOES carry 🪙, and route every
 # Paragraph / Table cell through it. We try a list of candidate paths
 # at import time, pick whichever one resolves first, and fall back to
 # the legacy "Rs." prefix in `_fmt_money` if absolutely nothing works
@@ -58,7 +58,7 @@ _HAS_RUPEE = False
 
 
 def _register_unicode_font() -> None:
-    """Locate a system TrueType font that includes ₹ (U+20B9) and
+    """Locate a system TrueType font that includes 🪙 (U+20B9) and
     register it under the stable aliases used elsewhere in this module.
     Search order: bundled app font → Linux server paths → Windows
     system paths → macOS system paths. First hit wins."""
@@ -80,7 +80,7 @@ def _register_unicode_font() -> None:
 
         # Linux (Ubuntu / Debian / Amazon Linux) — DejaVu is in
         # fonts-dejavu-core which is installed by default on most
-        # server images and ships with ₹.
+        # server images and ships with 🪙.
         ("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
          "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         ("DejaVu", "/usr/share/fonts/dejavu/DejaVuSans.ttf",
@@ -89,7 +89,7 @@ def _register_unicode_font() -> None:
         ("NotoSans", "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
          "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
 
-        # Windows — Arial and Segoe UI both carry ₹ (Win 8+).
+        # Windows — Arial and Segoe UI both carry 🪙 (Win 8+).
         ("Arial", "C:\\Windows\\Fonts\\arial.ttf",
          "C:\\Windows\\Fonts\\arialbd.ttf"),
         ("Segoe", "C:\\Windows\\Fonts\\segoeui.ttf",
@@ -113,7 +113,7 @@ def _register_unicode_font() -> None:
                 pdfmetrics.registerFont(TTFont(bold_alias, reg))
             # Map `<b>` inside Paragraph HTML to the bold face. Without
             # this, `<b>` falls back to the synthetic-bold renderer which
-            # ignores our TTF entirely and would re-introduce ■ for ₹.
+            # ignores our TTF entirely and would re-introduce ■ for 🪙.
             addMapping(alias, 0, 0, alias)         # normal
             addMapping(alias, 1, 0, bold_alias)    # bold
             addMapping(alias, 0, 1, alias)         # italic — synth
@@ -131,9 +131,9 @@ _register_unicode_font()
 
 
 def _rupee() -> str:
-    """₹ when the host font carries U+20B9, otherwise the plain-ASCII
+    """🪙 when the host font carries U+20B9, otherwise the plain-ASCII
     fallback. Keeps PDFs readable on a stripped-down server image."""
-    return "₹" if _HAS_RUPEE else "Rs. "
+    return "🪙" if _HAS_RUPEE else "Rs. "
 
 
 def _fmt_money(v: float | int | str | None) -> str:
@@ -239,7 +239,7 @@ def _header(title: str, subtitle: str, user_label: str, styles: dict) -> list:
 def _table(rows: list[list[Any]], col_widths: list[float]) -> Table:
     """Build a tight-padded table that wraps long cell content instead of
     overflowing the column. Each cell is wrapped in a Paragraph so the
-    layout engine breaks long strings (₹1,23,456.78 / symbol names) into
+    layout engine breaks long strings (🪙1,23,456.78 / symbol names) into
     multiple lines rather than running into the next column — the
     overflow the user reported in the P&L PDF.
     """
@@ -414,7 +414,7 @@ def build_pnl_pdf(user, payload: dict) -> bytes:
             )
         # Trimmed column widths — 28+22+22+28+28+24+28 = 180mm fit the
         # 180mm content area exactly. With the wider 8pt + wrapping font
-        # set in `_table()`, money columns now have room for ₹1,23,45,678.
+        # set in `_table()`, money columns now have room for 🪙1,23,45,678.
         elems.append(
             _table(rows, [26 * mm, 18 * mm, 18 * mm, 28 * mm, 28 * mm, 22 * mm, 28 * mm]),
         )

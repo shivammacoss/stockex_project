@@ -462,12 +462,12 @@ async def validate_request(
     max_amt = _decimal_or_zero(rule.get("max_amount"))
     if min_amt > 0 and amount < min_amt:
         raise OrderRejectedError(
-            f"Minimum {rule_type.lower()} is ₹{min_amt:.2f}",
+            f"Minimum {rule_type.lower()} is 🪙{min_amt:.2f}",
             code="MIN_AMOUNT",
         )
     if max_amt > 0 and amount > max_amt:
         raise OrderRejectedError(
-            f"Maximum {rule_type.lower()} per request is ₹{max_amt:.2f}",
+            f"Maximum {rule_type.lower()} per request is 🪙{max_amt:.2f}",
             code="MAX_AMOUNT",
         )
 
@@ -501,8 +501,8 @@ async def validate_request(
             remaining = max(0.0, daily_limit - consumed)
             raise OrderRejectedError(
                 (
-                    f"Daily {rule_type.lower()} limit ₹{daily_limit:.2f} "
-                    f"would be exceeded — ₹{remaining:.2f} remaining today"
+                    f"Daily {rule_type.lower()} limit 🪙{daily_limit:.2f} "
+                    f"would be exceeded — 🪙{remaining:.2f} remaining today"
                 ),
                 code="DAILY_LIMIT",
             )

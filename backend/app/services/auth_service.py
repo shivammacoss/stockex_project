@@ -344,7 +344,7 @@ async def revoke_user_sessions(user: User) -> None:
 # decision 2026-06-23). The old per-click behaviour spawned thousands of demo
 # users whose open positions never closed and bloated the DB/server. A daily
 # reset loop (`demo_service.reset_global_demo`, scheduled in main.py) flattens
-# its trades and restores the ₹1L virtual balance every 24h. NOTE: this is a
+# its trades and restores the 🪙1L virtual balance every 24h. NOTE: this is a
 # SHARED account — concurrent demo visitors see each other's positions/balance.
 GLOBAL_DEMO_EMAIL = "demo@stockex.app"
 GLOBAL_DEMO_MOBILE = "9000000000"
@@ -389,7 +389,7 @@ async def create_demo_session(*, ip: str = "0.0.0.0", user_agent: str | None = N
     # (dependencies.get_current_user). The instant the shared demo account's
     # `token_version` was ever bumped above 0 (admin block/unblock, password
     # reset, force_logout_user), EVERY fresh demo login 401'd on its very
-    # first /users/me (0 != N) → "Could not load profile" + ₹0.00 wallet, and
+    # first /users/me (0 != N) → "Could not load profile" + 🪙0.00 wallet, and
     # couldn't self-heal because the client's refresh short-circuits a
     # not-yet-expiring token. Carrying the real `ver` keeps demo consistent.
     access = create_access_token(

@@ -94,8 +94,8 @@ async def block_margin(user_id: str | PydanticObjectId, kind: str, amount: Decim
     if updated is None:
         w = await get_or_create(user_id, kind)
         raise InsufficientFundsError(
-            f"Insufficient {wallet_kinds.LABELS.get(kind, kind)} margin: have ₹{w.available_balance} "
-            f"(+credit ₹{w.credit_limit}), need ₹{amt}"
+            f"Insufficient {wallet_kinds.LABELS.get(kind, kind)} margin: have 🪙{w.available_balance} "
+            f"(+credit 🪙{w.credit_limit}), need 🪙{amt}"
         )
 
 

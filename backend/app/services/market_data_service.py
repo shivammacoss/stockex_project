@@ -391,7 +391,7 @@ async def _infoway_overlay(token: str, base_quote: dict[str, Any]) -> dict[str, 
             merged["depth"] = {"bids": depth["bids"], "asks": depth["asks"]}
         merged["source"] = "infoway"
         # USD/INR snapshot so the frontend can show margin in real INR
-        # rather than displaying the USD number with a ₹ symbol (which is
+        # rather than displaying the USD number with a 🪙 symbol (which is
         # how users end up trying to place orders worth 80× their wallet).
         merged["fx_rate"] = get_usd_inr_rate()
         return merged
@@ -611,7 +611,7 @@ def is_usd_quoted_segment(segment: str | None) -> bool:
     Per the broker's spec, Infoway-feed prices (forex / crypto / spot
     metals / energy / international stocks & indices) are now treated as
     INR directly — there is no live USD→INR multiplication on P&L, no
-    margin scaling, and the UI renders these prices with ₹ rather than $.
+    margin scaling, and the UI renders these prices with 🪙 rather than $.
     So this helper always returns False; every legacy call site that gated
     FX conversion on it becomes a no-op without further changes.
 

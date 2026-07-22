@@ -103,7 +103,7 @@ async def run_boot_migrations() -> None:
     # Heal legacy `marginCalcMode = "percent"` rows on every boot. Old seed
     # default locked freshly-seeded NSE_FUT / NSE_OPT / MCX_OPT etc. into
     # percent mode with intradayMargin = 100, so the user-side panel showed
-    # "100.00% · ₹{notional}/lot" until the admin explicitly clicked the
+    # "100.00% · 🪙{notional}/lot" until the admin explicitly clicked the
     # Mode dropdown. This heal resets seed-default rows to NULL so the
     # resolver's defensive inference picks the right mode automatically.
     # Idempotent — no-op once those rows are cleaned up or customised.
@@ -684,7 +684,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Shared demo reset: the login page's "Try Demo" logs everyone into ONE
     # shared demo account (auth_service.GLOBAL_DEMO_EMAIL) instead of minting a
     # throwaway per click. That account accrues everyone's trades, so flatten
-    # it and restore the ₹1L virtual balance every 24h. Polls hourly; the 24h
+    # it and restore the 🪙1L virtual balance every 24h. Polls hourly; the 24h
     # cadence is tracked in Redis so it survives restarts.
     from app.services.demo_service import demo_reset_loop
     demo_reset_task: _asyncio.Task = _asyncio.create_task(

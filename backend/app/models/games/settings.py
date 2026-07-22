@@ -166,7 +166,7 @@ class GameSettings(TimestampMixin):
     games_enabled: bool = True
     maintenance_mode: bool = False
     maintenance_message: str = "Games are under maintenance. Please check back soon."
-    token_value: float = 300.0  # 1 token = ₹300 (display as "tickets")
+    token_value: float = 300.0  # 1 token = 🪙300 (display as "tickets")
     platform_commission: float = 5.0
 
     profit_distribution: ProfitDistribution = Field(default_factory=ProfitDistribution)

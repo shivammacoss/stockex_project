@@ -1,6 +1,6 @@
 """Kuber wallet — the SUPER_ADMIN-only house pool (mirrors D:\\Stockex kuberWallet.js).
 
-A distributable pool (capped at ₹100 cr) kept SEPARATE from the SA's personal
+A distributable pool (capped at 🪙100 cr) kept SEPARATE from the SA's personal
 `available_balance`. It funds downstream franchise / patti payouts. When the SA
 funds a downstream admin, part comes from `kuber_balance` (pooled) and part from
 `available_balance` (personal), per the funding plan.
@@ -27,7 +27,7 @@ from app.utils.decimal_utils import ZERO, quantize_money, to_decimal
 
 logger = logging.getLogger(__name__)
 
-# ₹100 crore cap on the kuber pool (KUBER_WALLET_MAX_BALANCE in the reference).
+# 🪙100 crore cap on the kuber pool (KUBER_WALLET_MAX_BALANCE in the reference).
 KUBER_MAX = Decimal("1000000000")
 
 
@@ -61,7 +61,7 @@ async def summary(sa_id: str | PydanticObjectId) -> dict:
 
 
 async def bootstrap_kuber_to_max(sa_id: str | PydanticObjectId, actor_id=None) -> dict:
-    """Idempotently top the kuber pool up to the ₹100 cr cap."""
+    """Idempotently top the kuber pool up to the 🪙100 cr cap."""
     w = await _sa_wallet(sa_id)
     cur = to_decimal(w.kuber_balance)
     if cur >= KUBER_MAX:
@@ -75,7 +75,7 @@ async def bootstrap_kuber_to_max(sa_id: str | PydanticObjectId, actor_id=None) -
     )
     after = to_decimal(upd["kuber_balance"])
     await _kuber_ledger(w.user_id, delta, cur, after, TransactionType.KUBER_TOPUP,
-                        "Kuber pool topped up to ₹100 cr", actor_id)
+                        "Kuber pool topped up to 🪙100 cr", actor_id)
     return {"kuber_balance": str(after), "topped_up": str(delta)}
 
 
@@ -87,7 +87,7 @@ async def transfer_main_to_kuber(sa_id, amount, actor_id=None) -> dict:
     if to_decimal(w.available_balance) < amt:
         raise InsufficientFundsError("Insufficient main-wallet balance")
     if to_decimal(w.kuber_balance) + amt > KUBER_MAX:
-        raise ValueError("Transfer would exceed the ₹100 cr kuber cap")
+        raise ValueError("Transfer would exceed the 🪙100 cr kuber cap")
     # Debit main (visible in money views), then credit kuber.
     await wallet_service.adjust(sa_id, -amt, transaction_type=TransactionType.KUBER_TRANSFER,
                                 narration="Main → Kuber pool", reference_type="KUBER", actor_id=actor_id)

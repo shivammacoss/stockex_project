@@ -466,7 +466,7 @@ async def _find_or_create_from_zerodha(token: str) -> Instrument | None:
             # revisions that the cache reflects. Without this lookup a
             # contract first viewed BEFORE the CSV cache was warmed got
             # stuck at fallback `lot_size = 1`, which then sent the trade
-            # panel's margin to ~₹74 instead of ~₹1,858 for a BOSCHLTD25
+            # panel's margin to ~🪙74 instead of ~🪙1,858 for a BOSCHLTD25
             # lot — the user-reported "ek hi underlying ke alag expiry me
             # lot_size alag a rahe hain" bug. Trust whatever the CSV says
             # (including legitimate revisions across expiries).

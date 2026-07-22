@@ -59,8 +59,8 @@ async def get_effective_for_instrument(
     # Expiry-day override — mirror the mode-aware translation the validator
     # does at order time so the APK / web KPI tile + pre-flight check see
     # the SAME margin number the server will enforce. Without this the
-    # panel showed e.g. ₹2,068 for CRUDEOIL26MAYFUT on its expiry day
-    # while the server actually enforced ~₹51L (notional × 5 from the
+    # panel showed e.g. 🪙2,068 for CRUDEOIL26MAYFUT on its expiry day
+    # while the server actually enforced ~🪙51L (notional × 5 from the
     # old expiry-bug). Even after the validator fix this endpoint still
     # needs to surface the expiry-day numbers so admins who set a
     # stricter `expiryDayIntradayMargin` see it reflected on the panel.

@@ -141,7 +141,7 @@ async def atomic_games_wallet_debit(
     if updated is None:
         w = await get_or_create(user_id)
         raise InsufficientGamesFundsError(
-            f"Insufficient games balance: have ₹{w.balance}, need ₹{amt}"
+            f"Insufficient games balance: have 🪙{w.balance}, need 🪙{amt}"
         )
     balance_after = to_decimal(updated.get("balance"))
     await _record_ledger(
@@ -252,7 +252,7 @@ async def transfer_main_to_games(
     mw = await wallet_service.get_or_create(user_id)
     if to_decimal(mw.available_balance) < amt:
         raise InsufficientFundsError(
-            f"Insufficient main-wallet balance: available ₹{mw.available_balance}, need ₹{amt}"
+            f"Insufficient main-wallet balance: available 🪙{mw.available_balance}, need 🪙{amt}"
         )
 
     await wallet_service.adjust(
@@ -296,7 +296,7 @@ async def transfer_games_to_main(
     bal = await get_balance(user_id)
     if bal < amt:
         raise InsufficientGamesFundsError(
-            f"Insufficient games balance: available ₹{bal}, requested ₹{amt}"
+            f"Insufficient games balance: available 🪙{bal}, requested 🪙{amt}"
         )
 
     w = await atomic_games_wallet_debit(
@@ -334,7 +334,7 @@ async def create_games_withdrawal(
     bal = await get_balance(uid)
     if bal < amt:
         raise InsufficientGamesFundsError(
-            f"Insufficient games balance: available ₹{bal}, requested ₹{amt}"
+            f"Insufficient games balance: available 🪙{bal}, requested 🪙{amt}"
         )
     existing = await GamesWithdrawalRequest.find_one(
         GamesWithdrawalRequest.user_id == uid,

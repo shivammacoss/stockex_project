@@ -126,8 +126,8 @@ def _wallet_balance(wallet: Any) -> Decimal:
     """Denominator the stop-out percentages are measured against.
 
     Total wallet pool = available cash + currently locked margin + admin-
-    extended credit. With balance ₹1000 and stop-out 80 %, a floating
-    loss of ₹800 triggers stop-out — matching the broker's spec:
+    extended credit. With balance 🪙1000 and stop-out 80 %, a floating
+    loss of 🪙800 triggers stop-out — matching the broker's spec:
         loss_pct = (floating_loss + estimated_close_brokerage) / balance × 100
 
     Note: callers fold the close-leg brokerage estimate INTO the
@@ -776,7 +776,7 @@ async def _enforce_for_user(
     # can legitimately reach 0: realised losses floored the wallet to 0 with
     # the overflow parked in settlement_outstanding, or a position opened
     # with margin_used = 0. The OLD `return` here SILENTLY DISABLED stop-out
-    # for exactly those accounts — CL45900793 ran to -₹2.3L realised because
+    # for exactly those accounts — CL45900793 ran to -🪙2.3L realised because
     # every 250 ms tick bailed at this single line.
     #
     # There is no percentage to divide against a 0 balance, but the intent
@@ -908,8 +908,8 @@ async def _enforce_for_user(
     #   balance  = available + used_margin + credit_limit
     #
     # Admin sets 90% → stop-out fires when floating loss reaches 90%
-    # of the user's total balance. Example: balance ₹48K, 90% = stop
-    # when loss reaches ₹43.3K.
+    # of the user's total balance. Example: balance 🪙48K, 90% = stop
+    # when loss reaches 🪙43.3K.
     projected_loss = floating_loss + estimated_close_brokerage
     loss_pct = (
         float(projected_loss / balance * Decimal(100)) if balance > 0 and projected_loss > 0 else 0.0
@@ -967,7 +967,7 @@ async def _enforce_for_user(
         # wallet never lingers in the contradictory "high available_balance
         # + phantom settlement_outstanding" state an admin can misread as
         # "the user kept too much" (CL15362105 / MITESH — an admin clawed
-        # ₹2,000 after seeing an inflated balance). Net-neutral on equity;
+        # 🪙2,000 after seeing an inflated balance). Net-neutral on equity;
         # genuine capital-exhausted shortfall is left intact.
         try:
             await wallet_service.net_phantom_settlement(user.id, settlement_before)

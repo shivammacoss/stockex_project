@@ -134,8 +134,8 @@ async def execute_market_order(
     # If the upstream feed is down (Zerodha WS dropped + REST timing
     # out, Infoway tick stale) get_ltp can return 0 and bid/ask are
     # filtered out above when they're 0. Without this guard a market
-    # SELL would execute at ₹0.00 — operator-reported: an MCX position
-    # avg ₹8631 closed at ₹0 booked −₹17 lakh realised loss from a
+    # SELL would execute at 🪙0.00 — operator-reported: an MCX position
+    # avg 🪙8631 closed at 🪙0 booked −🪙17 lakh realised loss from a
     # single 100-lot exit, purely because the LTP feed flatlined for
     # ~3 minutes during a Zerodha auto-login window.
     #
@@ -260,7 +260,7 @@ async def execute_market_order(
             spread_side = quantize_money(spread_side)
             # Safety cap: a mis-keyed spread (e.g. a fat-finger 50000) must
             # NEVER book a wildly off-market fill — that is exactly how the
-            # GOLD ₹1.38 cr phantom profit happened. Beyond 20 % of LTP,
+            # GOLD 🪙1.38 cr phantom profit happened. Beyond 20 % of LTP,
             # treat the spread as misconfigured and leave the fill untouched.
             if spread_side > 0 and abs(spread_side - raw_ltp) <= raw_ltp * Decimal("0.20"):
                 fill_price = spread_side

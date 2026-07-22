@@ -76,7 +76,7 @@ async def transfer_to_admin(body: PeerTransferBody, admin: CurrentAdmin):
         )
     except Exception as e:
         raise _http(e)
-    return APIResponse(data=data, message=f"Sent ₹{body.amount:,.2f} to {data.get('to_code')}")
+    return APIResponse(data=data, message=f"Sent 🪙{body.amount:,.2f} to {data.get('to_code')}")
 
 
 @router.post("/requests", response_model=APIResponse[dict])

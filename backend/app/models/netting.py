@@ -191,7 +191,7 @@ class NettingFieldsBase(BaseModel):
     # Per-side margin mode for option Buy and Sell. NULL means "inherit
     # from the segment-level marginCalcMode above". When set, this mode
     # overrides for that side only — lets admin run, e.g., option BUY
-    # in Fixed (flat ₹/lot) while option SELL is in Times (multiplier).
+    # in Fixed (flat 🪙/lot) while option SELL is in Times (multiplier).
     optionBuyMarginCalcMode: Literal["fixed", "times", "percent"] | None = None
     optionSellMarginCalcMode: Literal["fixed", "times", "percent", "strike_pct"] | None = None
     intradayMargin: float | None = None
@@ -233,10 +233,10 @@ class NettingFieldsBase(BaseModel):
     expiryDayOptionSellMargin: float | None = None
     # When ON the three expiry-day margin values above are interpreted as
     # % of notional (just like the regular `marginCalcMode = percent` path).
-    # When OFF they're flat ₹/lot — same shape as Fixed margin mode. Lets
+    # When OFF they're flat 🪙/lot — same shape as Fixed margin mode. Lets
     # admin pick the units for expiry day independently from the rest of
     # the segment (e.g. percent during normal trading but a punitive flat
-    # ₹ on expiry day to discourage last-minute carries).
+    # 🪙 on expiry day to discourage last-minute carries).
     expiryDayMarginAsPercent: bool | None = None
 
 

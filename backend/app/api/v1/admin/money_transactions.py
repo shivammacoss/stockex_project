@@ -136,8 +136,8 @@ async def money_by_user(
     # recovery script writes when undoing a Zerodha-flatline trade).
     # The corrections are NOT real cash flow, so excluding them from
     # the tile aggregations brings the per-week number back to operator
-    # expectation. Operator hit this on CL62329114 — two ₹8,63,120
-    # reversal rows inflated the week's Add Fund by ~₹17 lakh.
+    # expectation. Operator hit this on CL62329114 — two 🪙8,63,120
+    # reversal rows inflated the week's Add Fund by ~🪙17 lakh.
     _SYSTEM_NARRATION_RX = "Initial balance credit|Bogus 0-price fill reversal|Reversal trade="
     is_system_adj = {
         "$regexMatch": {

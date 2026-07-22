@@ -296,7 +296,7 @@ async def reject_deposit(
 
         from app.services.push_service import send_to_user as _push_user
 
-        amt_label = f"₹{r.amount}" if r.amount else ""
+        amt_label = f"🪙{r.amount}" if r.amount else ""
         reason_label = (
             f" — {payload.admin_remark}" if payload.admin_remark else ""
         )
@@ -696,8 +696,8 @@ async def approve_withdrawal(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Insufficient balance: user has ₹{available:,.2f} available "
-                f"but withdrawal is ₹{amount:,.2f}. "
+                f"Insufficient balance: user has 🪙{available:,.2f} available "
+                f"but withdrawal is 🪙{amount:,.2f}. "
                 f"Reject this request or wait for a deposit."
             ),
         )
@@ -828,7 +828,7 @@ async def reject_withdrawal(
 
         from app.services.push_service import send_to_user as _push_user
 
-        amt_label = f"₹{r.amount}" if r.amount else ""
+        amt_label = f"🪙{r.amount}" if r.amount else ""
         reason_label = (
             f" — {payload.rejection_reason}" if payload.rejection_reason else ""
         )

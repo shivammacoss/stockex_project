@@ -89,7 +89,7 @@ async def _publish_wallet_event(
         upper = (reason or "").upper()
         if upper in {"DEPOSIT", "WITHDRAWAL", "ADJUSTMENT"}:
             amt_num = Decimal(str(amount))
-            amt_label = f"₹{abs(amt_num):,.2f}"
+            amt_label = f"🪙{abs(amt_num):,.2f}"
             if upper == "DEPOSIT":
                 title, body = "✅ Deposit approved", f"{amt_label} added to your wallet"
             elif upper == "WITHDRAWAL":
@@ -156,7 +156,7 @@ async def adjust(
       • credit_limit is NOT used to allow a negative balance any more.
         The earlier "credit_limit covers shortfall → allow negative"
         branch was the root cause of the production state where
-        `available_balance = −₹995.85` after a stop-out — admin
+        `available_balance = −🪙995.85` after a stop-out — admin
         snapshot from 21-May confirmed.
       • Inbound credits NO LONGER auto-clear settlement_outstanding.
         The settlement field is informational only; the user is not
@@ -198,7 +198,7 @@ async def adjust(
     # writes clobbered each other's debits (LOST UPDATES), leaving the
     # wallet richer than it should be. An admin Reopen then reversed the
     # FULL recorded P&L and the over-credit ballooned (CL20371190:
-    # ₹2L → ₹7L). We now guard the write with the `version` field:
+    # 🪙2L → 🪙7L). We now guard the write with the `version` field:
     # read → compute → update ONLY if version is unchanged; on a
     # concurrent bump we re-read and retry. Same floor-at-0 + settlement
     # semantics, just no lost updates.
@@ -326,7 +326,7 @@ async def adjust(
             reference_type=reference_type,
             reference_id=reference_id,
             narration=(
-                f"{narration} — shortfall ₹{settlement_booked} booked to settlement"
+                f"{narration} — shortfall 🪙{settlement_booked} booked to settlement"
             ),
             status=TransactionStatus.COMPLETED,
             created_by=PydanticObjectId(actor_id) if actor_id else None,
@@ -458,7 +458,7 @@ async def _ensure_pending_settlement_request(
             event_type=AdminNotificationEventType.SETTLEMENT_REQUESTED,
             level=NotificationLevel.WARNING,
             title="Settlement approval needed",
-            message=f"₹{shortfall} shortfall · {narration}",
+            message=f"🪙{shortfall} shortfall · {narration}",
             link="/payments?tab=settlements",
             reference_type="SettlementRequest",
             reference_id=str(req.id),
@@ -551,7 +551,7 @@ async def approve_settlement_request(
         reference_id=str(req.id),
         narration=(
             f"Admin {admin_user_code or admin_id} approved settlement "
-            f"request — shortfall ₹{shortfall} booked to settlement"
+            f"request — shortfall 🪙{shortfall} booked to settlement"
         ),
         status=TransactionStatus.COMPLETED,
         created_by=admin_id,
@@ -675,12 +675,12 @@ async def force_debit(
     # (risk_enforcer asyncio.gather). The old read-modify-write + w.save()
     # here let those concurrent force_debits clobber each other's debits
     # AND settlement bookings (LOST UPDATES) — so on 19-Jun CL20371190's
-    # 5-position stop-out left available_balance stuck at ~₹3.3L instead of
-    # flooring to ₹0 + booking the full ₹2.4L shortfall to settlement. The
+    # 5-position stop-out left available_balance stuck at ~🪙3.3L instead of
+    # flooring to 🪙0 + booking the full 🪙2.4L shortfall to settlement. The
     # admin saw that phantom-high balance, assumed the stop-out was wrong,
     # and reopened — ballooning the wallet. Guard the write with `version`
     # so each parallel close re-reads and applies cleanly: balance floors
-    # to ₹0 and settlement books IMMEDIATELY, every time. No more confusion.
+    # to 🪙0 and settlement books IMMEDIATELY, every time. No more confusion.
     from pymongo import ReturnDocument as _ReturnDocument
 
     before = ZERO
@@ -796,8 +796,8 @@ async def block_margin(user_id: str | PydanticObjectId, amount: Decimal | float)
     two concurrent orders for the same user can NEVER both pass the check
     and both lock. The previous read-modify-write let two near-simultaneous
     option sells each read the same available, both pass, and both lock —
-    driving available_balance NEGATIVE (e.g. a ₹15k wallet ending up with
-    ₹29k used_margin / ₹-14k available). The conditional `$expr` guarantees
+    driving available_balance NEGATIVE (e.g. a 🪙15k wallet ending up with
+    🪙29k used_margin / 🪙-14k available). The conditional `$expr` guarantees
     the DB only applies the decrement when the funds are actually there.
     """
     amt = quantize_money(to_decimal(amount))
@@ -841,8 +841,8 @@ async def block_margin(user_id: str | PydanticObjectId, amount: Decimal | float)
         # wallet vanished, which get_or_create above rules out).
         w = await get_or_create(user_id)
         raise InsufficientFundsError(
-            f"Insufficient margin: have ₹{w.available_balance} "
-            f"(+credit ₹{w.credit_limit}), need ₹{amt}"
+            f"Insufficient margin: have 🪙{w.available_balance} "
+            f"(+credit 🪙{w.credit_limit}), need 🪙{amt}"
         )
     # Notify the user's APK/web so the wallet's "available" and "used"
     # numbers reflect the new margin block immediately instead of waiting
@@ -941,7 +941,7 @@ async def net_phantom_settlement(
     freed margin could have covered. Net equity (available − settlement)
     is correct, but the split is wrong — and it makes an admin think the
     user "kept too much" (the CL15362105 / MITESH incident, where an admin
-    manually clawed ₹2,000 after seeing an inflated ₹2,316 balance).
+    manually clawed 🪙2,000 after seeing an inflated 🪙2,316 balance).
 
     This nets ONLY the settlement booked during the just-finished batch
     (`current_outstanding − settlement_before`) and ONLY up to the cash
@@ -1000,7 +1000,7 @@ async def net_phantom_settlement(
         balance_after=Decimal128(str(new_avail)),
         reference_type="STOP_OUT",
         narration=(
-            f"Phantom settlement ₹{recover} netted against margin freed in the "
+            f"Phantom settlement 🪙{recover} netted against margin freed in the "
             f"same stop-out close (close-ordering correction)"
         ),
         status=TransactionStatus.COMPLETED,
@@ -1075,7 +1075,7 @@ async def recompute_used_margin(
       • partial-close math mismatches the original block amount
       • legacy positions written before margin_used was tracked
     Admin-flagged symptom: "0 open positions, 0 active trades, but
-    USED MARGIN shows ₹1,728.70 — bahut sare IDs me ho raha".
+    USED MARGIN shows 🪙1,728.70 — bahut sare IDs me ho raha".
 
     This helper computes the canonical used_margin as
     ``sum(p.margin_used for p in open positions)`` and resets the
@@ -1234,7 +1234,7 @@ async def clamp_negative_balances_to_settlement() -> dict[str, int]:
     Why this exists: before the floor-at-0 fix, `adjust()` allowed any
     debit to push available_balance negative as long as credit_limit
     covered the shortfall. Production state on 21-May had at least one
-    wallet at −₹995.85 / Outstanding ₹680.50 — admin screenshot
+    wallet at −🪙995.85 / Outstanding 🪙680.50 — admin screenshot
     confirmed. Without this migration that user (and any other affected
     accounts) would keep showing a negative number on the wallet page
     even after the new code is deployed.
@@ -1273,7 +1273,7 @@ async def clamp_negative_balances_to_settlement() -> dict[str, int]:
                 balance_after=Decimal128(str(outstanding_after)),
                 narration=(
                     f"Migration: clamped negative available_balance "
-                    f"(₹{before_balance}) to 0, shortfall booked to settlement"
+                    f"(🪙{before_balance}) to 0, shortfall booked to settlement"
                 ),
                 status=TransactionStatus.COMPLETED,
             )

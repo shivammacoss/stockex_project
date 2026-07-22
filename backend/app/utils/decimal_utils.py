@@ -70,7 +70,7 @@ def is_positive(value: Any) -> bool:
 
 
 def format_inr(value: Any, *, with_symbol: bool = True) -> str:
-    """Format Decimal as Indian numbering (₹ 1,23,456.78)."""
+    """Format Decimal as Indian numbering (🪙 1,23,456.78)."""
     d = quantize_money(to_decimal(value))
     sign = "-" if d < ZERO else ""
     abs_str = f"{abs(d):.2f}"
@@ -88,4 +88,4 @@ def format_inr(value: Any, *, with_symbol: bool = True) -> str:
             chunks.append(rest)
         formatted_int = ",".join(reversed(chunks)) + "," + last_three
     out = f"{sign}{formatted_int}.{frac_part}"
-    return f"₹ {out}" if with_symbol else out
+    return f"🪙 {out}" if with_symbol else out

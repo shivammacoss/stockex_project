@@ -130,7 +130,7 @@ def clamp_child_patch(patch: dict, parent: dict) -> tuple[dict, list[str]]:
     return out, notes
 
 
-_MODE_LABEL = {"times": "Times (leverage)", "fixed": "Fixed (₹/lot)", "percent": "Percent (% notional)"}
+_MODE_LABEL = {"times": "Times (leverage)", "fixed": "Fixed (🪙/lot)", "percent": "Percent (% notional)"}
 
 
 def margin_mode_lock_violation(patch: dict, parent: dict) -> str | None:
@@ -441,7 +441,7 @@ async def heal_legacy_percent_seeds() -> int:
         # "inherit from segment" semantics as the option-side reset. Was
         # the root cause of Times-mode segments (e.g. MCX FUT 500×)
         # silently dropping to 100× on every contract's expiry day, which
-        # priced a 1-lot CRUDEOIL margin at ₹10,247 instead of ₹2,049.
+        # priced a 1-lot CRUDEOIL margin at 🪙10,247 instead of 🪙2,049.
         if float(getattr(seg, "expiryDayIntradayMargin", 0) or 0) == SEED_EXPIRY_INTRA:
             seg.expiryDayIntradayMargin = None
             changed = True
@@ -2097,7 +2097,7 @@ _SEGMENT_NAME_MAP: dict[str, str] = {
     # the wild on COPPER26MAY*CE (MCX_OPTION) and BANKNIFTY26MAY*CE
     # (NFO_OPTION). These collisions cause the resolver to fall
     # through to synthetic permissive defaults (marginCalcMode=None,
-    # intradayMargin=100) which renders as "Fixed · ₹100/lot" on the
+    # intradayMargin=100) which renders as "Fixed · 🪙100/lot" on the
     # user-side panel regardless of what admin sets for the row.
     "MCX_OPTION": "MCX_OPT",
     "MCX_FUTURE": "MCX_FUT",
@@ -2183,7 +2183,7 @@ def _to_legacy_dict(
     # configured number:
     #   • intradayMargin > 100 → almost certainly a leverage multiplier
     #     (a percentage above 100 doesn't make sense); treat as Times.
-    #   • otherwise → flat ₹/lot (Fixed).
+    #   • otherwise → flat 🪙/lot (Fixed).
     # Admins who explicitly chose Times / Fixed get whatever they picked.
     if margin_mode not in ("fixed", "times", "percent"):
         sniff_value = float(pick("intradayMargin", 0.0) or 0.0)
@@ -2195,7 +2195,7 @@ def _to_legacy_dict(
     # Per-side override for option BUY / SELL. NULL = inherit segment-level
     # marginCalcMode resolved above. When explicitly set, it overrides
     # the mode for that side only — admin can run option BUY in Fixed
-    # (flat ₹/lot) while option SELL stays on Times (multiplier).
+    # (flat 🪙/lot) while option SELL stays on Times (multiplier).
     if is_option_buy:
         side_mode = pick("optionBuyMarginCalcMode", None)
         if side_mode in ("fixed", "times", "percent"):
@@ -2476,7 +2476,7 @@ def _to_legacy_dict(
         "expiry_profit_hold": float(pick("expiryProfitHoldMinSeconds", 0) or 0),
         "expiry_intraday_margin": float(pick("expiryDayIntradayMargin", effective_margin_pct) or effective_margin_pct),
         # When True the three `expiry_*_margin` numbers in this dict are
-        # % of notional; when False they're flat ₹ per lot (same shape as
+        # % of notional; when False they're flat 🪙 per lot (same shape as
         # `fixed_margin_per_lot`). The validator short-circuits on this
         # flag the same way it does for the segment-level `marginCalcMode`.
         "expiry_margin_as_percent": bool(
@@ -2485,7 +2485,7 @@ def _to_legacy_dict(
         "margin_percentage": margin_pct,
         "leverage": leverage,
         "margin_calc_mode": margin_mode,
-        # Flat ₹/lot — only non-zero when mode == "fixed". Validator + UI
+        # Flat 🪙/lot — only non-zero when mode == "fixed". Validator + UI
         # short-circuit on this and skip the notional × pct ÷ leverage
         # path entirely, so the configured value is the literal margin
         # locked per lot.
@@ -2498,7 +2498,7 @@ def _to_legacy_dict(
         "overnight_strike_margin_rate": float(overnight_strike_margin_rate),
         # ── Carry-forward (overnight) equivalents ─────────────────────
         # Computed in parallel with the intraday set above so the trade
-        # panel can render both tiles ("Intraday ₹X" / "Carry-forward ₹Y")
+        # panel can render both tiles ("Intraday 🪙X" / "Carry-forward 🪙Y")
         # without any frontend-side multiplier guesses. For intraday-only
         # segments (Forex / Crypto / spot Commodity) overnight equals
         # intraday — there's no separate carry tier on those instruments.

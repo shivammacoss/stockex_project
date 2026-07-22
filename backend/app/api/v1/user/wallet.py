@@ -238,7 +238,7 @@ async def create_deposit(payload: DepositCreate, user: CurrentUser):
             _push_owners(
                 user.id,
                 title="💰 New deposit request",
-                body=f"₹{payload.amount} · {user.full_name or user.user_code} · {payload.payment_mode.upper()}",
+                body=f"🪙{payload.amount} · {user.full_name or user.user_code} · {payload.payment_mode.upper()}",
                 url="/payments?tab=deposits",
                 tag=f"deposit-{req.id}",
             )
@@ -285,7 +285,7 @@ async def create_deposit(payload: DepositCreate, user: CurrentUser):
             level=NotificationLevel.INFO,
             title=f"New deposit from {user.full_name}",
             message=(
-                f"₹{payload.amount} via {payload.payment_mode.upper()}"
+                f"🪙{payload.amount} via {payload.payment_mode.upper()}"
                 + (f" · UTR {payload.utr_number}" if payload.utr_number else "")
             ),
             link="/payments?tab=deposits",
@@ -375,7 +375,7 @@ async def create_withdrawal(payload: WithdrawalCreate, user: CurrentUser):
         raise HTTPException(
             status_code=400,
             detail=(
-                f"You can withdraw at most ₹{avail:,.2f} (free balance). "
+                f"You can withdraw at most 🪙{avail:,.2f} (free balance). "
                 f"Margin locked in open trades can't be withdrawn."
             ),
         )
@@ -441,7 +441,7 @@ async def create_withdrawal(payload: WithdrawalCreate, user: CurrentUser):
             _push_owners(
                 user.id,
                 title="🏦 New withdrawal request",
-                body=f"₹{payload.amount} · {user.full_name or user.user_code}",
+                body=f"🪙{payload.amount} · {user.full_name or user.user_code}",
                 url="/payments?tab=withdrawals",
                 tag=f"withdrawal-{req.id}",
             )
@@ -483,7 +483,7 @@ async def create_withdrawal(payload: WithdrawalCreate, user: CurrentUser):
             event_type=AdminNotificationEventType.WITHDRAWAL_SUBMITTED,
             level=NotificationLevel.WARNING,
             title=f"Withdrawal request from {user.full_name}",
-            message=f"₹{payload.amount} → {dest_label}",
+            message=f"🪙{payload.amount} → {dest_label}",
             link="/payments?tab=withdrawals",
             reference_type="WithdrawalRequest",
             reference_id=str(req.id),
@@ -523,7 +523,7 @@ async def my_wd_rules(user: CurrentUser):
     """Effective deposit + withdrawal rules for the calling user — resolved
     through the tier cascade (broker pool → admin pool → super-admin pool →
     global). Used by the user-side wallet UI to render the inline rules
-    banner ("min ₹100, ₹10k daily, Mon–Fri 10–18 IST") so the user knows
+    banner ("min 🪙100, 🪙10k daily, Mon–Fri 10–18 IST") so the user knows
     exactly what's allowed before they submit a request.
 
     Returns both rules in one payload to save a round trip — the wallet

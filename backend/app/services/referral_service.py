@@ -225,7 +225,7 @@ async def _super_admin_net_brokerage_share(referred: User, brokerage: Decimal) -
 
 async def _trading_referral_config() -> tuple[bool, Decimal, Decimal]:
     """(enabled, threshold, reward) from the super-admin's referral_eligibility.
-    Defaults: enabled True, ₹1000 threshold, ₹1000 reward."""
+    Defaults: enabled True, 🪙1000 threshold, 🪙1000 reward."""
     try:
         sa_id = await _super_admin_id()
         sa = await User.get(sa_id) if sa_id else None

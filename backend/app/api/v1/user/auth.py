@@ -344,13 +344,13 @@ async def two_fa_disable(payload: TwoFADisableRequest, user: CurrentUser):
     dependencies=[rate_limit("auth")],
 )
 async def demo_login(request: Request):
-    """Log into the shared demo account pre-funded with ₹5 Lakh virtual money.
+    """Log into the shared demo account pre-funded with 🪙5 Lakh virtual money.
 
     No signup required — returns a full JWT pair immediately. The shared demo
-    account is flattened + re-funded to ₹5,00,000 every 24h (demo_reset_loop).
+    account is flattened + re-funded to 🪙5,00,000 every 24h (demo_reset_loop).
     """
     pair = await auth_service.create_demo_session(
         ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    return APIResponse(data=pair, message="Demo account ready. ₹5,00,000 virtual balance credited.")
+    return APIResponse(data=pair, message="Demo account ready. 🪙5,00,000 virtual balance credited.")

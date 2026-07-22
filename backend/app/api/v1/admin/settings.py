@@ -587,7 +587,7 @@ async def list_audit(
             )
         # Close price: when the row never captured it, show the position's
         # current close as a static value (set BOTH sides equal so the UI
-        # renders a single figure, not a misleading "— → ₹x" arrow).
+        # renders a single figure, not a misleading "— → 🪙x" arrow).
         if not nv.get("close_price") and not ov.get("close_price"):
             cur_close = str(p.ltp) if p.ltp is not None else None
             if cur_close is not None:

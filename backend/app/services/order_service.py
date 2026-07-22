@@ -89,7 +89,7 @@ async def place_order(
     # `quantity = lots × contract_size`. Forex majors are 100,000 base
     # units / lot, spot gold is 100 troy oz / lot, USOIL is 1,000
     # barrels / lot — getting this right is the difference between a
-    # ₹1,000 margin lock and a ₹10,000,000 one.
+    # 🪙1,000 margin lock and a 🪙10,000,000 one.
     # Use the dedicated lot-segment classifier rather than `is_usd_quoted_segment`.
     # The latter now always returns False (FX conversion disabled per broker
     # spec); for lot-table selection we still need to know whether the row

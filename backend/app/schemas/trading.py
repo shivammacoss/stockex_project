@@ -136,7 +136,7 @@ class PositionOut(BaseModel):
     target: str | None = None
     # Snapshot of SL/TP at close time — present only on CLOSED rows.
     # The Closed-tab card on the user side reads these so the user
-    # can still see "trade had SL ₹X / TP ₹Y" even though the live
+    # can still see "trade had SL 🪙X / TP 🪙Y" even though the live
     # stop_loss / target fields were wiped at close to keep future
     # reopens clean. Same response-model-stripping rule that bit
     # holding_margin: declared here explicitly so FastAPI doesn't drop
@@ -156,7 +156,7 @@ class PositionOut(BaseModel):
     # Sum of brokerage across every trade that's part of this open
     # position. Without this declaration FastAPI's response_model filter
     # strips the field the positions endpoint already computes — the COMM
-    # column then renders ₹0.00 even for a charged trade. Same pattern as
+    # column then renders 🪙0.00 even for a charged trade. Same pattern as
     # `lots` / `lot_size` / `pnl_inr` above.
     charges: str | None = None
     # USD-quoted segments (Infoway: crypto / forex / metals / energy)

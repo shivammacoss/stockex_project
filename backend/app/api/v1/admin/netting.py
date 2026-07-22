@@ -469,7 +469,7 @@ async def repair_margin_mode(admin: SuperAdmin):
     whose stored value was null/legacy. When the admin saved any field
     on such a row, that pre-staged "fixed" went into the DB even if
     they intended Times. The resolver then respected "fixed" mode and
-    rendered the row as `Fixed · ₹{intradayMargin}/lot` regardless of
+    rendered the row as `Fixed · 🪙{intradayMargin}/lot` regardless of
     the admin's actual intent.
 
     This endpoint resets `marginCalcMode` to NULL on rows where

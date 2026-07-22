@@ -513,8 +513,8 @@ async def validate(
             lower = ref * to_decimal(1 - limit_pct / 100)
             if candidate < lower or candidate > upper:
                 raise OrderRejectedError(
-                    f"{name} ₹{candidate} is too far from market ₹{ref}. "
-                    f"Must be within {limit_pct}% (between ₹{lower:.2f} and ₹{upper:.2f}).",
+                    f"{name} 🪙{candidate} is too far from market 🪙{ref}. "
+                    f"Must be within {limit_pct}% (between 🪙{lower:.2f} and 🪙{upper:.2f}).",
                     code=f"{name.upper().replace(' ', '_')}_TOO_FAR",
                 )
 
@@ -529,9 +529,9 @@ async def validate(
             lower = ref * to_decimal(1 - limit_pct / 100)
             if lower < candidate < upper:
                 raise OrderRejectedError(
-                    f"{name} ₹{candidate} is too close to entry ₹{ref}. "
+                    f"{name} 🪙{candidate} is too close to entry 🪙{ref}. "
                     f"Must be at least {limit_pct}% away "
-                    f"(≤ ₹{lower:.2f} for sell-side or ≥ ₹{upper:.2f} for buy-side).",
+                    f"(≤ 🪙{lower:.2f} for sell-side or ≥ 🪙{upper:.2f} for buy-side).",
                     code=f"{name.upper().replace(' ', '_')}_TOO_CLOSE",
                 )
 
@@ -559,23 +559,23 @@ async def validate(
         if bracket_sl is not None and bracket_sl > 0:
             if action == OrderAction.BUY and bracket_sl >= _dir_ref:
                 raise OrderRejectedError(
-                    f"Stop Loss ₹{bracket_sl} must be BELOW entry ₹{_dir_ref} for a BUY order.",
+                    f"Stop Loss 🪙{bracket_sl} must be BELOW entry 🪙{_dir_ref} for a BUY order.",
                     code="SL_WRONG_SIDE",
                 )
             if action == OrderAction.SELL and bracket_sl <= _dir_ref:
                 raise OrderRejectedError(
-                    f"Stop Loss ₹{bracket_sl} must be ABOVE entry ₹{_dir_ref} for a SELL order.",
+                    f"Stop Loss 🪙{bracket_sl} must be ABOVE entry 🪙{_dir_ref} for a SELL order.",
                     code="SL_WRONG_SIDE",
                 )
         if bracket_tp is not None and bracket_tp > 0:
             if action == OrderAction.BUY and bracket_tp <= _dir_ref:
                 raise OrderRejectedError(
-                    f"Target ₹{bracket_tp} must be ABOVE entry ₹{_dir_ref} for a BUY order.",
+                    f"Target 🪙{bracket_tp} must be ABOVE entry 🪙{_dir_ref} for a BUY order.",
                     code="TP_WRONG_SIDE",
                 )
             if action == OrderAction.SELL and bracket_tp >= _dir_ref:
                 raise OrderRejectedError(
-                    f"Target ₹{bracket_tp} must be BELOW entry ₹{_dir_ref} for a SELL order.",
+                    f"Target 🪙{bracket_tp} must be BELOW entry 🪙{_dir_ref} for a SELL order.",
                     code="TP_WRONG_SIDE",
                 )
 
@@ -591,8 +591,8 @@ async def validate(
             dev = abs(candidate - ltp) / ltp * 100
             if dev > _MAX_LIMIT_DEV_PCT:
                 raise OrderRejectedError(
-                    f"{cap_name} ₹{candidate} deviates {dev:.1f}% from current market "
-                    f"₹{ltp}. Maximum allowed deviation is {_MAX_LIMIT_DEV_PCT}%.",
+                    f"{cap_name} 🪙{candidate} deviates {dev:.1f}% from current market "
+                    f"🪙{ltp}. Maximum allowed deviation is {_MAX_LIMIT_DEV_PCT}%.",
                     code=f"{cap_name.upper().replace(' ', '_')}_TOO_FAR",
                 )
 
@@ -664,14 +664,14 @@ async def validate(
                 code="MAX_QTY_PER_SCRIPT",
             )
 
-    # 6c) per-order notional cap (₹ value) — skip for closing orders
+    # 6c) per-order notional cap (🪙 value) — skip for closing orders
     max_value = float(s.get("max_value") or 0)
     if not is_reducing and max_value > 0:
         ref_price_for_value = price if price > 0 else ltp
         notional_check = quantity * float(ref_price_for_value)
         if notional_check > max_value:
             raise OrderRejectedError(
-                f"Order value ₹{notional_check:,.0f} exceeds per-order cap of ₹{max_value:,.0f}",
+                f"Order value 🪙{notional_check:,.0f} exceeds per-order cap of 🪙{max_value:,.0f}",
                 code="MAX_VALUE_EXCEEDED",
             )
 
@@ -713,11 +713,11 @@ async def validate(
     #   • `expiry_intraday_margin` (and the OPTION-buy/sell variants
     #     picked earlier in the resolver) → the value to use today.
     #   • `expiry_margin_as_percent` → when False the value above is a
-    #     flat ₹/lot (mirrors `margin_calc_mode = fixed`); when True
+    #     flat 🪙/lot (mirrors `margin_calc_mode = fixed`); when True
     #     it's % of notional / a leverage multiplier (interpretation
     #     follows the segment's `margin_calc_mode`). Lets admin run
     #     normal trading on, say, Times-leverage and still impose a
-    #     punitive flat ₹ on expiry.
+    #     punitive flat 🪙 on expiry.
     # Use `effective_expiry` so instruments whose stored `expiry` is None
     # (data-quality gap from Zerodha sync) still get the expiry-day rule
     # applied based on a symbol-derived fallback date. Without this,
@@ -737,7 +737,7 @@ async def validate(
         expiry_as_percent = bool(s.get("expiry_margin_as_percent", True))
         seg_mode = (s.get("margin_calc_mode") or "").lower()
         if not expiry_as_percent:
-            # Admin explicitly opted for flat ₹/lot on expiry — switch
+            # Admin explicitly opted for flat 🪙/lot on expiry — switch
             # the calc into fixed mode regardless of segment-default mode.
             s["margin_calc_mode"] = "fixed"
             s["fixed_margin_per_lot"] = expiry_margin
@@ -750,7 +750,7 @@ async def validate(
             # `leverage = 1` and stuffed the multiplier into
             # `margin_percentage`, which turned a 500× setting into "500%
             # of notional × ÷ 1" — i.e. 5× the notional locked. On a
-            # ₹10L crude lot that was ₹51L margin required and every
+            # 🪙10L crude lot that was 🪙51L margin required and every
             # expiry-day order failed with InsufficientFunds. Now we
             # preserve the Times semantics so the user pays the same
             # margin tier on expiry day unless admin explicitly changed
@@ -760,9 +760,9 @@ async def validate(
             s["fixed_margin_per_lot"] = 0.0
         elif seg_mode == "fixed":
             # Fixed segment + percent expiry knob → ambiguous (admin
-            # chose Fixed ₹/lot but didn't flip the `as_percent` flag).
+            # chose Fixed 🪙/lot but didn't flip the `as_percent` flag).
             # Honour the existing fixed semantics: the expiry value is
-            # ₹/lot.
+            # 🪙/lot.
             s["margin_calc_mode"] = "fixed"
             s["fixed_margin_per_lot"] = expiry_margin
             s["margin_percentage"] = 0.0
@@ -819,31 +819,31 @@ async def validate(
         cur = ltp if (ltp and ltp > 0) else ref_price  # live market price
         if uc is not None and cur > 0 and cur >= uc and action == OrderAction.BUY:
             raise OrderRejectedError(
-                f"{instrument.symbol} is at the UPPER CIRCUIT (₹{uc}). "
+                f"{instrument.symbol} is at the UPPER CIRCUIT (🪙{uc}). "
                 f"Only SELL is allowed — you can't BUY at the upper circuit.",
                 code="UPPER_CIRCUIT_BUY",
             )
         if lc is not None and cur > 0 and cur <= lc and action == OrderAction.SELL:
             raise OrderRejectedError(
-                f"{instrument.symbol} is at the LOWER CIRCUIT (₹{lc}). "
+                f"{instrument.symbol} is at the LOWER CIRCUIT (🪙{lc}). "
                 f"Only BUY is allowed — you can't SELL at the lower circuit.",
                 code="LOWER_CIRCUIT_SELL",
             )
         if ref_price > 0:
             if uc is not None and ref_price > uc:
                 raise OrderRejectedError(
-                    f"Price ₹{ref_price} is above the upper circuit ₹{uc}.",
+                    f"Price 🪙{ref_price} is above the upper circuit 🪙{uc}.",
                     code="UPPER_CIRCUIT",
                 )
             if lc is not None and ref_price < lc:
                 raise OrderRejectedError(
-                    f"Price ₹{ref_price} is below the lower circuit ₹{lc}.",
+                    f"Price 🪙{ref_price} is below the lower circuit 🪙{lc}.",
                     code="LOWER_CIRCUIT",
                 )
 
     notional = to_decimal(quantity) * ref_price
     # Fixed-margin segments skip the notional × pct ÷ leverage formula
-    # entirely — the admin's configured value is a flat ₹/lot charged
+    # entirely — the admin's configured value is a flat 🪙/lot charged
     # once per lot. Anything else falls into the standard percent/times
     # path. (`margin_pct` is already 100% with the `leverage` set for
     # times mode, and is the literal percent for legacy percent mode.)
@@ -922,7 +922,7 @@ async def validate(
             )
         if margin_required > available:
             raise InsufficientFundsError(
-                f"Need ₹{margin_required:.2f}, have ₹{available:.2f}"
+                f"Need 🪙{margin_required:.2f}, have 🪙{available:.2f}"
             )
 
     # 10) stop-loss mandatory

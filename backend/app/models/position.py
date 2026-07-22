@@ -72,7 +72,7 @@ class Position(TimestampMixin):
     # apply_fill clears the live `stop_loss` / `target` to 0 on full close
     # so a future reopen on the same instrument doesn't inherit stale
     # brackets; we copy them HERE first so the Closed tab can still show
-    # "Trade had SL ₹X, TP ₹Y" even after the live fields are wiped.
+    # "Trade had SL 🪙X, TP 🪙Y" even after the live fields are wiped.
     # Operator-flagged 22-May: "close trade me bhi user ko save SL/TP
     # dikhe — kitna laga tha pata chale".
     close_stop_loss: Money | None = None

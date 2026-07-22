@@ -1000,7 +1000,7 @@ async def list_positions(
                 # cell (BUY = green, SELL = red) since the signed `quantity`
                 # is 0 after the closing leg.
                 "opened_side": r.opened_side.value if r.opened_side is not None else None,
-                # Prices in source currency — UI renders with $ or ₹ based on
+                # Prices in source currency — UI renders with $ or 🪙 based on
                 # the `currency_quote` flag below.
                 "avg_price": f"{avg:.4f}" if is_usd else f"{avg:.2f}",
                 "ltp": f"{ltp_f:.4f}" if is_usd else f"{ltp_f:.2f}",
@@ -1017,7 +1017,7 @@ async def list_positions(
                 # amount on every closed trade.
                 "charges": f"{_charges_for(r):.2f}",
                 "margin_used": f"{margin_inr:.2f}",
-                # Currency tag so the UI can prefix avg/ltp with $ instead of ₹
+                # Currency tag so the UI can prefix avg/ltp with $ instead of 🪙
                 "currency_quote": "USD" if is_usd else "INR",
                 "open_usd_inr_rate": f"{open_rate:.4f}" if is_usd else None,
                 "current_usd_inr_rate": f"{current_usd_inr:.4f}" if is_usd else None,
@@ -1278,8 +1278,8 @@ async def admin_edit_position(
     # wallet.used_margin and DEBITED the delta from available_balance —
     # so a 500× leverage NFO_FUTURE edit drained the wallet by ~7× the
     # real margin requirement. Operator-flagged 22-May: RAMAN
-    # (CL99184090) BHARTIARTL edit zapped his wallet to -₹3.66 L
-    # (200 × 1892.70 = ₹3,78,540 locked instead of ₹757).
+    # (CL99184090) BHARTIARTL edit zapped his wallet to -🪙3.66 L
+    # (200 × 1892.70 = 🪙3,78,540 locked instead of 🪙757).
     # Margin only applies to OPEN rows — a CLOSED position holds none, so
     # editing a closed row's historical qty/avg never touches the wallet.
     # `margin_delta` is set to the (signed) change in locked margin so the
@@ -1306,7 +1306,7 @@ async def admin_edit_position(
             lots = qty_abs / _to_decimal(lot_size)
             action = "BUY" if p.quantity >= 0 else "SELL"
             # Derive CE/PE from the symbol so the resolver applies the admin's
-            # per-side option overrides (Opt Buy/Sell Fixed ₹/lot etc.). With
+            # per-side option overrides (Opt Buy/Sell Fixed 🪙/lot etc.). With
             # option_type=None the resolver ignores them and recomputes margin
             # off the generic segment Times/% — under-charging option edits.
             _esym = (p.instrument.symbol or "").upper()
@@ -1331,7 +1331,7 @@ async def admin_edit_position(
                 margin_pct = _to_decimal(s.get("margin_percentage") or 100.0) / _to_decimal(100)
                 leverage = _to_decimal(s.get("leverage") or 1.0) or _to_decimal(1)
                 new_margin = qty_abs * ref_price * margin_pct / leverage
-            # USD-quoted segments lock in INR (skip for fixed ₹/lot mode).
+            # USD-quoted segments lock in INR (skip for fixed 🪙/lot mode).
             if _is_usd_quoted_segment(p.segment_type) or _is_usd_quoted_segment(p.instrument.segment):
                 if not ((s.get("margin_calc_mode") == "fixed") and fixed_per_lot > 0):
                     new_margin = new_margin * _to_decimal(_get_usd_inr_rate())
@@ -1356,8 +1356,8 @@ async def admin_edit_position(
                     status_code=400,
                     detail=(
                         f"User ke paas itni margin nahi hai — is edit ke liye "
-                        f"₹{margin_delta:.2f} aur chahiye, par available sirf "
-                        f"₹{_avail:.2f} hai. Qty kam karein ya user ke wallet "
+                        f"🪙{margin_delta:.2f} aur chahiye, par available sirf "
+                        f"🪙{_avail:.2f} hai. Qty kam karein ya user ke wallet "
                         f"me funds add karein."
                     ),
                 )
@@ -1577,8 +1577,8 @@ async def admin_reopen_position(
     # reverse-the-full-realized restored ONLY the available leg and
     # left the settlement debt hanging, double-counting the shortfall
     # against the user. Operator-flagged 22-May: CL35171433 closed at
-    # ₹20,200 loss (₹12,617 cash + ₹7,583 settlement) → reopen credited
-    # full ₹20,200 to wallet but settlement stayed at ₹7,583 — user
+    # 🪙20,200 loss (🪙12,617 cash + 🪙7,583 settlement) → reopen credited
+    # full 🪙20,200 to wallet but settlement stayed at 🪙7,583 — user
     # got the shortfall amount as a hidden second refund.
     #
     # Fix: look up the SETTLEMENT_OUTSTANDING_BOOKED transaction(s)
@@ -1648,7 +1648,7 @@ async def admin_reopen_position(
                     reference_id=str(p.id),
                     narration=(
                         f"Reopen {p.instrument.symbol} — settlement unbooked "
-                        f"(₹{booked_total} was originally shortfall on the "
+                        f"(🪙{booked_total} was originally shortfall on the "
                         f"closing leg; reversing back so the cash refund "
                         f"doesn't double-credit the user)"
                     ),
@@ -1706,9 +1706,9 @@ async def admin_reopen_position(
                         f"Reopen {p.instrument.symbol} — reverse close P&L + brokerage "
                         f"(closed by {p.close_reason or 'unknown'}; reopened by "
                         f"{admin.user_code})"
-                        + (f" [PnL cash ₹{abs(realized + booked_total if realized < 0 else realized)}"
-                           f", brokerage ₹{closing_brokerage}"
-                           + (f", settlement ₹{booked_total} unwound separately" if booked_total > _Decimal("0") else "")
+                        + (f" [PnL cash 🪙{abs(realized + booked_total if realized < 0 else realized)}"
+                           f", brokerage 🪙{closing_brokerage}"
+                           + (f", settlement 🪙{booked_total} unwound separately" if booked_total > _Decimal("0") else "")
                            + "]")
                     ),
                     reference_type="Position",
@@ -1782,8 +1782,8 @@ async def admin_reopen_position(
     # options that's 5-20× more than the actual margin admin's
     # netting settings would lock. Production hit on 21-May:
     # reopening a CGPOWER26MAYFUT 340-lot @ 865.90 set margin_used
-    # to ₹2,94,406 (340 × 865.90), drained the user's available_balance
-    # to −₹2,79,422.
+    # to 🪙2,94,406 (340 × 865.90), drained the user's available_balance
+    # to −🪙2,79,422.
     #
     # The fix: query the most-recent EXECUTED opening order for this
     # (user, token, product_type) and reuse its `margin_blocked` —
@@ -2080,13 +2080,13 @@ async def positions_pnl_summary(
         # position's updated_at refreshes on every tick / risk-enforcer
         # cycle / SL-TP edit, which dragged its FULL running realized
         # (booked weeks earlier) into "This Week's Net P&L". A 67-open
-        # admin pool was showing ₹-17.7 lakh for a 2-day window.
+        # admin pool was showing 🪙-17.7 lakh for a 2-day window.
         rng: dict[str, Any] = {"$gte": window_start}
         if window_end is not None:
             rng["$lt"] = window_end
         # Filter out bogus zero-priced fills.  Before the matching engine
         # got the STALE_FEED guard, a stale Zerodha WS could push LTP = 0
-        # into get_ltp() and a market order would execute at ₹0.00, booking
+        # into get_ltp() and a market order would execute at 🪙0.00, booking
         # a phantom loss equal to the entire notional.  Those rows are
         # still in `trades` for the audit trail but they MUST NOT
         # contribute to the admin's headline P&L — they aren't real
@@ -2156,7 +2156,7 @@ async def positions_pnl_summary(
     # position is touched (new fill, partial close, manual edit). For an
     # open position sitting idle between fills the stored number is stale
     # (often 0 on a freshly opened position), which is what made the
-    # admin's "Open PNL" card stick at ₹0.00 while the per-row M2M column
+    # admin's "Open PNL" card stick at 🪙0.00 while the per-row M2M column
     # showed the correct live number. Mirror the /positions list view's
     # (ltp - avg) * qty math so both reads stay in lockstep.
     open_q: dict[str, Any] = {"status": PositionStatus.OPEN.value}
@@ -2198,7 +2198,7 @@ async def positions_pnl_summary(
             # stale cache, failed fetch). NEVER compute (ltp - avg) * qty
             # against a 0 LTP — that returns the WHOLE notional as a phantom
             # loss. On 19-Jun this made CL20371190's "This Week's Net P&L"
-            # read -₹3.39 Cr (≈ the sum of his open positions' notional) once
+            # read -🪙3.39 Cr (≈ the sum of his open positions' notional) once
             # the F&O feed went flat after market close, because get_ltp
             # handed back 0 (not None, so the old `is None` guard missed it).
             # Mirror refresh_unrealized_pnl's zero-mark guard: fall back to
@@ -2335,7 +2335,7 @@ async def position_netting_entries(
         if entry_kind == "Entry":
             total_volume += qty
             weighted += qty * price
-            formula_parts.append(f"{qty}×₹{price}")
+            formula_parts.append(f"{qty}×🪙{price}")
         pnl_inr = (
             _to_dec(t.pnl_inr) if getattr(t, "pnl_inr", None) is not None else None
         )
@@ -2353,9 +2353,9 @@ async def position_netting_entries(
 
     avg_entry = (weighted / total_volume) if total_volume > 0 else _to_dec(p.avg_price)
     avg_calc_formula = (
-        f"({' + '.join(formula_parts)}) ÷ {total_volume} = ₹{avg_entry:.2f}"
+        f"({' + '.join(formula_parts)}) ÷ {total_volume} = 🪙{avg_entry:.2f}"
         if formula_parts
-        else f"₹{avg_entry:.2f}"
+        else f"🪙{avg_entry:.2f}"
     )
 
     # Live LTP for OPEN; close price (already stamped onto position.ltp by
@@ -2506,9 +2506,9 @@ async def delete_position(
         # available-debited portion (realized + booked_total), so if
         # booked_total is undercounted the delete OVER-credits available by
         # exactly the settlement amount AND leaves the settlement standing.
-        # Operator-caught (CL33333046): a GOLD26AUGFUT stop-out debited ₹75,325
-        # from available + booked ₹38,574 to settlement, but the delete
-        # reversed the FULL ₹1,13,900 → ₹38,574 phantom cash + settlement never
+        # Operator-caught (CL33333046): a GOLD26AUGFUT stop-out debited 🪙75,325
+        # from available + booked 🪙38,574 to settlement, but the delete
+        # reversed the FULL 🪙1,13,900 → 🪙38,574 phantom cash + settlement never
         # cleared, because the old symbol-in-narration BOOKED scan missed it.
         #
         # PRIMARY (reliable): derive booked_total from the close's own PNL
@@ -2616,7 +2616,7 @@ async def delete_position(
         # (the position stays open, so the open brokerage still applies), but
         # delete fully unwinds the position. Operator caught the leak: after a
         # delete the user's balance was short by exactly the opening brokerage
-        # (₹321 + ₹320 across cycles). Sum every opening fill across the
+        # (🪙321 + 🪙320 across cycles). Sum every opening fill across the
         # position's lifecycle [opened_at, closed_at].
         opening_brokerage = _Decimal("0")
         if p.closed_at is not None:
@@ -2657,10 +2657,10 @@ async def delete_position(
                     narration=(
                         f"Delete {p.instrument.symbol} — reverse close P&L + brokerage "
                         f"(deleted by {admin.user_code})"
-                        f" [PnL ₹{abs(realized + booked_total if realized < 0 else realized)}"
-                        f", brokerage ₹{closing_brokerage + opening_brokerage}"
-                        f" (close ₹{closing_brokerage} + open ₹{opening_brokerage})"
-                        + (f", settlement ₹{booked_total} unwound separately" if booked_total > _Decimal("0") else "")
+                        f" [PnL 🪙{abs(realized + booked_total if realized < 0 else realized)}"
+                        f", brokerage 🪙{closing_brokerage + opening_brokerage}"
+                        f" (close 🪙{closing_brokerage} + open 🪙{opening_brokerage})"
+                        + (f", settlement 🪙{booked_total} unwound separately" if booked_total > _Decimal("0") else "")
                         + "]"
                     ),
                     reference_type="Position",
@@ -2725,7 +2725,7 @@ async def delete_position(
 
     # Wallet used_margin recompute — same source-of-truth idea but
     # for the locked-margin counter. Admin-flagged: "0 open positions
-    # par USED MARGIN ₹1,728.70 dikh raha". `release_margin` is
+    # par USED MARGIN 🪙1,728.70 dikh raha". `release_margin` is
     # delta-based and drifts when admin hard-deletes a Position
     # without a closing fill. Now every delete re-syncs the wallet
     # to sum(open positions' margin_used) so the orphan margin is

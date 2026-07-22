@@ -147,7 +147,7 @@ async def apply_fill(
                 new_margin_used = to_decimal(0)
                 # Snapshot the live SL / TP BEFORE we clear them, so the
                 # Closed-tab card on the user side can still surface
-                # "Trade had SL ₹X, TP ₹Y" — even though the live fields
+                # "Trade had SL 🪙X, TP 🪙Y" — even though the live fields
                 # are about to be wiped to keep reopens clean. Operator's
                 # 22-May spec: user ko close trade me bhi visible rahe
                 # ki SL/TP kitna laga tha.
@@ -1346,7 +1346,7 @@ async def refresh_unrealized_pnl(
     shorts — the price the user would actually realise right now. The
     last-traded LTP can lag the live quote on thin contracts (MCX silver /
     crude) and overstate the move; that mismatch made a SILVERM long show
-    ₹-11,621 (against a lagging LTP) when the live bid implied only ₹-4,535
+    🪙-11,621 (against a lagging LTP) when the live bid implied only 🪙-4,535
     (CL62329114 / PANKAJ).
 
     The quote is cached (700 ms TTL) and the caller's get_ltp fan-out
@@ -1468,10 +1468,10 @@ async def convert_intraday_to_carry(segment_set: frozenset[str] | set[str]) -> d
             # Derive CE/PE from the symbol (the Position's InstrumentRef
             # snapshot has no option_type field) so the resolver applies the
             # admin's per-side option overrides (e.g. Opt Sell Mode=Fixed,
-            # Opt Sell Overnight=₹15000) instead of silently falling back to
+            # Opt Sell Overnight=🪙15000) instead of silently falling back to
             # the generic segment Times/% margin. Without this the carry
             # margin is massively UNDER-computed (~20% of notional vs the
-            # configured ₹15000/lot), so `delta` looks affordable and an
+            # configured 🪙15000/lot), so `delta` looks affordable and an
             # under-funded option position is NEVER force-closed at EOD —
             # it rolls into NRML uncovered. Mirrors the positions endpoint.
             _osym = (pos.instrument.symbol or "").upper()

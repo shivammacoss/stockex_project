@@ -175,7 +175,7 @@ class ReferralEligibility(BaseModel):
     # A referrer earns a ONE-TIME reward once the super-admin's NET brokerage
     # income from the referred user (accrued across all their closed trades)
     # reaches `trading_threshold_amount`. The reward paid is
-    # `trading_reward_amount`. Both default ₹1000. `enabled` gates the feature.
+    # `trading_reward_amount`. Both default 🪙1000. `enabled` gates the feature.
     trading_threshold_amount: float = 1000.0
     trading_reward_amount: float = 1000.0
 
@@ -349,7 +349,7 @@ class User(TimestampMixin):
     # LEGACY single-rate (pre-2026-07-13). Superseded by per-segment rates
     # below; kept so old rows don't break and Account 2 can fall back.
     fixed_brokerage_unit: str | None = None  # "per_lot" | "per_crore"
-    fixed_brokerage_rate: Decimal128 | None = None  # ₹ per lot / per crore
+    fixed_brokerage_rate: Decimal128 | None = None  # 🪙 per lot / per crore
     # PER-SEGMENT FROZEN fixed-brokerage rate the PARENT takes from THIS node,
     # keyed by admin segment name (SEGMENT_CODES: NSE_STK_OPT, MCX_FUT, CRYPTO…).
     # SNAPSHOTTED the moment the parent sets this node's segment brokerage via the
@@ -500,7 +500,7 @@ class User(TimestampMixin):
     #     sweep debits `platform_charge_amount` from each of the admin's ACTIVE
     #     users' MAIN wallet once per IST day and credits it to the admin.
     #   • zero_balance_autoclose_enabled — when enabled, a user of this admin
-    #     whose whole balance has sat at ₹0 for ≥7 days is soft-closed
+    #     whose whole balance has sat at 🪙0 for ≥7 days is soft-closed
     #     (status → CLOSED, recoverable — NOT hard-deleted).
     platform_charge_enabled: bool = False
     platform_charge_amount: Money = Field(default_factory=lambda: Decimal128("0"))
@@ -510,7 +510,7 @@ class User(TimestampMixin):
     # IST day-string ("YYYY-MM-DD") of the last daily platform charge, so the
     # sweep never double-charges within a day and self-heals across restarts.
     last_platform_charge_day: str | None = None
-    # First moment the sweep observed this user's total balance at ₹0; cleared
+    # First moment the sweep observed this user's total balance at 🪙0; cleared
     # the moment any balance returns. `now - zero_balance_since ≥ 7d` → close.
     zero_balance_since: datetime | None = None
 

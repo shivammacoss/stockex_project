@@ -236,7 +236,7 @@ async def release_commission(admin: CurrentAdmin, payload: dict | None = None):
     if amt > held:
         raise HTTPException(
             status_code=400,
-            detail=f"Amount ₹{amt} exceeds held commission ₹{held}",
+            detail=f"Amount 🪙{amt} exceeds held commission 🪙{held}",
         )
 
     try:

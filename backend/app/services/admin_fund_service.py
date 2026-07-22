@@ -159,7 +159,7 @@ async def transfer_to_admin(actor: User, target: str, amount, description: str =
     aw = await wallet_service.get_or_create(actor.id)
     if to_decimal(aw.available_balance) < amt:
         raise InsufficientFundsError(
-            f"Insufficient balance: ₹{to_decimal(aw.available_balance):,.2f} available, ₹{amt:,.2f} needed"
+            f"Insufficient balance: 🪙{to_decimal(aw.available_balance):,.2f} available, 🪙{amt:,.2f} needed"
         )
     await wallet_service.adjust(
         actor.id, -amt, transaction_type=TransactionType.ADMIN_TRANSFER,
@@ -217,8 +217,8 @@ async def debit_admin_float_for_user(
     ow = await wallet_service.get_or_create(owner_id)
     if to_decimal(ow.available_balance) < amt:
         raise InsufficientFundsError(
-            f"Admin float insufficient: ₹{to_decimal(ow.available_balance):,.2f} available, "
-            f"₹{amt:,.2f} needed. Fund the admin (opening fund / fund request) first."
+            f"Admin float insufficient: 🪙{to_decimal(ow.available_balance):,.2f} available, "
+            f"🪙{amt:,.2f} needed. Fund the admin (opening fund / fund request) first."
         )
     await wallet_service.adjust(
         owner_id, -amt, transaction_type=TransactionType.ADMIN_FLOAT_DISPENSE,

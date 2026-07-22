@@ -1,6 +1,6 @@
 """Kuber pool management — SUPER_ADMIN only.
 
-The kuber wallet is the SA's distributable house pool (₹100 cr cap), separate
+The kuber wallet is the SA's distributable house pool (🪙100 cr cap), separate
 from their personal main wallet. Here the SA can view it, bootstrap/refill it to
 the cap, and move funds between kuber ↔ main.
 """
@@ -29,7 +29,7 @@ async def get_kuber(admin: SuperAdmin):
 
 @router.post("/bootstrap", response_model=APIResponse[dict])
 async def bootstrap(admin: SuperAdmin):
-    """Top the kuber pool up to the ₹100 cr cap (idempotent)."""
+    """Top the kuber pool up to the 🪙100 cr cap (idempotent)."""
     return APIResponse(
         data=await kuber_service.bootstrap_kuber_to_max(admin.id, actor_id=admin.id),
         message="Kuber pool topped up",

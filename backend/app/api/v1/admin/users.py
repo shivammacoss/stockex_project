@@ -763,8 +763,8 @@ async def wallet_adjust(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Insufficient balance: user has ₹{available:,.2f} available "
-                    f"but you're trying to debit ₹{abs(amt):,.2f}."
+                    f"Insufficient balance: user has 🪙{available:,.2f} available "
+                    f"but you're trying to debit 🪙{abs(amt):,.2f}."
                 ),
             )
 
@@ -911,7 +911,7 @@ async def update_credit_limit(
     if new_limit < Decimal("0"):
         raise HTTPException(
             status_code=400,
-            detail=f"Resulting credit limit would be negative (current ₹{wallet.credit_limit}, delta ₹{delta})",
+            detail=f"Resulting credit limit would be negative (current 🪙{wallet.credit_limit}, delta 🪙{delta})",
         )
     wallet.credit_limit = Decimal128(str(new_limit))
     wallet.version += 1
@@ -1293,10 +1293,10 @@ async def live_trade_stats(user_id: str, admin: CurrentAdmin):
         # position via the same resolver order_validator uses.
         try:
             # Derive CE/PE from the symbol so the resolver applies the admin's
-            # per-side option overrides (Opt Sell/Buy Fixed ₹/lot). With
+            # per-side option overrides (Opt Sell/Buy Fixed 🪙/lot). With
             # option_type=None it fell back to the generic segment Times/% and
-            # CF Total (EOD) showed the ~20% number (₹795) instead of the
-            # configured Fixed carry (₹15000/lot). Same fix as the user
+            # CF Total (EOD) showed the ~20% number (🪙795) instead of the
+            # configured Fixed carry (🪙15000/lot). Same fix as the user
             # positions endpoint + EOD carry rollover.
             _csym = (p.instrument.symbol or "").upper()
             _cotype = (
@@ -1323,8 +1323,8 @@ async def live_trade_stats(user_id: str, admin: CurrentAdmin):
             # the product-aware fields on the INTRADAY value (the
             # "symmetric-Times patch" in netting_service), so reading
             # them here returned the intraday number — operator-flagged
-            # 22-May: NIFTY26MAYFUT MIS 65-qty showed CF Total ₹3,096
-            # (= intraday at 500×) when it should have been ₹25,802 (=
+            # 22-May: NIFTY26MAYFUT MIS 65-qty showed CF Total 🪙3,096
+            # (= intraday at 500×) when it should have been 🪙25,802 (=
             # notional ÷ overnight=60). Same bug family the position
             # serializer + intraday-to-carry rollover already fixed.
             ovn_fixed = float(s.get("overnight_fixed_margin_per_lot") or 0)
