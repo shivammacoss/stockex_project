@@ -237,7 +237,10 @@ class QuoteOut(BaseModel):
     open: float
     high: float
     low: float
-    prev_close: float
+    # Optional: some feeds don't carry a prior close (e.g. Binance crypto OPTIONS
+    # via eapi, which only give mark + greeks). Missing prev_close was 422-ing
+    # the whole quote response, so crypto-option prices silently never rendered.
+    prev_close: float = 0.0
     volume: float  # crypto/forex have fractional contract volumes (e.g. 5.21241 BTC)
     bid: float
     ask: float
