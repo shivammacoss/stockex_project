@@ -144,6 +144,82 @@ async def cleanup_expired_once() -> dict[str, int]:
     }
 
 
+# Binance crypto options settle at 08:00 UTC on their expiry date.
+_BINANCE_OPT_EXPIRY_UTC_HOUR = 8
+
+
+async def settle_expired_crypto_options() -> dict:
+    """Settle open CRYPTO OPTION positions at their true INTRINSIC value once the
+    contract has expired (past 08:00 UTC on its expiry date).
+
+      • CALL  → intrinsic = max(0, spot − strike)
+      • PUT   → intrinsic = max(0, strike − spot)
+      • spot  = live BTC index (the option's underlying)
+
+    Unlike the generic IST-midnight cleanup (which force-closes at the last MARK
+    price ~10.5 h late — over-crediting an out-of-the-money option), this settles
+    ON TIME and at the correct intrinsic: an OTM option books at 0 (buyer loses
+    the full premium), an ITM option at its exercise value. Leader-only, run each
+    cleanup tick. Skips (retries next tick) when the BTC spot isn't available.
+    """
+    from datetime import datetime, time as _dtime, timezone
+
+    from app.models.position import Position, PositionStatus
+    from app.services import market_data_service, position_service
+    from app.utils.decimal_utils import ZERO, to_decimal
+
+    now = datetime.now(timezone.utc)
+    try:
+        positions = await Position.find(
+            {
+                "status": PositionStatus.OPEN.value,
+                "segment_type": {"$regex": "^CRYPTO_OPTION"},
+            }
+        ).to_list()
+    except Exception:
+        logger.exception("crypto_opt_settle_query_failed")
+        return {"settled": 0}
+
+    settled = 0
+    for pos in positions:
+        try:
+            inst = pos.instrument
+            exp = getattr(inst, "expiry", None)
+            if exp is None:
+                continue
+            exp_date = exp.date() if hasattr(exp, "date") else exp
+            exp_dt = datetime.combine(
+                exp_date, _dtime(_BINANCE_OPT_EXPIRY_UTC_HOUR, 0), tzinfo=timezone.utc
+            )
+            if now < exp_dt:
+                continue  # not expired yet
+            try:
+                spot = to_decimal(
+                    await market_data_service.get_ltp(inst.underlying_token or "CRYPTO_BTCUSD")
+                )
+            except Exception:
+                spot = ZERO
+            if spot <= ZERO:
+                continue  # no spot yet — retry next sweep
+            strike = to_decimal(inst.strike)
+            opt_type = str(getattr(inst.option_type, "value", inst.option_type) or "").upper()
+            intrinsic = max(ZERO, spot - strike) if opt_type in ("CE", "C", "CALL") else max(ZERO, strike - spot)
+            res = await position_service.settle_expired_position(
+                pos, settlement_price=intrinsic, allow_zero=True, reason="CRYPTO_OPT_EXPIRY"
+            )
+            if res == "settled":
+                settled += 1
+                logger.info(
+                    "crypto_opt_settled token=%s intrinsic=%s spot=%s strike=%s type=%s",
+                    inst.token, intrinsic, spot, strike, opt_type,
+                )
+        except Exception:
+            logger.exception("crypto_opt_settle_failed pos=%s", getattr(pos, "id", None))
+    if settled:
+        logger.info("crypto_opt_settlement_swept settled=%s", settled)
+    return {"settled": settled}
+
+
 async def expiry_cleanup_loop(interval_sec: float = 3600.0) -> None:
     """Hourly sweep. An hourly cadence is enough because expiry happens at
     instrument granularity (date), not minute — but it's frequent enough
@@ -159,12 +235,14 @@ async def expiry_cleanup_loop(interval_sec: float = 3600.0) -> None:
         # expired while the server was down.
         try:
             await cleanup_expired_once()
+            await settle_expired_crypto_options()
         except Exception:
             logger.exception("expiry_cleanup_initial_sweep_failed")
         while _running:
             await asyncio.sleep(interval_sec)
             try:
                 await cleanup_expired_once()
+                await settle_expired_crypto_options()
             except Exception:
                 logger.exception("expiry_cleanup_tick_failed")
     finally:

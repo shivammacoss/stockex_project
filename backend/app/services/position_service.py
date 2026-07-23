@@ -267,6 +267,7 @@ async def settle_expired_position(
     *,
     settlement_price: Decimal | None = None,
     reason: str = "EXPIRY_SETTLED",
+    allow_zero: bool = False,
 ) -> str:
     """Force-close ONE open position whose underlying contract has expired.
 
@@ -313,29 +314,36 @@ async def settle_expired_position(
 
     token = pos.instrument.token
 
-    # ── Resolve a non-zero settlement price ──────────────────────────
+    # ── Resolve the settlement price ─────────────────────────────────
     settle = (
         quantize_money(to_decimal(settlement_price))
         if settlement_price is not None
         else ZERO
     )
-    if settle <= ZERO:
-        try:
-            settle = quantize_money(to_decimal(await market_data_service.get_ltp(token)))
-        except Exception:  # noqa: BLE001
-            settle = ZERO
-    if settle <= ZERO:
-        settle = quantize_money(to_decimal(pos.ltp))
-    if settle <= ZERO:
-        # No usable price anywhere — never settle at 0. Leave OPEN so a
-        # later run (with an admin-supplied price) can settle it.
-        log.info(
-            "expiry_settlement_skip_no_price pos=%s token=%s symbol=%s",
-            pos.id,
-            token,
-            pos.instrument.symbol,
-        )
-        return "skipped"
+    if settlement_price is not None and allow_zero:
+        # EXPLICIT expiry settlement with a KNOWN price (option intrinsic value —
+        # 0 for an out-of-the-money option that expires worthless). Honour it
+        # as-is and skip the live/frozen fallback, so an OTM option books at 0
+        # (buyer loses the full premium) instead of the last mark price.
+        settle = max(ZERO, settle)
+    else:
+        if settle <= ZERO:
+            try:
+                settle = quantize_money(to_decimal(await market_data_service.get_ltp(token)))
+            except Exception:  # noqa: BLE001
+                settle = ZERO
+        if settle <= ZERO:
+            settle = quantize_money(to_decimal(pos.ltp))
+        if settle <= ZERO:
+            # No usable price anywhere — never settle at 0. Leave OPEN so a
+            # later run (with an admin-supplied price) can settle it.
+            log.info(
+                "expiry_settlement_skip_no_price pos=%s token=%s symbol=%s",
+                pos.id,
+                token,
+                pos.instrument.symbol,
+            )
+            return "skipped"
 
     # ── Realized P&L — identical formula to matching_engine / weekly ──
     avg = to_decimal(pos.avg_price)
