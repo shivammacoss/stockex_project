@@ -28,13 +28,20 @@ SEGMENT_LABELS: dict[str, str] = {
 }
 
 
+# Option segments default to closing 30s BEFORE the normal 15:30 bell so option
+# trading auto-stops just ahead of the underlying close (avoids last-second
+# entries). Only the DEFAULT pre-fill — a saved row wins as usual.
+_OPTION_SEGMENTS = {"NSE_STK_OPT", "NSE_IDX_OPT", "BSE_OPT", "MCX_OPT", "CRYPTO_OPT"}
+
+
 def _row_out(code: str, r: MarketControl | None) -> dict:
+    default_close = "15:29:30" if code in _OPTION_SEGMENTS else "15:30"
     return {
         "segment": code,
         "label": SEGMENT_LABELS.get(code, code),
         "enabled": bool(r.enabled) if r else False,
         "open_time": (r.open_time if r else "09:15") or "09:15",
-        "close_time": (r.close_time if r else "15:30") or "15:30",
+        "close_time": (r.close_time if r else default_close) or default_close,
     }
 
 
