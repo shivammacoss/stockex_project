@@ -270,6 +270,15 @@ class Settings(BaseSettings):
     # Main wallet. A one-shot boot migration seeds segment wallets from Main.
     # Flip to False to instantly revert to the legacy single-wallet path.
     MULTI_WALLET_ENABLED: bool = True
+    # When a trading (segment) wallet's loss takes it below zero, first pull the
+    # shortfall out of the user's MAIN cash wallet (where deposits land and
+    # trading wallets are funded from) if it has balance — so a trading wallet
+    # going into minus is auto-covered from available cash before it becomes a
+    # settlement/negative balance. Only what MAIN can afford is pulled (MAIN
+    # never goes negative); any remainder follows the per-wallet auto-settlement
+    # rule (floor+book, or go negative). Default ON — flip OFF to keep trading
+    # wallets fully isolated from MAIN.
+    SEGMENT_SHORTFALL_COVER_FROM_MAIN: bool = True
 
     # ── Admin float / fund-cap (SA→admin allocation caps user funding) ───
     # When True, an admin/broker crediting a downline USER (deposit-approve,

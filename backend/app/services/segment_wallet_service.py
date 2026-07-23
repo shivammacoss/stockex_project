@@ -19,6 +19,7 @@ from beanie import PydanticObjectId
 from bson import Decimal128
 from pymongo import ReturnDocument
 
+from app.core.config import settings
 from app.core.exceptions import InsufficientFundsError
 from app.core.redis_client import publish
 from app.models.segment_wallet import SegmentWallet
@@ -148,6 +149,95 @@ async def _kind_auto_settlement_on(user_id: str | PydanticObjectId, kind: str) -
         return True
 
 
+async def _cover_from_main(user_id: str | PydanticObjectId, kind: str) -> None:
+    """Auto-cover a segment wallet's shortfall from the user's MAIN cash wallet.
+
+    When a trading (segment) wallet's loss exceeds its balance it either floors
+    to 0 (booking ``settlement_outstanding``, auto-settlement ON) or goes
+    NEGATIVE (auto-settlement OFF). Either way the user still owes the shortfall.
+    Since the MAIN wallet is where deposits land and trading wallets are funded
+    FROM it, pull the shortfall out of MAIN automatically when it has cash — so a
+    trading wallet dipping into minus is covered from available cash first.
+
+    Pulls only what MAIN can afford (never drives MAIN negative); any remainder
+    stays as the segment wallet's shortfall (settlement / negative balance).
+    No-op when the feature is off, MAIN is empty, or there's nothing to cover.
+    Best-effort: never raises into the caller's settlement path.
+    """
+    if not settings.SEGMENT_SHORTFALL_COVER_FROM_MAIN:
+        return
+    try:
+        # 1) How much is owed, and how much MAIN can spare right now.
+        w = await get_or_create(user_id, kind)
+        outstanding = to_decimal(w.settlement_outstanding)
+        avail = to_decimal(w.available_balance)
+        shortfall = add(outstanding, (-avail) if avail < ZERO else ZERO)
+        if shortfall <= ZERO:
+            return
+        mw = await wallet_service.get_or_create(user_id)
+        main_avail = to_decimal(mw.available_balance)
+        if main_avail <= ZERO:
+            return
+        cover = quantize_money(min(shortfall, main_avail))
+        if cover <= ZERO:
+            return
+
+        # 2) Debit MAIN once (atomic + version-guarded inside wallet_service).
+        #    cover ≤ main_avail, so MAIN never floors/goes negative.
+        await wallet_service.adjust(
+            user_id, -cover, transaction_type=TransactionType.WALLET_TRANSFER,
+            narration=f"Auto-cover {kind} shortfall from main wallet",
+            reference_type=f"WALLET:{kind}",
+        )
+
+        # 3) Apply the SAME cover to the segment wallet (pay down settlement
+        #    first, then raise a negative available back toward 0), version-
+        #    guarded. Refund MAIN if we somehow can't land it.
+        coll = SegmentWallet.get_motor_collection()
+        for _attempt in range(12):
+            w = await get_or_create(user_id, kind)
+            outstanding = to_decimal(w.settlement_outstanding)
+            avail = to_decimal(w.available_balance)
+            pay_settle = quantize_money(min(cover, outstanding if outstanding > ZERO else ZERO))
+            remainder = sub(cover, pay_settle)
+            updated = await coll.find_one_and_update(
+                {"_id": w.id, "version": w.version},
+                {"$set": {
+                    "settlement_outstanding": to_decimal128(sub(outstanding, pay_settle)),
+                    "available_balance": to_decimal128(add(avail, remainder)),
+                    "version": (w.version or 0) + 1,
+                }},
+                return_document=ReturnDocument.AFTER,
+            )
+            if updated is not None:
+                new_available = to_decimal(updated.get("available_balance"))
+                try:
+                    await WalletTransaction(
+                        user_id=PydanticObjectId(str(user_id)),
+                        transaction_type=TransactionType.WALLET_TRANSFER,
+                        amount=Decimal128(str(cover)),
+                        balance_before=Decimal128(str(avail)),
+                        balance_after=Decimal128(str(new_available)),
+                        reference_type=f"WALLET:{kind}",
+                        narration="Auto-cover from main wallet",
+                        status=TransactionStatus.COMPLETED,
+                    ).insert()
+                except Exception:  # noqa: BLE001
+                    logger.debug("cover_from_main_txn_failed", exc_info=True)
+                asyncio.create_task(
+                    _publish(user_id, kind, reason="AUTO_COVER", amount=cover, balance_after=new_available)
+                )
+                return
+            await asyncio.sleep(0.015 * (_attempt + 1))
+        # Couldn't land the segment credit — refund MAIN so the books balance.
+        await wallet_service.adjust(
+            user_id, cover, transaction_type=TransactionType.WALLET_TRANSFER,
+            narration=f"Auto-cover refund ({kind})",
+        )
+    except Exception:  # noqa: BLE001 — never let auto-cover break settlement
+        logger.exception("cover_from_main_failed user=%s kind=%s", user_id, kind)
+
+
 async def adjust(
     user_id: str | PydanticObjectId, kind: str, amount: Decimal | float | int | str, *,
     transaction_type: TransactionType, narration: str,
@@ -158,6 +248,7 @@ async def adjust(
     amt = quantize_money(to_decimal(amount))
     coll = SegmentWallet.get_motor_collection()
     before = after = ZERO
+    breached = False  # this debit took the wallet below zero (floor OR negative)
     for _attempt in range(12):
         w = await get_or_create(user_id, kind)
         before = to_decimal(w.available_balance)
@@ -167,7 +258,8 @@ async def adjust(
         # then let `available_balance` go NEGATIVE (mines), like the main wallet's
         # auto_settlement=OFF flow. `allow_negative` (internal transfer-revert etc.)
         # still bypasses flooring outright.
-        floor_this = after < ZERO and not allow_negative
+        breached = after < ZERO and not allow_negative
+        floor_this = breached
         if floor_this and not await _kind_auto_settlement_on(user_id, kind):
             floor_this = False
         if floor_this:
@@ -212,6 +304,11 @@ async def adjust(
     )
     await txn.insert()
     asyncio.create_task(_publish(user_id, kind, reason=transaction_type.value, amount=amt, balance_after=after))
+    # This debit pushed the trading wallet below zero — auto-cover the shortfall
+    # from the user's MAIN cash wallet (if it has funds) before it lingers as a
+    # settlement / negative balance. Best-effort; never fails the debit.
+    if breached and amt < ZERO:
+        await _cover_from_main(user_id, kind)
     return txn
 
 
