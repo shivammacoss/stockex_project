@@ -208,9 +208,23 @@ export async function unwrap<T>(p: Promise<{ data: ApiResponse<T> }>): Promise<T
 export const AdminAuthAPI = {
   login: (body: { identifier: string; password: string; two_fa_code?: string }) =>
     unwrap<AdminTokenPair>(api.post("/admin/auth/login", body)),
+  // Public broker demo signup — creates a personal DEMO BROKER (50L virtual
+  // float) and logs into the admin app immediately.
+  brokerDemoRegister: (body: {
+    full_name: string;
+    email: string;
+    mobile: string;
+    password: string;
+  }) => unwrap<AdminTokenPair>(api.post("/admin/auth/broker-demo-register", body)),
   refresh: (refresh_token: string) => unwrap<AdminTokenPair>(api.post("/admin/auth/refresh", { refresh_token })),
   logout: (refresh_token?: string) => unwrap<any>(api.post("/admin/auth/logout", { refresh_token })),
   me: () => unwrap<any>(api.get("/admin/auth/me")),
+};
+
+// Super-admin "Demo" section — demo users + demo brokers, converted vs pending.
+export const AdminDemoAPI = {
+  list: (params: { kind: "users" | "brokers"; status: "pending" | "converted"; q?: string; page?: number; page_size?: number }) =>
+    unwrap<any>(api.get("/admin/management/demo", { params })),
 };
 
 export const DashboardAPI = {
@@ -275,6 +289,9 @@ export const AdminMeAPI = {
     unwrap<any>(api.get(`/admin/me/members/${memberId}/fund-detail`, { params: { limit } })),
   // SUPER_ADMIN games revenue analytics (per_game / per_admin / totals).
   gamesBreakdown: () => unwrap<any>(api.get("/admin/me/games-breakdown")),
+  // Convert the logged-in DEMO BROKER into a real broker (zeroes the virtual
+  // float, unlocks user-create).
+  convertToReal: () => unwrap<any>(api.post("/admin/me/convert-to-real")),
 };
 
 export const AdminKuberAPI = {

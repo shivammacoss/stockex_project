@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Users,
   Crown,
+  FlaskConical,
   Wallet,
   Handshake,
   BarChart3,
@@ -127,6 +128,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     title: "Management",
     items: [
       { href: "/management/sub-admins", label: "Admin Management", icon: Crown, superOnly: true },
+      { href: "/demo", label: "Demo", icon: FlaskConical, superOnly: true },
       // Broker Management — sits right under Admin Management. Visible to the
       // SUPER-ADMIN too (they can create brokers directly in the platform pool),
       // to admins (their own brokers), and to brokers (their sub-brokers).

@@ -59,6 +59,9 @@ export interface AdminUser {
   pnl_share_pct?: string | null;
   // Populated only for role === "BROKER".
   broker_permissions?: BrokerPermissions | null;
+  // True when this admin-tier account is a DEMO (currently only demo BROKERs).
+  // Drives the "Switch to real" banner + the create-user popup.
+  is_demo?: boolean;
   // When role === "BROKER" and this is set, the broker was created under
   // another broker — i.e., they're a sub-broker. UI flips the role chip.
   assigned_broker_id?: string | null;

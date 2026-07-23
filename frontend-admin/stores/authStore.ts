@@ -62,6 +62,7 @@ export const useAdminAuthStore = create<AdminAuthState>()(
                 full_name: me.full_name,
                 role: me.role,
                 last_login_at: me.last_login_at ?? null,
+                is_demo: (me as any).is_demo ?? false,
                 admin_permissions: me.admin_permissions ?? null,
                 broker_permissions: me.broker_permissions ?? null,
                 pnl_share_pct: me.pnl_share_pct ?? null,

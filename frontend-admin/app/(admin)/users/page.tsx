@@ -2,10 +2,20 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, TrendingDown, TrendingUp } from "lucide-react";
-import { UsersAPI } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Plus, Search, TrendingDown, TrendingUp, Rocket } from "lucide-react";
+import { UsersAPI, AdminMeAPI, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/common/PageHeader";
 import { DataTable, type Column } from "@/components/common/DataTable";
@@ -42,6 +52,28 @@ type LiveStat = {
 
 export default function AdminUsersPage() {
   const me = useAdminAuthStore((s) => s.admin);
+  const refreshMe = useAdminAuthStore((s) => s.refreshMe);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const isDemoBroker = !!me?.is_demo;
+  const [demoBlock, setDemoBlock] = useState(false);
+  const [converting, setConverting] = useState(false);
+
+  async function convertToReal() {
+    setConverting(true);
+    try {
+      await AdminMeAPI.convertToReal();
+      await refreshMe();
+      await queryClient.invalidateQueries();
+      setDemoBlock(false);
+      toast.success("You're now a real broker — you can create users. Float ₹0; ask your admin for funds.");
+      router.push("/users/new");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not switch to real account.");
+    } finally {
+      setConverting(false);
+    }
+  }
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("");
   const [mode, setMode] = useState<"live" | "demo">("live");
@@ -256,13 +288,48 @@ export default function AdminUsersPage() {
         title={isDemo ? "Demo users" : "All users"}
         description={`${total} ${isDemo ? "demo" : ""} users`}
         actions={
-          <Button asChild>
-            <Link href="/users/new">
+          isDemoBroker ? (
+            <Button onClick={() => setDemoBlock(true)}>
               <Plus className="size-4" /> New user
-            </Link>
-          </Button>
+            </Button>
+          ) : (
+            <Button asChild>
+              <Link href="/users/new">
+                <Plus className="size-4" /> New user
+              </Link>
+            </Button>
+          )
         }
       />
+
+      {/* Demo broker → create-user is blocked until they switch to real. */}
+      <Dialog open={demoBlock} onOpenChange={(v) => !converting && setDemoBlock(v)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Rocket className="size-5 text-emerald-600" /> Switch to a real broker to add users
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-1">
+              <span className="block">
+                You&apos;re on a <span className="font-bold text-foreground">demo broker</span> account —
+                creating real users isn&apos;t allowed on demo.
+              </span>
+              <span className="block rounded-lg border border-border bg-muted/30 p-2.5 text-[13px] leading-relaxed text-foreground">
+                Switch to a real broker account to unlock creating &amp; managing your own
+                users. Your 🪙50,00,000 virtual float becomes ₹0 — your admin funds you.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setDemoBlock(false)} disabled={converting}>
+              Not now
+            </Button>
+            <Button onClick={convertToReal} loading={converting} className="bg-emerald-600 font-bold text-white hover:bg-emerald-700">
+              Switch to real &amp; create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Live / Demo mode toggle */}
       <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
