@@ -317,9 +317,13 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
     #     operator hit: all 3 games settled at 23,991.25 while the feed was
     #     disconnected). If the super-admin has typed the day's official close, it
     #     WINS — for Number, Jackpot AND Bracket alike — over any pinned/quoted
-    #     auto value. Only while the market is closed; during hours the live LTP
-    #     below is correct.
-    if not is_market_open():
+    #     auto value. Applies when the market is closed, OR whenever the day being
+    #     resolved is a PAST day (a manual re-declare of an earlier session must
+    #     use the typed value even if today's market happens to be open). During
+    #     TODAY's live hours the manual override is skipped so the live LTP below
+    #     drives the live spot.
+    _resolve_is_past_day = ist_day < now_ist().strftime("%Y-%m-%d")
+    if not is_market_open() or _resolve_is_past_day:
         manual = await manual_nifty_close(ist_day)
         if manual is not None and manual > 0:
             return await _converge(quantize_money(manual), pin_day=True)

@@ -29,7 +29,7 @@ from beanie import PydanticObjectId
 from app.models.games.settings import GameConfig
 from app.models.user import User
 from app.services.games import wallet_service
-from app.utils.decimal_utils import ZERO, quantize_money, to_decimal
+from app.utils.decimal_utils import ZERO, quantize_money, to_decimal, to_decimal128
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,61 @@ async def distribute_profit_split(
     await _pay(chain["broker"], br_amt, game_key=game_key, role="BROKER", base=P, related_user_id=user.id)
     await _pay(chain["admin"], ad_amt, game_key=game_key, role="ADMIN", base=P, related_user_id=user.id)
     await _bump_earnings(user, sb_amt + br_amt + ad_amt)
+
+
+async def _unpay(role_user: User | None, amount: Decimal, *, game_key: str, role: str) -> None:
+    """Reverse one `_pay`: pull `amount` back from the recipient's temporary
+    (HELD) wallet into the house. Best-effort — floors temp at 0 (if the
+    commission was already released to main, only what remains is clawed)."""
+    if role_user is None or amount <= ZERO:
+        return
+    if not bool(getattr(role_user, "receives_hierarchy_brokerage", True)):
+        return
+    try:
+        from app.models.wallet import Wallet
+
+        w = await Wallet.find_one(Wallet.user_id == role_user.id)
+        if w is not None:
+            new_temp = to_decimal(w.temporary_balance) - amount
+            if new_temp < ZERO:
+                new_temp = ZERO
+            w.temporary_balance = to_decimal128(new_temp)
+            if hasattr(w, "temporary_total_earned"):
+                new_tot = to_decimal(getattr(w, "temporary_total_earned", 0) or 0) - amount
+                if new_tot < ZERO:
+                    new_tot = ZERO
+                w.temporary_total_earned = to_decimal128(new_tot)
+            w.version = (w.version or 0) + 1
+            await w.save()
+    except Exception:
+        logger.exception("hierarchy_unpay_temp_failed role=%s", role)
+    # Return the money to the house.
+    await wallet_service.house_settle(
+        amount, game_key=game_key, narration=f"Reverse games commission ← {role} ({role_user.user_code})"
+    )
+
+
+async def reverse_profit_split(
+    user: User, win_amount, game_key: str, cfg: GameConfig
+) -> None:
+    """Reverse ``distribute_profit_split`` for a mis-declared win — mirrors the
+    forward split exactly (config is unchanged on a same-session reversal), then
+    claws each role's share back from its HELD wallet into the house."""
+    P = quantize_money(to_decimal(win_amount))
+    if P <= ZERO or getattr(user, "is_demo", False):
+        return
+    chain = await _resolve_chain(user)
+    has_sb, has_br, has_ad = bool(chain["sub_broker"]), bool(chain["broker"]), bool(chain["admin"])
+    sb_pct, br_pct, ad_pct = _cascade(
+        cfg.sub_broker_profit_pct, cfg.broker_profit_pct, cfg.admin_profit_pct,
+        has_sb=has_sb, has_br=has_br, has_ad=has_ad, sub_to_broker=cfg.sub_broker_share_to_broker,
+    )
+    sb_amt = quantize_money(P * to_decimal(sb_pct) / to_decimal(100))
+    br_amt = quantize_money(P * to_decimal(br_pct) / to_decimal(100))
+    ad_amt = quantize_money(P * to_decimal(ad_pct) / to_decimal(100))
+    await _unpay(chain["sub_broker"], sb_amt, game_key=game_key, role="SUB_BROKER")
+    await _unpay(chain["broker"], br_amt, game_key=game_key, role="BROKER")
+    await _unpay(chain["admin"], ad_amt, game_key=game_key, role="ADMIN")
 
 
 async def distribute_gross_hierarchy(

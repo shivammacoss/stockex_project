@@ -89,6 +89,66 @@ async def credit_referral_on_win(user: User, win_amount, cfg: GameConfig, *, gam
         )
 
 
+async def reverse_referral_on_win(user: User, win_amount, cfg: GameConfig, *, game_key: str) -> dict:
+    """Reverse ``credit_referral_on_win`` for a mis-declared win.
+
+    Claws the reward back from the referrer's games wallet (best-effort — if the
+    referrer already spent it, only reports the shortfall), returns the money to
+    the house, and RESETS the ``first_win_by_game`` gate so a corrected
+    re-declare can pay the referrer again. Returns a small report dict."""
+    report = {"reward": "0", "clawed": True}
+    try:
+        referred_by = getattr(user, "referred_by", None)
+        if not referred_by:
+            return report
+        pct = float(cfg.referrer_profit_pct or 0)
+        if pct <= 0:
+            return report
+        reward = quantize_money(to_decimal(win_amount) * to_decimal(pct) / to_decimal(100))
+
+        # Reset the first-win gate so a corrected re-declare pays again.
+        stats = getattr(user, "game_referral", None)
+        if stats is not None and stats.first_win_by_game.get(game_key):
+            stats.first_win_by_game[game_key] = False
+            user.game_referral = stats
+            await user.save()
+
+        if reward <= ZERO:
+            return report
+        report["reward"] = str(reward)
+
+        # Claw back from the referrer's games wallet (best-effort).
+        try:
+            await wallet_service.atomic_games_wallet_debit(
+                referred_by, reward, game_key=game_key,
+                description=f"Reverse referral reward — {user.user_code}'s {game_key} win",
+                meta={"kind": "REFERRAL_REVERSE", "referred_user": str(user.id)},
+            )
+            await wallet_service.house_settle(
+                reward, game_key=game_key,
+                narration=f"Reverse referral reward (referrer of {user.user_code})",
+            )
+        except Exception:
+            report["clawed"] = False  # referrer already spent it — reported
+
+        # Best-effort undo the rollup (stats only).
+        try:
+            from app.services import referral_service
+
+            await referral_service.record_referral_earning(
+                referred_by, user.id, -reward, game=game_key
+            )
+        except Exception:
+            pass
+        return report
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "games_referral_reverse_failed user=%s game=%s",
+            getattr(user, "id", None), game_key,
+        )
+        return report
+
+
 async def credit_referral_on_first_win(
     user: User, game_key: str, cfg: GameConfig, *, is_top_rank: bool = True,
     referral_base: float | int | str | None = None,

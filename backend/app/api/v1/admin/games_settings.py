@@ -357,3 +357,42 @@ async def release_hierarchy_earnings(user_id: str, admin: SuperAdmin, payload: d
         PydanticObjectId(user_id), amount, actor_id=admin.id
     )
     return APIResponse(data=res, message="Released to main wallet")
+
+
+# ── Manual game entry + reversal (SUPER_ADMIN) ────────────────────────
+# One typed NIFTY close drives all 3 nifty games (Number/Jackpot/Bracket).
+@router.get("/manual-entry", response_model=APIResponse[dict])
+async def manual_entry_preview(_: SuperAdmin, day: str | None = None):
+    from app.services.games import manual_game_service as mgs
+    from app.utils.time_utils import now_ist
+
+    d = day or now_ist().strftime("%Y-%m-%d")
+    return APIResponse(data=await mgs.preview_day(d))
+
+
+@router.post("/manual-entry/declare", response_model=APIResponse[dict])
+async def manual_entry_declare(payload: dict, _: SuperAdmin):
+    from app.services.games import manual_game_service as mgs
+    from app.utils.time_utils import now_ist
+
+    d = str(payload.get("day") or now_ist().strftime("%Y-%m-%d"))
+    close = payload.get("close_price")
+    if close in (None, ""):
+        raise HTTPException(status_code=400, detail="close_price is required")
+    try:
+        res = await mgs.declare_day(d, close)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return APIResponse(data=res, message="Result declared for all 3 games.")
+
+
+@router.post("/manual-entry/reverse", response_model=APIResponse[dict])
+async def manual_entry_reverse(payload: dict, _: SuperAdmin):
+    from app.services.games import manual_game_service as mgs
+    from app.utils.time_utils import now_ist
+
+    d = str(payload.get("day") or now_ist().strftime("%Y-%m-%d"))
+    res = await mgs.reverse_day(d)
+    return APIResponse(
+        data=res, message="Reversed — payouts clawed back, results cleared. Re-declare with the correct close."
+    )
