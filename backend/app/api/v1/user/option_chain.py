@@ -91,6 +91,45 @@ def _exchange_bucket(exchange: str | None) -> str:
     return ""
 
 
+# Super-admin can size "strikes around ATM" per option segment (index / stock /
+# MCX / crypto). Stored as a JSON map; each entry falls back to the global scalar
+# `option_chain.strikes_around_atm` when unset.
+_STRIKES_BY_SEGMENT_KEY = "option_chain.strikes_around_atm_by_segment"
+STRIKES_SEGMENTS = ["NSE_IDX_OPT", "NSE_STK_OPT", "MCX_OPT", "CRYPTO_OPT"]
+
+
+def _strikes_seg_key(exchange: str | None, underlying: str | None) -> str:
+    """Classify an option chain into one of the 4 independently-sizable segments
+    (index option / stock option / MCX option). Crypto is passed explicitly."""
+    from app.services.netting_service import _INDEX_UNDERLYING_PREFIXES
+
+    ex = (exchange or "").upper()
+    if ex == "MCX":
+        return "MCX_OPT"
+    su = (underlying or "").upper()
+    if su.startswith(tuple(_INDEX_UNDERLYING_PREFIXES)):
+        return "NSE_IDX_OPT"
+    return "NSE_STK_OPT"
+
+
+async def _strikes_around_atm_for(seg_key: str) -> int:
+    """Per-segment 'strikes around ATM' set by the super-admin, falling back to
+    the global scalar when the segment isn't configured."""
+    try:
+        scalar = int(await _read_setting("option_chain.strikes_around_atm", _DEFAULT_STRIKES_AROUND_ATM) or _DEFAULT_STRIKES_AROUND_ATM)
+    except (TypeError, ValueError):
+        scalar = _DEFAULT_STRIKES_AROUND_ATM
+    by_seg = await _read_setting(_STRIKES_BY_SEGMENT_KEY, {})
+    if isinstance(by_seg, dict) and seg_key in by_seg:
+        try:
+            v = int(by_seg.get(seg_key))
+            if v > 0:
+                return v
+        except (TypeError, ValueError):
+            pass
+    return scalar
+
+
 def _effective_max_expiries(resolved: dict[str, Any], underlying: str | None, exchange: str | None) -> int:
     """Effective expiry cap for ONE instrument:
         1) the underlying's per-script "Show expiry month" (if set),
@@ -429,6 +468,20 @@ async def _crypto_option_chain(user: CurrentUser, root: str, expiry: str | None)
         else:
             atm_strike = enriched_rows[len(enriched_rows) // 2]["strike"]
 
+    # Window to ATM ± N (super-admin CRYPTO_OPT setting) — the crypto chain
+    # otherwise returns every listed strike.
+    _crypto_window = await _strikes_around_atm_for("CRYPTO_OPT")
+    if enriched_rows and _crypto_window > 0:
+        _atm_idx = len(enriched_rows) // 2
+        if atm_strike is not None:
+            for _i, _r in enumerate(enriched_rows):
+                if _r["strike"] == atm_strike:
+                    _atm_idx = _i
+                    break
+        _lo = max(0, _atm_idx - _crypto_window)
+        _hi = min(len(enriched_rows), _atm_idx + _crypto_window + 1)
+        enriched_rows = enriched_rows[_lo:_hi]
+
     data_source = "live" if any(
         (cell.get(side) or {}).get("source") == "binance_options"
         for cell in enriched_rows for side in ("ce", "pe")
@@ -606,7 +659,7 @@ async def option_chain(
     #   2. If no LTPs are cached yet (cold start), fall back to the median
     #      strike — close enough for the first paint; the next 2 s poll
     #      will have real LTPs and recentre.
-    strikes_around_atm = int(await _read_setting("option_chain.strikes_around_atm", _DEFAULT_STRIKES_AROUND_ATM))
+    strikes_around_atm = await _strikes_around_atm_for(_strikes_seg_key(_sample_ex, und_key))
 
     def _row_cached_ltp(row: dict[str, Any], side: str) -> float | None:
         cell = row.get(side)

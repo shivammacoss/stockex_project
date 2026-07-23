@@ -29,6 +29,7 @@ const COLOR_PALETTE = ["emerald", "violet", "rose", "amber", "sky", "fuchsia"];
 const KEYS = {
   underlyings: "option_chain.underlyings",
   strikesAroundAtm: "option_chain.strikes_around_atm",
+  strikesBySegment: "option_chain.strikes_around_atm_by_segment",
   maxExpiries: "option_chain.max_expiries",
   maxExpiriesByExchange: "option_chain.max_expiries_by_exchange",
 };
@@ -36,6 +37,15 @@ const KEYS = {
 const EXCHANGES = ["NSE", "BSE", "MCX"] as const;
 type ExBucket = (typeof EXCHANGES)[number];
 type MbeMap = Record<ExBucket, number>;
+
+// Per-option-segment "strikes around ATM" (super-admin sizes each independently).
+const STRIKE_SEGMENTS = [
+  { key: "NSE_IDX_OPT", label: "Index Option" },
+  { key: "NSE_STK_OPT", label: "Stock Option" },
+  { key: "MCX_OPT", label: "MCX Option" },
+  { key: "CRYPTO_OPT", label: "Crypto Option" },
+] as const;
+type StrikeSegMap = Record<string, number>;
 
 export default function OptionChainAdminPage() {
   const qc = useQueryClient();
@@ -74,6 +84,12 @@ export default function OptionChainAdminPage() {
 
   const [underlyings, setUnderlyings] = useState<UnderlyingCfg[]>([]);
   const [strikesAroundAtm, setStrikesAroundAtm] = useState<number>(15);
+  const [strikesBySeg, setStrikesBySeg] = useState<StrikeSegMap>({
+    NSE_IDX_OPT: 15,
+    NSE_STK_OPT: 15,
+    MCX_OPT: 15,
+    CRYPTO_OPT: 15,
+  });
   const [mbe, setMbe] = useState<MbeMap>({ NSE: 6, BSE: 6, MCX: 6 });
   const [overrideUnderlyings, setOverrideUnderlyings] = useState<boolean>(true);
   const [overrideMaxExpiries, setOverrideMaxExpiries] = useState<boolean>(true);
@@ -94,6 +110,13 @@ export default function OptionChainAdminPage() {
       MCX: Number(gmbeRaw?.MCX) || globalMax || 6,
     };
     setStrikesAroundAtm(globalStrikes);
+    const gbsRaw = (rows.find((r: any) => r.key === KEYS.strikesBySegment)?.value || {}) as Record<string, any>;
+    setStrikesBySeg({
+      NSE_IDX_OPT: Number(gbsRaw?.NSE_IDX_OPT) || globalStrikes,
+      NSE_STK_OPT: Number(gbsRaw?.NSE_STK_OPT) || globalStrikes,
+      MCX_OPT: Number(gbsRaw?.MCX_OPT) || globalStrikes,
+      CRYPTO_OPT: Number(gbsRaw?.CRYPTO_OPT) || globalStrikes,
+    });
 
     if (isSuper) {
       setUnderlyings(globalUnd);
@@ -133,13 +156,17 @@ export default function OptionChainAdminPage() {
       const s = Number(rows.find((r: any) => r.key === KEYS.strikesAroundAtm)?.value);
       const gmbe = (rows.find((r: any) => r.key === KEYS.maxExpiriesByExchange)?.value || {}) as Record<string, any>;
       if (s !== strikesAroundAtm) return true;
+      const gbs = (rows.find((r: any) => r.key === KEYS.strikesBySegment)?.value || {}) as Record<string, any>;
+      for (const seg of STRIKE_SEGMENTS) {
+        if ((Number(gbs?.[seg.key]) || strikesAroundAtm) !== strikesBySeg[seg.key]) return true;
+      }
       for (const ex of EXCHANGES) {
         if ((Number(gmbe?.[ex]) || 0) !== mbe[ex]) return true;
       }
       return JSON.stringify(u ?? []) !== JSON.stringify(underlyings);
     }
     return canOverride;
-  }, [rows, underlyings, strikesAroundAtm, mbe, isSuper, canOverride]);
+  }, [rows, underlyings, strikesAroundAtm, strikesBySeg, mbe, isSuper, canOverride]);
 
   function addUnderlying() {
     setUnderlyings((p) => [...p, { label: "", symbol: "", color: DEFAULT_COLOR, max_expiries: null }]);
@@ -162,9 +189,14 @@ export default function OptionChainAdminPage() {
         return;
       }
     }
-    if (isSuper && (strikesAroundAtm < 1 || strikesAroundAtm > 100)) {
-      toast.error("Strikes around ATM must be between 1 and 100");
-      return;
+    if (isSuper) {
+      for (const seg of STRIKE_SEGMENTS) {
+        const v = strikesBySeg[seg.key];
+        if (!Number.isFinite(v) || v < 1 || v > 100) {
+          toast.error(`${seg.label}: strikes around ATM must be between 1 and 100`);
+          return;
+        }
+      }
     }
     for (const ex of EXCHANGES) {
       if (mbe[ex] < 1 || mbe[ex] > 24) {
@@ -187,10 +219,12 @@ export default function OptionChainAdminPage() {
       });
 
       if (isSuper) {
-        // PRESERVE strikes_around_atm — still consumed by the user endpoint.
+        // Per-segment strikes; keep the global scalar = Index value as the
+        // fallback for any code path that still reads the single setting.
         await Promise.all([
           SettingsAPI.updatePlatform(KEYS.underlyings, cleaned),
-          SettingsAPI.updatePlatform(KEYS.strikesAroundAtm, strikesAroundAtm),
+          SettingsAPI.updatePlatform(KEYS.strikesBySegment, strikesBySeg),
+          SettingsAPI.updatePlatform(KEYS.strikesAroundAtm, strikesBySeg.NSE_IDX_OPT),
           SettingsAPI.updatePlatform(KEYS.maxExpiriesByExchange, mbe),
           // Legacy single fallback mirrors NSE so old single-int consumers
           // + the resolver's ultimate fallback stay sane.
@@ -332,16 +366,33 @@ export default function OptionChainAdminPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {isSuper && (
-              <div className="space-y-1">
-                <Label>Strikes around ATM</Label>
-                <Input
-                  type="number" min={1} max={100}
-                  value={strikesAroundAtm}
-                  onChange={(e) => setStrikesAroundAtm(Number(e.target.value || 1))}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  We render <span className="font-tabular">{strikesAroundAtm * 2 + 1}</span> strikes total (ATM ± {strikesAroundAtm}). Platform-wide.
-                </p>
+              <div className="space-y-2.5">
+                <div>
+                  <Label>Strikes around ATM · per option segment</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    How many strikes above &amp; below ATM each option chain shows. Set independently for each segment.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {STRIKE_SEGMENTS.map((seg) => {
+                    const v = strikesBySeg[seg.key] ?? 15;
+                    return (
+                      <div key={seg.key} className="space-y-1">
+                        <Label className="text-[13px]">{seg.label}</Label>
+                        <Input
+                          type="number" min={1} max={100}
+                          value={v}
+                          onChange={(e) =>
+                            setStrikesBySeg((p) => ({ ...p, [seg.key]: Number(e.target.value || 1) }))
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          {v * 2 + 1} strikes (ATM ± {v})
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div className={cn("space-y-3", canOverride && !overrideMaxExpiries && "pointer-events-none opacity-50")}>
