@@ -263,6 +263,14 @@ export const AdminGamesAPI = {
   hierarchyEarnings: () => unwrap<any[]>(api.get("/admin/games/hierarchy-earnings")),
   releaseHierarchyEarnings: (userId: string, amount: number) =>
     unwrap<any>(api.post(`/admin/games/hierarchy-earnings/${userId}/release`, { amount })),
+  // Manual game entry — one NIFTY close drives all 3 nifty games; reverse on
+  // a wrong result (claws back payouts + clears declared).
+  manualEntry: (day?: string) =>
+    unwrap<any>(api.get("/admin/games/manual-entry", { params: day ? { day } : {} })),
+  manualEntryDeclare: (body: { day?: string; close_price: string }) =>
+    unwrap<any>(api.post("/admin/games/manual-entry/declare", body)),
+  manualEntryReverse: (day?: string) =>
+    unwrap<any>(api.post("/admin/games/manual-entry/reverse", { day })),
 };
 
 export const AdminMeAPI = {

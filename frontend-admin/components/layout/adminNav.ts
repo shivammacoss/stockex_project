@@ -149,6 +149,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     title: "Games",
     items: [
       { href: "/games/settings", label: "Game Settings", icon: Gamepad2, superOnly: true },
+      { href: "/games/manual-entry", label: "Manual Game Entry", icon: FlaskConical, superOnly: true },
       { href: "/games/withdrawals", label: "Games Withdrawals", icon: Wallet, superOnly: true },
       { href: "/games/earnings", label: "Games Earnings", icon: Handshake, superOnly: true },
       { href: "/games/monitor", label: "Live Bets", icon: Activity, superOnly: true },
