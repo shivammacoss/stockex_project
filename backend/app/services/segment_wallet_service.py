@@ -198,13 +198,17 @@ async def _cover_from_main(user_id: str | PydanticObjectId, kind: str) -> None:
             w = await get_or_create(user_id, kind)
             outstanding = to_decimal(w.settlement_outstanding)
             avail = to_decimal(w.available_balance)
-            pay_settle = quantize_money(min(cover, outstanding if outstanding > ZERO else ZERO))
-            remainder = sub(cover, pay_settle)
+            # Raise a NEGATIVE available back toward 0 FIRST (that's the minus the
+            # user sees on the wallet card), then pay down any settlement booking.
+            neg = (-avail) if avail < ZERO else ZERO
+            pay_neg = quantize_money(min(cover, neg))
+            remainder = sub(cover, pay_neg)
+            pay_settle = quantize_money(min(remainder, outstanding if outstanding > ZERO else ZERO))
             updated = await coll.find_one_and_update(
                 {"_id": w.id, "version": w.version},
                 {"$set": {
+                    "available_balance": to_decimal128(add(avail, pay_neg)),
                     "settlement_outstanding": to_decimal128(sub(outstanding, pay_settle)),
-                    "available_balance": to_decimal128(add(avail, remainder)),
                     "version": (w.version or 0) + 1,
                 }},
                 return_document=ReturnDocument.AFTER,
