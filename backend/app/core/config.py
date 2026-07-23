@@ -279,6 +279,13 @@ class Settings(BaseSettings):
     # rule (floor+book, or go negative). Default ON — flip OFF to keep trading
     # wallets fully isolated from MAIN.
     SEGMENT_SHORTFALL_COVER_FROM_MAIN: bool = True
+    # Extra delay (seconds) before the 3 Nifty games (Number/Jackpot/Bracket)
+    # settle, ON TOP of each game's result-time grace. Gives NSE's official
+    # "clearing" close (last-30-min VWAP, published a little after 15:30) time to
+    # land in the Zerodha REST quote, so the games settle on the SAME clearing
+    # price the broker terminal shows instead of a slightly-earlier tick. Results
+    # show ~this much later; raise if the feed is often late, lower for speed.
+    GAMES_NIFTY_CLEARING_DELAY_SEC: int = 90
 
     # ── Admin float / fund-cap (SA→admin allocation caps user funding) ───
     # When True, an admin/broker crediting a downline USER (deposit-approve,

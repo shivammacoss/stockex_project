@@ -328,7 +328,33 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
         if manual is not None and manual > 0:
             return await _converge(quantize_money(manual), pin_day=True)
 
-    # 0) Pinned official close for this day (set once from the REST quote below).
+    # 1) Live LTP ONLY while the market is OPEN — the exact price right now.
+    if is_market_open():
+        live = await nifty_ltp()
+        if live and live > 0:
+            return live
+
+    # 2) OFFICIAL NSE CLOSE = the Zerodha REST QUOTE's ltp after the session.
+    #    NSE computes an index's official close as the WEIGHTED AVERAGE of the
+    #    last 30 min (15:00–15:30) — the "clearing" price every broker terminal
+    #    shows — and it lands in the REST quote's `ltp` a short while after close.
+    #    We read this FRESH quote BEFORE the pin so the games converge onto the
+    #    real clearing the moment it publishes, even if an EARLIER resolve pinned
+    #    a pre-clearing tick while the feed was still catching up (the 22-Jul bug:
+    #    pinned 23,991.25 while the clearing was 23,996.25). Re-pins on success so
+    #    a later re-settle (quote gone → 0) still reads the correct value.
+    try:
+        from app.services import market_data_service
+
+        q = await market_data_service.get_quote(str(NIFTY_TOKEN))
+        qltp = to_decimal(q.get("ltp") or 0)
+        if qltp > 0:
+            return await _converge(quantize_money(qltp), pin_day=True)
+    except Exception:
+        logger.debug("nifty_price_at_quote_failed", exc_info=True)
+
+    # 0) Pinned official close — FALLBACK once the REST quote is gone (goes to 0
+    #    later in the evening / next day). Preserves the last good clearing.
     if not is_market_open():
         try:
             pinned = await cache_get(day_key)
@@ -338,32 +364,6 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
                     return pv
         except Exception:
             logger.debug("nifty_day_pin_read_failed", exc_info=True)
-
-    # 1) Live LTP ONLY while the market is OPEN — the exact price right now.
-    if is_market_open():
-        live = await nifty_ltp()
-        if live and live > 0:
-            return live
-
-    # 2) OFFICIAL NSE CLOSE = the Zerodha REST QUOTE's ltp after the session.
-    #    NSE computes an index's official close as the WEIGHTED AVERAGE of the
-    #    last 30 min (15:00–15:30) — NOT the last traded print. That official
-    #    value is what every broker terminal shows (2026-07-14: 24,072.75) and
-    #    it lands in the REST quote's `ltp` after close. The historical minute /
-    #    day candle only carries the last-TRADED close (24,081.10, ~8 pts higher)
-    #    — using it made the games settle at a different number than the admin's
-    #    terminal. Prefer the quote; NOT the frozen WS tick (get_ltp_instant),
-    #    which can lag — so we call get_quote (REST) directly.
-    try:
-        from app.services import market_data_service
-
-        q = await market_data_service.get_quote(str(NIFTY_TOKEN))
-        qltp = to_decimal(q.get("ltp") or 0)
-        if qltp > 0:
-            # PIN it for the day so a later re-settle (quote gone) stays correct.
-            return await _converge(quantize_money(qltp), pin_day=True)
-    except Exception:
-        logger.debug("nifty_price_at_quote_failed", exc_info=True)
 
     # STRICT (Number game): no last-traded / stale fallbacks — a wrong winning
     # digit is worse than a delayed result. Wait for the real official close.

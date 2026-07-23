@@ -109,6 +109,13 @@ async def declare_and_settle(game_key: str) -> int:
         return 0
 
     now = now_ist()
+    # Nifty jackpot waits an extra bit for NSE's official clearing close to land
+    # (BTC has an exact close). See config.GAMES_NIFTY_CLEARING_DELAY_SEC.
+    from app.core.config import settings as _app_settings
+
+    grace_sec = _RESULT_GRACE_SEC + (
+        _app_settings.GAMES_NIFTY_CLEARING_DELAY_SEC if game_key == "niftyJackpot" else 0
+    )
     result_t = parse_hms(cfg.result_time)
     banks = await JackpotBank.find(
         JackpotBank.game_key == game_key, JackpotBank.result_declared == False  # noqa: E712
@@ -121,7 +128,7 @@ async def declare_and_settle(game_key: str) -> int:
         result_dt = ist_datetime_for_day(bank.bet_date).replace(
             hour=result_t.hour, minute=result_t.minute, second=result_t.second
         )
-        if now < result_dt + timedelta(seconds=_RESULT_GRACE_SEC):
+        if now < result_dt + timedelta(seconds=grace_sec):
             continue
 
         if game_key == "btcJackpot":

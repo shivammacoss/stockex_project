@@ -248,6 +248,14 @@ async def declare_and_settle(game_key: str) -> int:
     ).to_list()
 
     now = now_ist()
+    # Nifty games wait an extra bit so NSE's official "clearing" close has time
+    # to land in the Zerodha quote before we settle (BTC has an exact close, so
+    # no extra delay). See config.GAMES_NIFTY_CLEARING_DELAY_SEC.
+    from app.core.config import settings as _app_settings
+
+    grace_sec = _RESULT_GRACE_SEC + (
+        _app_settings.GAMES_NIFTY_CLEARING_DELAY_SEC if game_key == "niftyNumber" else 0
+    )
     result_t = parse_hms(cfg.result_time)
     by_day: dict[str, list[NumberBet]] = {}
     for b in pending:
@@ -262,7 +270,7 @@ async def declare_and_settle(game_key: str) -> int:
         result_dt_today = ist_datetime_for_day(today).replace(
             hour=result_t.hour, minute=result_t.minute, second=result_t.second
         )
-        if now >= result_dt_today + timedelta(seconds=_RESULT_GRACE_SEC):
+        if now >= result_dt_today + timedelta(seconds=grace_sec):
             by_day[today] = []
 
     if not by_day:
@@ -273,7 +281,7 @@ async def declare_and_settle(game_key: str) -> int:
         result_dt = ist_datetime_for_day(day).replace(
             hour=result_t.hour, minute=result_t.minute, second=result_t.second
         )
-        if now < result_dt + timedelta(seconds=_RESULT_GRACE_SEC):
+        if now < result_dt + timedelta(seconds=grace_sec):
             continue
 
         close, result_number, source = await resolve_result(game_key, day, cfg, result_dt)
