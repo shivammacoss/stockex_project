@@ -156,6 +156,7 @@ function TimeField({
         <Clock className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           type="time"
+          step="1"
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}

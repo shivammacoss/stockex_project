@@ -32,8 +32,13 @@ def to_utc(dt: datetime) -> datetime:
 
 
 def parse_hhmm(value: str) -> time:
-    h, m = value.split(":", 1)
-    return time(int(h), int(m))
+    # Accepts HH:MM or HH:MM:SS (seconds optional). Splitting on ":" once and
+    # int()-ing the tail crashed on an "HH:MM:SS" value — now seconds are parsed.
+    parts = value.split(":")
+    h = int(parts[0])
+    m = int(parts[1]) if len(parts) > 1 else 0
+    s = int(parts[2]) if len(parts) > 2 else 0
+    return time(h, m, s)
 
 
 def market_open_time() -> time:

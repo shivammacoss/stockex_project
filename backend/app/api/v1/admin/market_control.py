@@ -63,10 +63,12 @@ async def set_market_control(
         row = MarketControl(segment_name=segment)
     if "enabled" in payload:
         row.enabled = bool(payload["enabled"])
+    # Keep up to HH:MM:SS (8 chars) so the super-admin can set seconds, not just
+    # HH:MM. parse_hhmm tolerates both when enforcing the window.
     if payload.get("open_time"):
-        row.open_time = str(payload["open_time"]).strip()[:5]
+        row.open_time = str(payload["open_time"]).strip()[:8]
     if payload.get("close_time"):
-        row.close_time = str(payload["close_time"]).strip()[:5]
+        row.close_time = str(payload["close_time"]).strip()[:8]
     await row.save()
     # Drop the enforcement cache so the change applies on the next order.
     try:
