@@ -16,7 +16,8 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter
 
 from app.core.dependencies import SuperAdmin
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.wallet import Wallet
 from app.schemas.admin.management import (
     AssignUserRequest,
     BulkAssignRequest,
@@ -94,6 +95,91 @@ def _ser_settlement(row, sa: User | None) -> SettlementDTO:
 
 
 # ── Sub-admin CRUD ───────────────────────────────────────────────────
+@router.get("/demo", response_model=APIResponse[dict])
+async def list_demo_accounts(
+    admin: SuperAdmin,
+    kind: str = "users",
+    status: str = "pending",
+    q: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """SUPER-ADMIN only. Demo accounts, split converted vs still-demo.
+
+    - ``kind``   = "users" (role CLIENT) | "brokers" (role BROKER)
+    - ``status`` = "pending" (still a demo, ``is_demo=True``) |
+                   "converted" (``demo_converted_at`` set, now real)
+
+    Also returns head-counts for all four tabs so the UI can badge them.
+    """
+    import re as _re
+
+    role = UserRole.BROKER.value if kind == "brokers" else UserRole.CLIENT.value
+    query: dict = {"role": role}
+    if status == "converted":
+        query["demo_converted_at"] = {"$ne": None}
+    else:
+        query["is_demo"] = True
+    if q:
+        rx = _re.compile(_re.escape(q.strip()), _re.IGNORECASE)
+        query["$or"] = [{"email": rx}, {"mobile": rx}, {"user_code": rx}, {"full_name": rx}]
+
+    total = await User.find(query).count()
+    rows = (
+        await User.find(query)
+        .sort("-created_at")
+        .skip((page - 1) * page_size)
+        .limit(page_size)
+        .to_list()
+    )
+    wallets = await Wallet.find({"user_id": {"$in": [r.id for r in rows]}}).to_list()
+    wmap = {str(w.user_id): w for w in wallets}
+    items = []
+    for u in rows:
+        w = wmap.get(str(u.id))
+        items.append(
+            {
+                "id": str(u.id),
+                "user_code": u.user_code,
+                "full_name": u.full_name,
+                "email": u.email,
+                "mobile": u.mobile,
+                "role": u.role.value,
+                "is_demo": bool(u.is_demo),
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "converted_at": u.demo_converted_at.isoformat() if u.demo_converted_at else None,
+                "wallet_balance": str(w.available_balance) if w else "0",
+            }
+        )
+
+    async def _count(r: str, conv: bool) -> int:
+        base: dict = {"role": r}
+        if conv:
+            base["demo_converted_at"] = {"$ne": None}
+        else:
+            base["is_demo"] = True
+        return await User.find(base).count()
+
+    counts = {
+        "users_pending": await _count(UserRole.CLIENT.value, False),
+        "users_converted": await _count(UserRole.CLIENT.value, True),
+        "brokers_pending": await _count(UserRole.BROKER.value, False),
+        "brokers_converted": await _count(UserRole.BROKER.value, True),
+    }
+    return APIResponse(
+        data={
+            "items": items,
+            "counts": counts,
+            "meta": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": (total + page_size - 1) // page_size,
+            },
+        }
+    )
+
+
 @router.get("/sub-admins", response_model=APIResponse[dict])
 async def list_sub_admins(
     admin: SuperAdmin,

@@ -20,12 +20,14 @@ from bson import Decimal128
 
 from app.core.dependencies import CurrentAdmin, SuperAdmin
 from app.models.admin_settlement import AdminSettlement
+from app.models.audit_log import AuditAction
 from app.models.broker_settlement import BrokerSettlement
 from app.models.transaction import TransactionType, WalletTransaction
 from app.models.user import User, UserRole
 from app.models.wallet import Wallet
 from app.schemas.common import APIResponse
 from app.services import wallet_service
+from app.services.audit_service import log_event
 from app.services.games import wallet_service as games_wallet_service
 from app.utils.decimal_utils import ZERO, to_decimal
 from fastapi import APIRouter, HTTPException, Query
@@ -77,6 +79,36 @@ async def update_my_profile(payload: dict, admin: CurrentAdmin):
     await user.save()
     return APIResponse(
         data={"id": str(user.id), "full_name": user.full_name, "city": user.city}
+    )
+
+
+@router.post("/convert-to-real", response_model=APIResponse[dict])
+async def convert_broker_to_real(admin: CurrentAdmin):
+    """Convert the logged-in DEMO BROKER into a real broker: zero the (virtual)
+    50L float, wipe its ledger, unlock full permissions (user-create), flip to
+    LIVE. Login + hierarchy (platform pool, under the super-admin) are kept, so
+    the broker carries on with a ₹0 float — funded later by the admin. 400 if the
+    caller isn't a demo broker."""
+    if admin.role != UserRole.BROKER or not getattr(admin, "is_demo", False):
+        raise HTTPException(status_code=400, detail="This is not a demo broker account.")
+    from app.services import demo_service
+
+    res = await demo_service.convert_demo_broker_to_real(admin)
+    if not res.get("converted"):
+        raise HTTPException(status_code=400, detail="Could not convert this account.")
+    try:
+        await log_event(
+            action=AuditAction.UPDATE,
+            entity_type="User",
+            entity_id=admin.id,
+            actor_id=admin.id,
+            new_values={"account_type": "LIVE", "is_demo": False, "role": "BROKER"},
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    return APIResponse(
+        data={"converted": True},
+        message="Your broker account is now real. Float is ₹0 — contact your admin to add funds. You can now create users.",
     )
 
 

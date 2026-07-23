@@ -9,6 +9,7 @@ otherwise no one could log in. We rely on rate-limiting + correct credentials
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, status
+from pydantic import BaseModel, EmailStr, Field
 
 from app.core.dependencies import CurrentAdmin
 from app.core.exceptions import InvalidCredentialsError
@@ -118,6 +119,7 @@ async def admin_login(payload: AdminLoginRequest, request: Request):
                 full_name=pair.user.full_name,
                 role=pair.user.role,
                 last_login_at=None,
+                is_demo=admin_user.is_demo,
                 admin_permissions=admin_user.admin_permissions,
                 pnl_share_pct=(
                     str(admin_user.pnl_share_pct)
@@ -159,6 +161,7 @@ async def admin_refresh(payload: RefreshRequest):
                 email=pair.user.email,
                 full_name=pair.user.full_name,
                 role=pair.user.role,
+                is_demo=admin_user.is_demo,
                 admin_permissions=admin_user.admin_permissions,
                 pnl_share_pct=(
                     str(admin_user.pnl_share_pct)
@@ -186,6 +189,70 @@ async def admin_logout(payload: LogoutRequest, admin: CurrentAdmin):
     return APIResponse(data=OkResponse(message="Admin logged out"))
 
 
+class BrokerDemoRegisterRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=128)
+    email: EmailStr
+    mobile: str = Field(pattern=r"^[6-9]\d{9}$")
+    password: str = Field(min_length=8)
+
+
+@router.post(
+    "/broker-demo-register",
+    response_model=APIResponse[AdminTokenPair],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[rate_limit("auth")],
+)
+async def broker_demo_register(payload: BrokerDemoRegisterRequest, request: Request):
+    """PUBLIC broker demo signup. Mints a personal DEMO BROKER (platform pool,
+    under the super-admin) pre-funded with 🪙50,00,000 virtual float, and logs in
+    to the admin app immediately. The demo broker sees the full broker dashboard
+    but CANNOT create users (→ "switch to real" popup); converting to real zeroes
+    the wallet and unlocks user creation."""
+    from app.services import demo_service
+
+    broker = await demo_service.create_demo_broker(
+        email=payload.email,
+        mobile=payload.mobile,
+        password=payload.password,
+        full_name=payload.full_name,
+    )
+    fresh = await User.get(broker.id) or broker
+    pair = await auth_service.mint_login_pair(
+        fresh,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+        audience="admin",
+    )
+    return APIResponse(
+        data=AdminTokenPair(
+            access_token=pair.access_token,
+            refresh_token=pair.refresh_token,
+            expires_in=pair.expires_in,
+            admin=AdminUserOut(
+                id=str(fresh.id),
+                user_code=fresh.user_code,
+                email=fresh.email,
+                full_name=fresh.full_name,
+                role=fresh.role.value,
+                last_login_at=None,
+                is_demo=fresh.is_demo,
+                admin_permissions=fresh.admin_permissions,
+                broker_permissions=fresh.broker_permissions,
+                pnl_share_pct=(
+                    str(fresh.broker_pnl_share_pct)
+                    if fresh.broker_pnl_share_pct is not None
+                    else None
+                ),
+                assigned_broker_id=(
+                    str(fresh.assigned_broker_id) if fresh.assigned_broker_id else None
+                ),
+                **(await _branding_fields_for(fresh)),
+            ),
+        ),
+        message="Demo broker account ready. 🪙50,00,000 virtual float credited.",
+    )
+
+
 @router.get("/me", response_model=APIResponse[AdminUserOut])
 async def admin_me(admin: CurrentAdmin):
     return APIResponse(
@@ -196,6 +263,7 @@ async def admin_me(admin: CurrentAdmin):
             full_name=admin.full_name,
             role=admin.role.value,
             last_login_at=admin.last_login_at.isoformat() if admin.last_login_at else None,
+            is_demo=admin.is_demo,
             admin_permissions=admin.admin_permissions,
             broker_permissions=admin.broker_permissions,
             pnl_share_pct=(

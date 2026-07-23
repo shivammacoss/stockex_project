@@ -259,6 +259,12 @@ class User(TimestampMixin):
     status: UserStatus = UserStatus.PENDING
     account_type: AccountType = AccountType.LIVE
     is_demo: bool = False
+    # Set the moment a demo account (client OR broker) is converted to real.
+    # `is_demo` flips False on convert, so this is the ONLY durable marker that
+    # a real account STARTED as a demo — the super-admin "Demo" section uses it
+    # to split "converted" from "still-demo" (is_demo=True). None = never a demo
+    # convert (either a native real account, or still a live demo).
+    demo_converted_at: datetime | None = None
 
     # Session epoch. Stamped into every access token as the `ver` claim;
     # the per-request auth dependency rejects any token whose `ver` doesn't

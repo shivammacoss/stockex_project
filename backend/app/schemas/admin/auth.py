@@ -38,6 +38,9 @@ class AdminUserOut(BaseModel):
     pnl_share_pct: str | None = None
     # Broker-tier gating: populated only for role == "BROKER".
     broker_permissions: BrokerPermissions | None = None
+    # True when this admin-tier account is a DEMO (currently only demo BROKERs).
+    # Frontend shows the "Switch to real" banner + blocks user-create for these.
+    is_demo: bool = False
     # Parent broker id — set when this BROKER was created under another
     # broker (i.e., they're a sub-broker). Frontend swaps the role chip
     # to "SUB-BROKER" when present.

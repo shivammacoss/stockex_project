@@ -12,14 +12,18 @@ from __future__ import annotations
 
 import logging
 
+from decimal import Decimal
+
 from bson import Decimal128
 
+from app.core.exceptions import AppError
 from app.models.order import Order
 from app.models.position import Position
 from app.models.trade import Trade
 from app.models.transaction import TransactionStatus, TransactionType, WalletTransaction
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services import wallet_service
+from app.utils.time_utils import now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +153,128 @@ async def convert_demo_to_real(user: User) -> dict:
 
     user.is_demo = False
     user.account_type = AccountType.LIVE
+    user.demo_converted_at = now_utc()
     await user.save()
 
     logger.info("demo_converted_to_real user=%s", uid)
+    return {"converted": True}
+
+
+# ── Demo BROKER lifecycle ────────────────────────────────────────────
+# A public "broker demo" signup mints a real BROKER row flagged is_demo, seeded
+# with 50 lakh virtual float, dropped into the platform pool (under the super-
+# admin). It gets the full broker dashboard EXCEPT the ability to create users
+# (users perm stays VIEW → the create endpoint 403s, the UI pops "switch to
+# real"). On convert the wallet is zeroed and users is unlocked to EDIT.
+_DEMO_BROKER_FUND = 5_000_000  # 🪙50,00,000 virtual
+
+
+def _demo_broker_permissions():
+    """Restricted broker permission set for a demo broker: sees everything, can
+    set its own bank + play with settings, but CANNOT create users (VIEW only,
+    while the create endpoint needs EDIT)."""
+    from app.models._base import PermissionLevel as P
+    from app.models.user import BrokerPermissions
+
+    return BrokerPermissions(
+        users=P.VIEW,  # see the Users section; CREATE blocked (needs EDIT) → popup
+        kyc=P.VIEW,
+        deposits=P.VIEW,
+        withdrawals=P.VIEW,
+        ledger=P.VIEW,
+        reports=P.VIEW,
+        trading_view=P.VIEW,
+        brokerage=P.VIEW,
+        sub_brokers=P.VIEW,
+        banks=P.EDIT,  # can set up their own bank
+        segment_settings=P.EDIT,
+        risk=P.EDIT,
+        netting=P.EDIT,
+    )
+
+
+def _real_broker_permissions():
+    """Full broker permission set granted on convert — unlocks user creation."""
+    from app.models._base import PermissionLevel as P
+    from app.models.user import BrokerPermissions
+
+    return BrokerPermissions(
+        users=P.EDIT,
+        kyc=P.EDIT,
+        deposits=P.EDIT,
+        withdrawals=P.EDIT,
+        ledger=P.EDIT,
+        reports=P.EDIT,
+        trading_view=P.EDIT,
+        brokerage=P.EDIT,
+        sub_brokers=P.EDIT,
+        banks=P.EDIT,
+        segment_settings=P.EDIT,
+        risk=P.EDIT,
+        netting=P.EDIT,
+    )
+
+
+async def create_demo_broker(*, email: str, mobile: str, password: str, full_name: str) -> User:
+    """Provision a personal DEMO BROKER (platform pool, under the super-admin),
+    pre-funded with 50 lakh virtual float. Restricted perms (no user-create).
+    Returns the new broker; the caller mints the admin token pair."""
+    from app.models.user import AccountType
+    from app.services import broker_management_service
+
+    sa = await User.find_one(User.role == UserRole.SUPER_ADMIN)
+    if sa is None:
+        raise AppError("Broker demo signup is unavailable — no super-admin configured.")
+
+    broker = await broker_management_service.create_broker(
+        creator=sa,
+        email=email,
+        mobile=mobile,
+        password=password,
+        full_name=full_name,
+        permissions=_demo_broker_permissions(),
+        pnl_share_pct=Decimal("0"),
+    )
+    broker.is_demo = True
+    broker.account_type = AccountType.DEMO
+    await broker.save()
+    await wallet_service.adjust(
+        broker.id,
+        _DEMO_BROKER_FUND,
+        transaction_type=TransactionType.BONUS,
+        narration="Demo broker virtual credit",
+    )
+    logger.info("demo_broker_created broker=%s", broker.id)
+    return broker
+
+
+async def convert_demo_broker_to_real(broker: User) -> dict:
+    """Convert a personal DEMO BROKER into a real broker: zero the (virtual)
+    wallet, wipe its ledger, unlock full permissions (user-create), flip to
+    LIVE. Login + hierarchy (platform pool, under the super-admin) are kept, so
+    it carries on as a real broker with a ₹0 float — funded later by the admin."""
+    if not getattr(broker, "is_demo", False) or broker.role != UserRole.BROKER:
+        return {"converted": False, "reason": "not a demo broker"}
+
+    from app.models.user import AccountType
+
+    uid = broker.id
+    wallet = await wallet_service.get_or_create(uid)
+    wallet.available_balance = _ZERO
+    wallet.used_margin = _ZERO
+    wallet.settlement_outstanding = _ZERO
+    if hasattr(wallet, "temporary_balance"):
+        wallet.temporary_balance = _ZERO
+    wallet.version = (wallet.version or 0) + 1
+    await wallet.save()
+    await WalletTransaction.find(WalletTransaction.user_id == uid).delete()
+
+    broker.is_demo = False
+    broker.account_type = AccountType.LIVE
+    broker.demo_converted_at = now_utc()
+    broker.broker_permissions = _real_broker_permissions()
+    await broker.save()
+    logger.info("demo_broker_converted_to_real broker=%s", uid)
     return {"converted": True}
 
 
