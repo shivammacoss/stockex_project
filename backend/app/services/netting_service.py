@@ -2541,6 +2541,7 @@ def _to_legacy_dict(
         "swap_long": float(pick("swapLong", 0.0) or 0.0),
         "swap_short": float(pick("swapShort", 0.0) or 0.0),
         "swap_time": str(pick("swapTime", "22:30")),
+        "carry_forward_charge_percent": float(pick("carryForwardChargePercent", 0.0) or 0.0),
         "charge_on": str(pick("chargeOn", "both")),
     }
 

@@ -221,6 +221,10 @@ class NettingFieldsBase(BaseModel):
     swapLong: float | None = None
     swapShort: float | None = None
     swapTime: str | None = None  # HH:MM IST
+    # Carry-forward (overnight) charge: % of position notional debited when an
+    # open position is carried past the segment's close into the next day
+    # (charged once, at the intraday→carry rollover). 0 / None = no charge.
+    carryForwardChargePercent: float | None = None
     # Block
     isActive: bool | None = None
     tradingEnabled: bool | None = None
@@ -310,6 +314,8 @@ class NettingFieldsRequired(BaseModel):
     swapLong: float = 0.0
     swapShort: float = 0.0
     swapTime: str = "22:30"
+    # % of notional charged when a position is carried overnight (0 = none).
+    carryForwardChargePercent: float = 0.0
     # Block
     isActive: bool = True
     tradingEnabled: bool = True

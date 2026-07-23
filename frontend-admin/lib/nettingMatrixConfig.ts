@@ -163,6 +163,7 @@ export const CATEGORY_FIELDS: Record<string, FieldDef[]> = {
     { key: "swapLong", label: "Swap Long", type: "number" },
     { key: "swapShort", label: "Swap Short", type: "number" },
     { key: "swapTime", label: "Swap Time (IST)", type: "time" },
+    { key: "carryForwardChargePercent", label: "Carry Fwd Charge (%)", type: "number" },
   ],
   block: [
     {

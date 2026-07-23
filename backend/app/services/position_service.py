@@ -1405,6 +1405,46 @@ async def list_holdings(user_id: str | PydanticObjectId) -> list[Holding]:
 
 
 # ── Intraday → carryforward auto-rollover ───────────────────────────
+async def _charge_carry_forward(pos, s: dict) -> None:
+    """Debit the segment's carry-forward charge — % of the position's notional —
+    for holding it overnight. Called once per position per rollover (both a
+    MIS→NRML conversion and an already-NRML carry). No-op when the % is 0."""
+    import logging as _lg
+
+    try:
+        pct = float((s or {}).get("carry_forward_charge_percent") or 0.0)
+    except (TypeError, ValueError):
+        pct = 0.0
+    if pct <= 0:
+        return
+    try:
+        from app.models.transaction import TransactionType
+        from app.services import wallet_router
+
+        price = to_decimal(pos.ltp)
+        if price <= ZERO:
+            price = to_decimal(pos.avg_price)
+        notional = abs(to_decimal(pos.quantity)) * price
+        charge = quantize_money(notional * to_decimal(pct) / to_decimal(100))
+        if charge <= ZERO:
+            return
+        await wallet_router.adjust(
+            pos.user_id,
+            pos.segment_type,
+            -charge,
+            transaction_type=TransactionType.ADJUSTMENT,
+            narration=f"Carry-forward charge {pct:g}% · {pos.instrument.symbol}",
+        )
+        _lg.getLogger(__name__).info(
+            "carry_forward_charged user=%s sym=%s pct=%s charge=%s",
+            pos.user_id, pos.instrument.symbol, pct, charge,
+        )
+    except Exception:
+        _lg.getLogger(__name__).exception(
+            "carry_forward_charge_failed pos=%s", getattr(pos, "id", None)
+        )
+
+
 async def convert_intraday_to_carry(segment_set: frozenset[str] | set[str]) -> dict[str, int]:
     """At market close for a segment group, flip every open MIS position in
     that group to NRML. For each position we re-resolve the NRML margin
@@ -1653,6 +1693,11 @@ async def convert_intraday_to_carry(segment_set: frozenset[str] | set[str]) -> d
             except Exception:  # noqa: BLE001
                 skipped += 1
             continue
+
+        # This position IS carrying overnight (it passed the affordability
+        # check above). Debit the segment's carry-forward charge (% of notional)
+        # once — for BOTH a MIS→NRML conversion and an already-NRML carry.
+        await _charge_carry_forward(pos, s)
 
         # Affordable + already NRML → nothing to do (it's already carrying
         # on overnight margin; we don't re-lock the affordable ones to avoid
