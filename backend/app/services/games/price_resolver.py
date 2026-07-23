@@ -347,9 +347,40 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
         from app.services import market_data_service
 
         q = await market_data_service.get_quote(str(NIFTY_TOKEN))
-        qltp = to_decimal(q.get("ltp") or 0)
-        if qltp > 0:
-            return await _converge(quantize_money(qltp), pin_day=True)
+        qltp = quantize_money(to_decimal(q.get("ltp") or 0))
+        fresh = qltp > 0 and not q.get("stale")
+        if fresh and not strict:
+            # Live-display / bracket-live path — use the fresh value immediately.
+            return await _converge(qltp, pin_day=True)
+        if fresh and strict:
+            # SETTLEMENT stability gate: only lock the clearing once the fresh
+            # quote has held the SAME value for `stable_window` seconds. NSE
+            # publishes the clearing (last-30-min VWAP) a little after 15:30 and
+            # the quote keeps updating until it lands on it — settling on the
+            # first tick can catch a PRE-clearing value (22-Jul: 23,991.25 before
+            # 23,996.25). So we wait for it to stop moving, however long the feed
+            # takes to connect properly. Feed down / stale (ltp 0) → not `fresh`,
+            # so the candidate is left untouched and we keep waiting.
+            import time as _time
+
+            from app.core.config import settings as _cfg
+
+            stable_window = int(_cfg.GAMES_NIFTY_CLEARING_DELAY_SEC or 0)
+            stab_key = f"games:nifty:candidate:{ist_day}"
+            nowt = _time.time()
+            try:
+                rec = await cache_get(stab_key)
+            except Exception:
+                rec = None
+            same = bool(rec) and to_decimal(rec.get("v") or 0) == qltp
+            if same and (nowt - float(rec.get("t") or 0)) >= stable_window:
+                return await _converge(qltp, pin_day=True)  # stable → the clearing
+            if not same:
+                try:
+                    await cache_set(stab_key, {"v": str(qltp), "t": nowt}, ttl_sec=21600)
+                except Exception:
+                    pass
+            # else: same value but not stable long enough yet → fall through, wait
     except Exception:
         logger.debug("nifty_price_at_quote_failed", exc_info=True)
 

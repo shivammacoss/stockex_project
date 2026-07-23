@@ -279,12 +279,14 @@ class Settings(BaseSettings):
     # rule (floor+book, or go negative). Default ON — flip OFF to keep trading
     # wallets fully isolated from MAIN.
     SEGMENT_SHORTFALL_COVER_FROM_MAIN: bool = True
-    # Extra delay (seconds) before the 3 Nifty games (Number/Jackpot/Bracket)
-    # settle, ON TOP of each game's result-time grace. Gives NSE's official
-    # "clearing" close (last-30-min VWAP, published a little after 15:30) time to
-    # land in the Zerodha REST quote, so the games settle on the SAME clearing
-    # price the broker terminal shows instead of a slightly-earlier tick. Results
-    # show ~this much later; raise if the feed is often late, lower for speed.
+    # Stability window (seconds) for the 3 Nifty games' clearing close. At
+    # settlement the resolver reads the fresh Zerodha quote but only LOCKS it
+    # once the value has held STEADY for this long — so it never settles on a
+    # pre-clearing tick or a flaky-feed value. NSE's official clearing close
+    # (last-30-min VWAP) lands a little after 15:30 and the quote keeps moving
+    # until it settles on it; we wait for it to stop moving, HOWEVER long the
+    # feed takes to connect properly (feed down → keeps waiting). Correctness
+    # over speed. Raise for a stricter wait, lower for faster results.
     GAMES_NIFTY_CLEARING_DELAY_SEC: int = 90
 
     # ── Admin float / fund-cap (SA→admin allocation caps user funding) ───

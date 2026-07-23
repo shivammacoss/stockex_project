@@ -131,14 +131,12 @@ async def declare_and_settle() -> int:
     if cfg is None or not cfg.enabled:
         return 0
 
-    # Wait an extra bit past expiry so NSE's official clearing close has time to
-    # land before we resolve (same value the Number/Jackpot games settle on).
-    from app.core.config import settings as _app_settings
-
-    _cutoff = now_utc() - timedelta(seconds=_app_settings.GAMES_NIFTY_CLEARING_DELAY_SEC)
+    # The resolver's stability gate waits for the official clearing close before
+    # it returns a value, so we resolve as soon as trades expire and let the
+    # resolver hold until the clearing lands.
     due = await BracketTrade.find(
         BracketTrade.status == GameBetStatus.PENDING,
-        BracketTrade.expires_at <= _cutoff,
+        BracketTrade.expires_at <= now_utc(),
     ).limit(_MAX_PER_TICK).to_list()
     if not due:
         return 0
