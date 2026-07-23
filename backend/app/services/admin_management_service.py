@@ -86,6 +86,26 @@ async def create_sub_admin(
             sa.fixed_brokerage_unit = fixed_brokerage_unit
         if fixed_brokerage_rate is not None:
             sa.fixed_brokerage_rate = to_decimal128(fixed_brokerage_rate)
+
+    # Copy the super-admin's AUTO-SETTLEMENT policy (pool on/off + the per-wallet
+    # `kinds` map) onto the new admin so it starts identical to the SA — the
+    # third global toggle alongside the segment + risk snapshot below. Segment &
+    # risk are materialised into the new admin's own tables (snapshot_for_new_
+    # admin); auto-settlement lives on the User doc, so copy it here. The SA can
+    # still change the new admin's toggle afterwards; later SA edits don't
+    # cascade (same snapshot policy). Default was `True`, so without this an
+    # admin created while the SA had settlement OFF wrongly started ON.
+    try:
+        creator = await User.get(created_by)
+        if creator is not None and creator.role == UserRole.SUPER_ADMIN:
+            sa.pool_auto_settlement = bool(creator.pool_auto_settlement)
+            sa.pool_auto_settlement_kinds = dict(creator.pool_auto_settlement_kinds or {})
+    except Exception:  # noqa: BLE001 — never block admin creation on this copy
+        import logging as _lg
+
+        _lg.getLogger(__name__).exception(
+            "auto_settlement_copy_failed_on_admin_create admin=%s", sa.id
+        )
     await sa.save()
 
     # Snapshot the super-admin's current effective settings (segments
