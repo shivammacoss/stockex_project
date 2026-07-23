@@ -123,9 +123,17 @@ async def list_platform_settings(admin: CurrentAdmin, category: str | None = Non
 async def update_platform_setting(key: str, payload: UpdatePlatformSettingRequest, admin: CurrentAdmin):
     s = await PlatformSetting.find_one(PlatformSetting.setting_key == key)
     if s is None:
-        raise HTTPException(status_code=404, detail="Setting not found")
-    s.setting_value = payload.setting_value
-    await s.save()
+        # Upsert — a super-admin setting a brand-new platform key (e.g. the new
+        # per-segment option-chain strikes) CREATES it instead of 404ing. The
+        # category is the key's dotted prefix so it lists under the same group.
+        category = key.split(".", 1)[0] if "." in key else "general"
+        s = PlatformSetting(
+            setting_key=key, setting_value=payload.setting_value, category=category
+        )
+        await s.insert()
+    else:
+        s.setting_value = payload.setting_value
+        await s.save()
     await log_event(
         action=AuditAction.SETTING_CHANGE,
         entity_type="PlatformSetting",
