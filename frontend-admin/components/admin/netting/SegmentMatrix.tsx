@@ -35,15 +35,20 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
     return seg[key];
   }
 
-  // LOT category only: split the Index Option row into Buy + Sell, each editing
-  // the per-side lot fields (optionBuyMinLots / optionSellMinLots …). Every
-  // other segment/category stays one row editing the field directly.
-  const SPLIT_SEG = "NSE_IDX_OPT";
+  // LOT category only: split EVERY option segment (NSE stock/index option, BSE
+  // option, MCX option, crypto option — anything with optionApplies) into Buy +
+  // Sell rows, each editing the per-side lot fields (optionBuyMinLots /
+  // optionSellMinLots …). Every non-option segment/category stays one row
+  // editing the field directly. The backend resolver already applies
+  // optionBuy*/optionSell* per option order for ANY option segment (it keys off
+  // the order's CE/PE + BUY/SELL, not the segment name), so once the admin sets
+  // a per-side value here it is enforced live. Unset per-side fields fall back
+  // to the segment-wide lot, so existing single-row values keep applying.
   function keyFor(sub: string | null, key: string) {
     return sub ? `${sub}${key[0].toUpperCase()}${key.slice(1)}` : key;
   }
   function expand(seg: any): Array<{ label: string; sub: string | null }> {
-    if (categoryId === "lot" && seg.name === SPLIT_SEG) {
+    if (categoryId === "lot" && seg.optionApplies) {
       return [
         { label: `${seg.displayName} · Buy`, sub: "optionBuy" },
         { label: `${seg.displayName} · Sell`, sub: "optionSell" },
