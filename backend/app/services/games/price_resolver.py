@@ -361,26 +361,40 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
             # 23,996.25). So we wait for it to stop moving, however long the feed
             # takes to connect properly. Feed down / stale (ltp 0) → not `fresh`,
             # so the candidate is left untouched and we keep waiting.
-            import time as _time
-
-            from app.core.config import settings as _cfg
-
-            stable_window = int(_cfg.GAMES_NIFTY_CLEARING_DELAY_SEC or 0)
-            stab_key = f"games:nifty:candidate:{ist_day}"
-            nowt = _time.time()
+            # Guard: only trust the value when the Zerodha SESSION is actually
+            # live. A disconnected session returns a FROZEN last value (non-zero,
+            # NOT flagged stale) that would otherwise look "stable" and settle on
+            # the wrong close (23-Jul: session down → frozen 23,869.60 locked
+            # instead of the real clearing). Session down → don't touch the
+            # candidate, keep waiting; the operator declares via Manual Game Entry.
             try:
-                rec = await cache_get(stab_key)
+                from app.services.zerodha_service import zerodha as _zs
+
+                session_live = bool(getattr(_zs, "access_token", None))
             except Exception:
-                rec = None
-            same = bool(rec) and to_decimal(rec.get("v") or 0) == qltp
-            if same and (nowt - float(rec.get("t") or 0)) >= stable_window:
-                return await _converge(qltp, pin_day=True)  # stable → the clearing
-            if not same:
+                session_live = False
+
+            if session_live:
+                import time as _time
+
+                from app.core.config import settings as _cfg
+
+                stable_window = int(_cfg.GAMES_NIFTY_CLEARING_DELAY_SEC or 0)
+                stab_key = f"games:nifty:candidate:{ist_day}"
+                nowt = _time.time()
                 try:
-                    await cache_set(stab_key, {"v": str(qltp), "t": nowt}, ttl_sec=21600)
+                    rec = await cache_get(stab_key)
                 except Exception:
-                    pass
-            # else: same value but not stable long enough yet → fall through, wait
+                    rec = None
+                same = bool(rec) and to_decimal(rec.get("v") or 0) == qltp
+                if same and (nowt - float(rec.get("t") or 0)) >= stable_window:
+                    return await _converge(qltp, pin_day=True)  # stable → the clearing
+                if not same:
+                    try:
+                        await cache_set(stab_key, {"v": str(qltp), "t": nowt}, ttl_sec=21600)
+                    except Exception:
+                        pass
+                # else: same value but not stable long enough yet → wait
     except Exception:
         logger.debug("nifty_price_at_quote_failed", exc_info=True)
 
