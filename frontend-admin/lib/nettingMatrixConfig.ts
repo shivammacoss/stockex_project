@@ -178,6 +178,29 @@ export const CATEGORY_FIELDS: Record<string, FieldDef[]> = {
       key: "tradingEnabled",
       label: "Trading Enabled",
       type: "select",
+      // Non-option segments use ONE trading toggle; option segments split it
+      // into Buy / Sell below so an admin can block only one side.
+      notForOption: true,
+      options: [
+        { v: true, l: "Yes" },
+        { v: false, l: "No" },
+      ],
+    },
+    {
+      key: "optionBuyTradingEnabled",
+      label: "Buy Enabled",
+      type: "select",
+      optionOnly: true,
+      options: [
+        { v: true, l: "Yes" },
+        { v: false, l: "No" },
+      ],
+    },
+    {
+      key: "optionSellTradingEnabled",
+      label: "Sell Enabled",
+      type: "select",
+      optionOnly: true,
       options: [
         { v: true, l: "Yes" },
         { v: false, l: "No" },

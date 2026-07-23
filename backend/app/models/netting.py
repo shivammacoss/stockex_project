@@ -224,6 +224,12 @@ class NettingFieldsBase(BaseModel):
     # Block
     isActive: bool | None = None
     tradingEnabled: bool | None = None
+    # Per-side block for OPTION segments — lets an admin pause only BUY or only
+    # SELL new entries (e.g. block option WRITING but allow buying). Resolved
+    # per order: a BUY reads optionBuyTradingEnabled, a SELL optionSellTrading-
+    # Enabled; when unset they fall back to the segment-wide tradingEnabled.
+    optionBuyTradingEnabled: bool | None = None
+    optionSellTradingEnabled: bool | None = None
     allowOvernight: bool | None = None
     # Expiry day
     expiryProfitHoldMinSeconds: int | None = None
@@ -307,6 +313,10 @@ class NettingFieldsRequired(BaseModel):
     # Block
     isActive: bool = True
     tradingEnabled: bool = True
+    # None → the side inherits the segment-wide tradingEnabled (default: both
+    # allowed). Set to block only BUY or only SELL new option entries.
+    optionBuyTradingEnabled: bool | None = None
+    optionSellTradingEnabled: bool | None = None
     allowOvernight: bool = True
     # Expiry day
     expiryProfitHoldMinSeconds: int = 0

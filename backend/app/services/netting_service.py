@@ -2450,15 +2450,28 @@ def _to_legacy_dict(
                 pass
         return fallback
 
+    # Per-side option BLOCK: an option BUY reads optionBuyTradingEnabled, a SELL
+    # optionSellTradingEnabled; when unset (None) fall back to the segment-wide
+    # tradingEnabled. Non-option orders always use the segment-wide flag. Lets an
+    # admin pause ONLY buying or ONLY writing (selling) of an option segment.
+    _seg_trading = bool(pick("tradingEnabled", True))
+    if is_option_buy:
+        _side_te = pick("optionBuyTradingEnabled", None)
+    elif is_option_sell:
+        _side_te = pick("optionSellTradingEnabled", None)
+    else:
+        _side_te = None
+    _trading_enabled = bool(_side_te) if _side_te is not None else _seg_trading
+
     return {
         # legacy 22-field shape (and a few netting-only extras)
         # `allow` is the combined gate for backwards-compat (OrderPanel reads
         # it for the "no trading" warning). Two flags are also exposed
         # separately so the validator can permit closing trades even when
         # `tradingEnabled = false` — see admin Block settings spec.
-        "allow": bool(pick("tradingEnabled", True)) and bool(pick("isActive", True)),
+        "allow": _trading_enabled and bool(pick("isActive", True)),
         "is_active": bool(pick("isActive", True)),
-        "trading_enabled": bool(pick("tradingEnabled", True)),
+        "trading_enabled": _trading_enabled,
         "commission_type": legacy_commission_type,
         "commission_value": commission_value,
         "min_brokerage": 0.0,
