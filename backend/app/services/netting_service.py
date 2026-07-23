@@ -115,18 +115,18 @@ def clamp_child_patch(patch: dict, parent: dict) -> tuple[dict, list[str]]:
         if k in _BROKERAGE_FIELDS:
             if child_ct == parent_ct and v < pv:  # brokerage floor
                 out[k] = pv
-                notes.append(f"{k} raised to parent brokerage floor {pv}")
+                notes.append(f"{k}: minimum brokerage allowed is {pv}")
         elif k in _MARGIN_FIELDS:
             is_times = (mode == "times") or (mode is None and (v > 100 or pv > 100))
             if is_times and v > pv:  # leverage ceiling
                 out[k] = pv
-                notes.append(f"{k} capped to parent leverage {pv}")
+                notes.append(f"{k}: maximum leverage allowed is {pv}")
             elif not is_times and v < pv:  # margin-required floor
                 out[k] = pv
-                notes.append(f"{k} raised to parent margin {pv}")
+                notes.append(f"{k}: minimum margin allowed is {pv}")
         elif v > pv:  # generic ceiling
             out[k] = pv
-            notes.append(f"{k} capped to parent limit {pv}")
+            notes.append(f"{k}: maximum allowed is {pv}")
     return out, notes
 
 

@@ -200,7 +200,16 @@ async def update_segment(
             raise HTTPException(status_code=400, detail=mode_err)
         parent_eff = await svc.resolve_parent_effective_segment(admin, seg.name)
         if parent_eff:
-            patch, _clamp_notes = svc.clamp_child_patch(patch, parent_eff)
+            _clamped, _clamp_notes = svc.clamp_child_patch(patch, parent_eff)
+            # The super-admin's tier is the CEILING/FLOOR. If the admin tries to
+            # save a value past it, REJECT with a clear "not allowed" popup rather
+            # than silently clamping — so they know their change didn't stick.
+            if _clamp_notes:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Not allowed — these exceed the limits set by your super-admin: "
+                    + "; ".join(_clamp_notes),
+                )
     if admin.role == UserRole.SUPER_ADMIN:
         over = await svc.upsert_super_admin_segment_override(admin.id, seg.name, patch)
         scope = "SUPER_ADMIN"

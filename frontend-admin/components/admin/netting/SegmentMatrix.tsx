@@ -3,10 +3,18 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, ShieldAlert } from "lucide-react";
 import { NettingAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { CATEGORY_FIELDS, isFieldNA, type SegmentRow } from "@/lib/nettingMatrixConfig";
 import { Cell } from "./Cell";
 import { useAdminAuthStore } from "@/stores/authStore";
@@ -26,6 +34,7 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
 
   const [edits, setEdits] = useState<Record<string, Record<string, any>>>({});
   const [saving, setSaving] = useState(false);
+  const [notAllowed, setNotAllowed] = useState<string | null>(null);
 
   function setEdit(segId: string, key: string, val: any) {
     setEdits((prev) => ({ ...prev, [segId]: { ...(prev[segId] || {}), [key]: val } }));
@@ -136,9 +145,15 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
         Object.fromEntries(Object.entries(prev).filter(([k]) => failedIds.has(k))),
       );
       const firstErr = (failedIdx[0].r as PromiseRejectedResult).reason;
-      toast.error(
-        `${failedIdx.length} of ${ids.length} didn't save: ${firstErr?.message || "error"}`,
-      );
+      const msg = firstErr?.message || "error";
+      // A super-admin limit violation comes back as "Not allowed — …". Surface
+      // it as a blocking popup (not a fleeting toast) so the admin clearly sees
+      // their change was rejected and why.
+      if (/not allowed/i.test(msg)) {
+        setNotAllowed(msg);
+      } else {
+        toast.error(`${failedIdx.length} of ${ids.length} didn't save: ${msg}`);
+      }
     }
     setSaving(false);
   }
@@ -147,6 +162,30 @@ export function SegmentMatrix({ categoryId, subAdminId }: { categoryId: string; 
 
   return (
     <div className="space-y-3">
+      {/* Blocking "not allowed" popup — shown when a save is rejected for
+          exceeding the super-admin's segment limits. */}
+      <Dialog open={!!notAllowed} onOpenChange={(v) => !v && setNotAllowed(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="size-5 text-destructive" /> Not allowed
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-1">
+              <span className="block">
+                Your super-admin has set limits for these settings — your change goes past them, so it wasn&apos;t saved.
+              </span>
+              <span className="block rounded-lg border border-border bg-muted/30 p-2.5 text-[13px] leading-relaxed text-foreground">
+                {(notAllowed || "").replace(/^Not allowed — /i, "")}
+              </span>
+              <span className="block text-[12px]">Adjust the value within the allowed limit and save again.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setNotAllowed(null)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-end">
         <Button
           onClick={saveAll}
