@@ -93,23 +93,27 @@ export function WinningDigitsPrice({
   const grouped = Math.floor(v).toLocaleString("en-IN");
   const decimals = v.toFixed(2).split(".")[1] ?? "00";
 
+  // Winning digits POP: bigger + extrabold + glow. Everything else is
+  // de-emphasised (smaller + lighter) so the eye lands on the digits that win.
   const winCls = cn(
-    "inline-block text-sell font-extrabold transition-transform duration-300 drop-shadow-[0_0_10px_rgba(224,79,95,0.45)]",
+    "inline-block align-baseline text-sell font-extrabold text-[1.18em] leading-none transition-transform duration-300 drop-shadow-[0_0_10px_rgba(224,79,95,0.45)]",
     pop ? "scale-[1.35]" : "scale-100",
   );
+  const dimCls = "align-baseline text-[0.72em] font-semibold text-foreground/70";
+  const dotCls = "align-baseline text-[0.6em] text-muted-foreground";
 
   return (
-    <span className={cn("tabular-nums", className)}>
+    <span className={cn("inline-flex items-baseline tabular-nums", className)}>
       {mode === "btc" ? (
         <>
-          {grouped.slice(0, -2)}
+          <span className={dimCls}>{grouped.slice(0, -2)}</span>
           <span className={winCls}>{grouped.slice(-2)}</span>
-          <span className="text-muted-foreground">.{decimals}</span>
+          <span className={dotCls}>.{decimals}</span>
         </>
       ) : (
         <>
-          {grouped}
-          <span className="text-muted-foreground">.</span>
+          <span className={dimCls}>{grouped}</span>
+          <span className={dotCls}>.</span>
           <span className={winCls}>{decimals}</span>
         </>
       )}
