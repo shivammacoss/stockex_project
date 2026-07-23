@@ -9,6 +9,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ArrowLeftRight,
+  Info,
   LineChart,
   Layers,
   Minus,
@@ -204,6 +205,7 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
   // Option-chain picker open state. Only meaningful for Indian
   // equity/index/future rows (see `showOptionChain` below).
   const [optionChainOpen, setOptionChainOpen] = useState(false);
+  const [showScriptInfo, setShowScriptInfo] = useState(false);
   // True for ~250 ms while the in-sheet OptionChainPicker is swapping
   // the parent's `token` to a freshly-picked strike. Used by the outer
   // Dialog's `onOpenChange` below to ignore the spurious close event
@@ -1012,13 +1014,28 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
 
         <div className="my-3 h-px bg-border" />
 
-        {/* ── Lot info row ────────────────────────────────────────── */}
-        <div className="flex items-end gap-3 px-4">
-          <div className="flex flex-1 gap-4 text-[11px]">
+        {/* ── Lot / script-info row ───────────────────────────────── */}
+        <div className="flex items-end gap-2 px-4">
+          <div className="flex flex-1 flex-wrap gap-x-4 gap-y-1 text-[11px]">
+            <LotMeta label="Min Lots" value={minLot > 0 ? String(minLot) : "—"} />
             <LotMeta label="Max Lots" value={maxLotTotal > 0 ? String(maxLotTotal) : "—"} />
             <LotMeta label="Order Lots" value={maxLotPerOrder > 0 ? String(maxLotPerOrder) : "—"} />
             <LotMeta label="Lot Size" value={String(lotSize)} />
           </div>
+          {/* Script info toggle — shows this instrument's trading limits */}
+          <button
+            type="button"
+            onClick={() => setShowScriptInfo((v) => !v)}
+            aria-label="Script info"
+            aria-expanded={showScriptInfo}
+            className={`flex size-8 items-center justify-center rounded-md border transition-colors ${
+              showScriptInfo
+                ? "border-mp-primary/50 bg-mp-primary/10 text-mp-primary"
+                : "border-border bg-card text-muted-foreground hover:bg-muted/40"
+            }`}
+          >
+            <Info className="size-4" />
+          </button>
           <button
             type="button"
             onClick={() => setUnit((u) => (u === "LOTS" ? "QTY" : "LOTS"))}
@@ -1028,6 +1045,28 @@ function TradeDetailSheetInner({ token, open, onClose, onSwap, initialSide, seed
             {unit === "LOTS" ? "Qty" : "Lots"}
           </button>
         </div>
+
+        {/* Script info — trading limits for THIS instrument (client-facing) */}
+        {showScriptInfo && (
+          <div className="mx-4 mt-2 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+              <Info className="size-3.5 text-mp-primary" /> Script info
+              <span className="truncate font-normal text-muted-foreground">· {instrument?.symbol}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <ScriptInfoRow label="Min order" value={`${minLot} lot${minLot === 1 ? "" : "s"}`} />
+              <ScriptInfoRow
+                label="Max per order"
+                value={maxLotPerOrder > 0 ? `${maxLotPerOrder} lots` : "No limit"}
+              />
+              <ScriptInfoRow
+                label="Max lots / script"
+                value={maxLotTotal > 0 ? `${maxLotTotal} lots` : "No limit"}
+              />
+              <ScriptInfoRow label="Lot size" value={`${lotSize} qty`} />
+            </div>
+          </div>
+        )}
 
         {/* ── Price + Lot stepper ─────────────────────────────────── */}
         <div className="mt-3 grid grid-cols-2 gap-2 px-4">
@@ -1334,6 +1373,15 @@ function LotMeta({ label, value }: { label: string; value: string }) {
     <div>
       <div className="text-muted-foreground">{label}</div>
       <div className="font-tabular text-base font-bold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function ScriptInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="font-tabular text-[11px] font-bold tabular-nums text-foreground">{value}</span>
     </div>
   );
 }
