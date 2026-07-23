@@ -437,6 +437,30 @@ class BinanceOptionsService:
                         upserts += 1
             except Exception:
                 logger.debug("binance_option_mirror_failed sym=%s", sym, exc_info=True)
+        # Deactivate any previously-mirrored option that is NO LONGER in the
+        # windowed universe — spot drifted out of its strike, or it expired /
+        # settled on Binance. Otherwise those rows linger in the marketwatch /
+        # option chain showing 0.00 forever (the feed only prices the current
+        # window, e.g. spot fell to ~49.9k so the old 61k–64k strikes stopped
+        # being priced). Guarded on a non-empty universe so a transient empty
+        # refresh never deactivates everything.
+        try:
+            keep = list(self._universe.keys())
+            if keep:
+                coll = Instrument.get_motor_collection()
+                res = await coll.update_many(
+                    {
+                        "segment": SegmentType.CRYPTO_OPTION_BUY.value,
+                        "token": {"$nin": keep},
+                        "is_active": True,
+                    },
+                    {"$set": {"is_active": False, "is_tradable": False}},
+                )
+                if getattr(res, "modified_count", 0):
+                    logger.info("binance_options_deactivated_stale=%s", res.modified_count)
+        except Exception:
+            logger.debug("binance_options_deactivate_stale_failed", exc_info=True)
+
         if upserts:
             logger.info("binance_options_mirror upserts=%s", upserts)
         return upserts
