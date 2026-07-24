@@ -51,6 +51,15 @@ export function BracketScreen({ id }: { id: GameUiId }) {
   });
   const results: any[] = (history || []).filter((t: any) => t.status && t.status !== "PENDING");
 
+  // GLOBAL last-5 session results (the official session-close per day) — visible
+  // to EVERY player, even before their own trades settle.
+  const { data: recentResults } = useQuery({
+    queryKey: ["games", "bets", "bracket-recent-results"],
+    queryFn: () => GamesAPI.bracketRecentResults(5),
+    refetchInterval: 5000,
+  });
+  const sessionResults: any[] = recentResults || [];
+
   const place = useMutation({
     mutationFn: async () => {
       if (!side) throw new Error("Pick UP or DOWN");
@@ -124,10 +133,48 @@ export function BracketScreen({ id }: { id: GameUiId }) {
           </CardContent>
         </Card>
 
-        {/* Recent results — resolved trades STAY visible with won/lost + payout
+        {/* Last 5 SESSION results — GLOBAL, shown to everyone so recent outcomes
+            are always visible even before your own trades settle. */}
+        <Card>
+          <CardHeader className="pb-3"><CardTitle>Last 5 results</CardTitle></CardHeader>
+          <CardContent className="space-y-1">
+            {sessionResults.length === 0 && (
+              <div className="py-2 text-sm text-muted-foreground">No results yet.</div>
+            )}
+            {sessionResults.map((r: any) => {
+              const up = r.direction === "UP";
+              const down = r.direction === "DOWN";
+              return (
+                <div key={r.day} className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-sm last:border-0">
+                  <span className="flex min-w-0 flex-col">
+                    <span className="font-medium">{r.day}</span>
+                    <span className="text-[11px] text-muted-foreground">Session close</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="tabular-nums font-semibold">
+                      {Number(r.close_price).toFixed(2)}
+                    </span>
+                    {r.direction && (
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[11px] font-bold",
+                          up ? "bg-buy/15 text-buy" : down ? "bg-sell/15 text-sell" : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {up ? "▲ UP" : down ? "▼ DOWN" : "— FLAT"}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        {/* Your own resolved trades STAY visible with won/lost + payout
             (they used to just vanish when the bracket settled). */}
         <Card>
-          <CardHeader className="pb-3"><CardTitle>Recent results</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle>Your recent results</CardTitle></CardHeader>
           <CardContent className="space-y-1">
             {results.length === 0 && <div className="py-2 text-sm text-muted-foreground">No results yet.</div>}
             {results.map((t: any) => {

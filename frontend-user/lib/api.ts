@@ -561,6 +561,8 @@ export const GamesAPI = {
   bracketActive: () => unwrap<any[]>(api.get("/user/games/bracket/active")),
   bracketHistory: (limit = 50) =>
     unwrap<any[]>(api.get("/user/games/bracket/history", { params: { limit } })),
+  bracketRecentResults: (limit = 5) =>
+    unwrap<any[]>(api.get("/user/games/bracket/recent-results", { params: { limit } })),
   // Jackpot
   jackpotBid: (body: { gameId: string; predictedPrice: number }) =>
     unwrap<any>(api.post("/user/games/jackpot/bid", body)),
