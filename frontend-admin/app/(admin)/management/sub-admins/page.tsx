@@ -19,6 +19,7 @@ import {
   Percent,
   DollarSign,
   Gift,
+  Ban,
 } from "lucide-react";
 import { SubAdminSegmentDialog } from "@/components/admin/netting/SubAdminSegmentDialog";
 
@@ -826,9 +827,10 @@ function CreateSubAdminDialog({
   const [perms, setPerms] = useState<AdminPermissions>({ ...ALL_ON });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  // Step 1 is a TYPE CHOOSER: pick "normal" (% PNL/brokerage) vs "fixed"
-  // (Account 2 per-segment fixed brokerage). null = still on the chooser.
-  const [mode, setMode] = useState<"normal" | "fixed" | null>(null);
+  // Step 1 is a TYPE CHOOSER: pick "normal" (% PNL + % brokerage), "fixed"
+  // (Account 2 per-segment fixed brokerage), or "nobrokerage" (% PNL only, the
+  // super-admin takes ZERO brokerage from this admin). null = still on chooser.
+  const [mode, setMode] = useState<"normal" | "fixed" | "nobrokerage" | null>(null);
   // Reset to the chooser + all-perms-on every time the dialog is (re)opened.
   useEffect(() => {
     if (open) {
@@ -837,6 +839,10 @@ function CreateSubAdminDialog({
     }
   }, [open]);
   const isFixed = mode === "fixed";
+  const isNoBrokerage = mode === "nobrokerage";
+  // Both fixed AND no-brokerage hide the "Brokerage share %" input — fixed uses
+  // the per-segment rate, no-brokerage forces it to 0.
+  const hideBrokerageShare = isFixed || isNoBrokerage;
 
   async function submit() {
     if (form.password.length < 8) {
@@ -856,8 +862,13 @@ function CreateSubAdminDialog({
         password: form.password,
         permissions: perms as unknown as Record<string, boolean>,
         pnl_share_pct: form.pnl_share_pct,
-        brokerage_share_pct:
-          form.brokerage_share_pct.trim() === "" ? undefined : form.brokerage_share_pct,
+        // No-brokerage admin → force brokerage share to an explicit 0 (super-admin
+        // takes NO brokerage cut). Fixed → per-segment rate handles it later.
+        brokerage_share_pct: isNoBrokerage
+          ? "0"
+          : form.brokerage_share_pct.trim() === ""
+            ? undefined
+            : form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
         // Type chosen on the chooser step; the per-segment fixed rate is set
         // (and frozen) later in the admin's Segment settings → Brokerage.
@@ -877,20 +888,22 @@ function CreateSubAdminDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>
             {mode === null
               ? "New admin — choose type"
               : isFixed
                 ? "New fixed-brokerage admin"
-                : "New PNL (%) admin"}
+                : isNoBrokerage
+                  ? "New no-brokerage admin"
+                  : "New PNL (%) admin"}
           </DialogTitle>
         </DialogHeader>
 
         {/* ── Step 1: TYPE CHOOSER ─────────────────────────────────── */}
         {mode === null ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => setMode("normal")}
@@ -920,14 +933,38 @@ function CreateSubAdminDialog({
                 what they charge their users. Shows up in Account 2.
               </p>
             </button>
+            <button
+              type="button"
+              onClick={() => setMode("nobrokerage")}
+              className="group flex flex-col items-start gap-2 rounded-xl border-2 border-border bg-card/40 p-4 text-left transition hover:border-primary hover:bg-primary/5"
+            >
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Ban className="size-5" />
+              </div>
+              <div className="text-base font-semibold">No-brokerage admin</div>
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                You take a <b>% share of PNL only</b> — <b>NO brokerage</b> cut from this admin
+                (brokerage share fixed at 0%). Set just the PNL share %.
+              </p>
+            </button>
           </div>
         ) : (
         <>
         {/* Chosen-type banner + change-type back link */}
         <div className="mb-3 flex items-center justify-between rounded-lg border border-primary/40 bg-primary/5 px-3 py-2">
           <div className="flex items-center gap-2 text-sm font-medium">
-            {isFixed ? <DollarSign className="size-4 text-primary" /> : <Percent className="size-4 text-primary" />}
-            {isFixed ? "Fixed-brokerage admin (Account 2)" : "Normal PNL (%) admin"}
+            {isFixed ? (
+              <DollarSign className="size-4 text-primary" />
+            ) : isNoBrokerage ? (
+              <Ban className="size-4 text-primary" />
+            ) : (
+              <Percent className="size-4 text-primary" />
+            )}
+            {isFixed
+              ? "Fixed-brokerage admin (Account 2)"
+              : isNoBrokerage
+                ? "No-brokerage admin (PNL % only)"
+                : "Normal PNL (%) admin"}
           </div>
           <button
             type="button"
@@ -993,8 +1030,9 @@ function CreateSubAdminDialog({
             />
           </div>
           {/* Brokerage share % only applies to the % (normal) flow — a
-              fixed-brokerage admin's brokerage is the per-segment fixed rate. */}
-          {!isFixed && (
+              fixed-brokerage admin's brokerage is the per-segment fixed rate, and
+              a no-brokerage admin's is pinned to 0. */}
+          {!hideBrokerageShare && (
             <div className="space-y-1.5">
               <Label>Brokerage share %</Label>
               <Input
@@ -1039,6 +1077,18 @@ function CreateSubAdminDialog({
           </div>
         )}
 
+        {/* No-brokerage note. */}
+        {isNoBrokerage && (
+          <div className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3">
+            <p className="text-[12px] text-foreground/80">
+              This admin&apos;s <b>brokerage share is fixed at 0%</b> — you take <b>none</b> of
+              their brokerage, only the <b>PNL share %</b> above. The admin still charges their
+              own users whatever their segment settings say; you just don&apos;t take a
+              brokerage cut. You can change it later from the 3-dot menu.
+            </p>
+          </div>
+        )}
+
         <div className="mt-4 space-y-2">
           <div className="text-sm font-medium">Permissions</div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1063,7 +1113,7 @@ function CreateSubAdminDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={loading}>
-            Create {isFixed ? "fixed-brokerage admin" : "PNL admin"}
+            Create {isFixed ? "fixed-brokerage admin" : isNoBrokerage ? "no-brokerage admin" : "PNL admin"}
           </Button>
         </DialogFooter>
         </>
