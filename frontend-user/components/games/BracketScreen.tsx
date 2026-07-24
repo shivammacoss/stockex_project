@@ -61,6 +61,11 @@ export function BracketScreen({ id }: { id: GameUiId }) {
   });
   const sessionResults: any[] = recentResults || [];
   const latestResult: any | undefined = sessionResults[0];
+  // Today's declared session result (if any) — used to show the RESULT in the
+  // live-spot card once the market is closed for the day.
+  const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const resultForToday: any | undefined =
+    latestResult?.day === todayIST ? latestResult : undefined;
 
   // Result-declared popup: when TODAY's session-close result first appears,
   // pop it once (tracked in localStorage so it doesn't re-show on reload or
@@ -160,9 +165,48 @@ export function BracketScreen({ id }: { id: GameUiId }) {
             <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-primary/10 blur-3xl" />
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Nifty Bracket · Live spot</div>
-                <LivePrice value={live} className="mt-1 text-3xl font-bold sm:text-4xl" />
-                <div className="mt-1"><LiveDot live={!!live} label={live ? "Live price" : "Waiting for feed"} /></div>
+                {resultForToday && !open ? (
+                  <>
+                    {/* Market closed + result declared → show the SESSION RESULT
+                        right here in the spot card (price + UP/DOWN), instead of
+                        the stale live tick. */}
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Nifty Bracket · Session result
+                    </div>
+                    <div className="mt-1 flex items-center gap-3">
+                      <span className="text-3xl font-bold tabular-nums sm:text-4xl">
+                        {Number(resultForToday.close_price).toFixed(2)}
+                      </span>
+                      {resultForToday.direction && (
+                        <span
+                          className={cn(
+                            "rounded-md px-2.5 py-1 text-sm font-bold",
+                            resultForToday.direction === "UP"
+                              ? "bg-buy/15 text-buy"
+                              : resultForToday.direction === "DOWN"
+                                ? "bg-sell/15 text-sell"
+                                : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {resultForToday.direction === "UP"
+                            ? "▲ UP"
+                            : resultForToday.direction === "DOWN"
+                              ? "▼ DOWN"
+                              : "— FLAT"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Session close · {resultForToday.day}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Nifty Bracket · Live spot</div>
+                    <LivePrice value={live} className="mt-1 text-3xl font-bold sm:text-4xl" />
+                    <div className="mt-1"><LiveDot live={!!live} label={live ? "Live price" : "Waiting for feed"} /></div>
+                  </>
+                )}
               </div>
               {open ? <GameStatePill state="open" label="Open" /> : <GameStatePill state="closed" label="Closed" />}
             </div>
