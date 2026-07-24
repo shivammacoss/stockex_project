@@ -274,8 +274,16 @@ export default function SubAdminsPage() {
     {
       key: "brokerage_share_pct",
       header: "Brokerage %",
+      // Fixed-brokerage admins take a per-segment fixed rate (set in Segment
+      // settings → Brokerage), NOT a % — so show "Fixed" instead of wrongly
+      // inheriting the PNL share %. Otherwise: the admin's own brokerage %, or
+      // fall back to the PNL share % (legacy admins with no split).
       render: (r) =>
-        r.brokerage_share_pct != null ? `${r.brokerage_share_pct}%` : `${r.pnl_share_pct ?? "0"}%`,
+        r.is_fixed_brokerage
+          ? "Fixed"
+          : r.brokerage_share_pct != null
+            ? `${r.brokerage_share_pct}%`
+            : `${r.pnl_share_pct ?? "0"}%`,
     },
     { key: "user_count", header: "Users", render: (r) => r.user_count ?? 0 },
     { key: "broker_count", header: "Brokers", render: (r) => r.broker_count ?? 0 },
@@ -863,12 +871,15 @@ function CreateSubAdminDialog({
         permissions: perms as unknown as Record<string, boolean>,
         pnl_share_pct: form.pnl_share_pct,
         // No-brokerage admin → force brokerage share to an explicit 0 (super-admin
-        // takes NO brokerage cut). Fixed → per-segment rate handles it later.
+        // takes NO brokerage cut). Fixed → per-segment rate handles it later
+        // (send undefined). Normal → the typed %, or undefined when blank.
         brokerage_share_pct: isNoBrokerage
           ? "0"
-          : form.brokerage_share_pct.trim() === ""
+          : isFixed
             ? undefined
-            : form.brokerage_share_pct,
+            : (form.brokerage_share_pct ?? "").trim() === ""
+              ? undefined
+              : form.brokerage_share_pct,
         opening_fund: Number(form.opening_fund) || 0,
         // Type chosen on the chooser step; the per-segment fixed rate is set
         // (and frozen) later in the admin's Segment settings → Brokerage.
@@ -876,7 +887,7 @@ function CreateSubAdminDialog({
       });
       toast.success("Sub-admin created");
       onOpenChange(false);
-      setForm({ full_name: "", email: "", mobile: "", password: "", confirm_password: "", pnl_share_pct: "0", opening_fund: "0" });
+      setForm({ full_name: "", email: "", mobile: "", password: "", confirm_password: "", pnl_share_pct: "0", brokerage_share_pct: "", opening_fund: "0", is_fixed_brokerage: false, fixed_brokerage_unit: "per_crore", fixed_brokerage_rate: "" });
       setPerms({ ...ALL_OFF });
       onCreated(created);
     } catch (e: any) {
