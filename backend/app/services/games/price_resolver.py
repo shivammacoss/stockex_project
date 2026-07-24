@@ -432,6 +432,82 @@ async def resolve_nifty_price_at(dt: datetime, strict: bool = False) -> Decimal 
     return await nifty_ltp_display()
 
 
+async def resolve_nifty_last_candle_close(dt: datetime) -> Decimal | None:
+    """CLOSE of the LAST 1-minute session candle at/just before `dt` — the exact
+    "C" value the Zerodha chart shows for the final candle (the 15:29→15:30 print).
+    Used by the BRACKET game (operator spec: "settle on the last candle's close").
+
+    Why this and not the official-VWAP strict path the Number/Jackpot games use:
+    the operator verifies the bracket result against the chart's last-candle close,
+    and this value is drawn from the SAME Kite historical candles the chart is. It
+    is also robust to a dropped WS LIVE feed — `get_historical` is a REST call,
+    independent of the streaming session, so a frozen live tick can't skew it.
+
+    Order of trust:
+      1. Super-admin manual close (feed-down safety) — always wins when typed.
+      2. Last 1-minute historical candle close (the chart's "C"). Pinned per-day.
+      3. Pinned close from an earlier resolve today (REST hiccup right now).
+    Returns None when nothing authoritative is available yet → the caller WAITS
+    and retries next tick; it never settles on a stale / bogus price.
+    """
+    from datetime import timedelta
+
+    from app.core.redis_client import cache_get, cache_set
+    from app.services.zerodha_service import zerodha
+    from app.utils.time_utils import now_ist
+
+    try:
+        ist_day = (dt if dt.tzinfo is None else dt.astimezone(now_ist().tzinfo)).strftime("%Y-%m-%d")
+    except Exception:
+        ist_day = now_ist().strftime("%Y-%m-%d")
+    day_key = f"games:nifty:close:{ist_day}"
+
+    # 1) Manual SA override (feed-down safety) — always wins when typed.
+    manual = await manual_nifty_close(ist_day)
+    if manual is not None and manual > 0:
+        v = quantize_money(manual)
+        try:
+            await cache_set(day_key, str(v), ttl_sec=259200)
+            if dt.date() == now_ist().date():
+                await cache_set(_NIFTY_LAST_KEY, str(v), ttl_sec=_NIFTY_LAST_TTL)
+        except Exception:
+            pass
+        return v
+
+    # 2) LAST 1-minute historical candle close (the chart's "C"). REST call, so
+    #    it's immune to a frozen WS tick and matches the chart exactly.
+    try:
+        candles = await zerodha.get_historical(
+            NIFTY_TOKEN, dt - timedelta(hours=6), dt + timedelta(minutes=1), "minute"
+        )
+        if candles:
+            cl = to_decimal(candles[-1]["close"])
+            if cl > 0:
+                v = quantize_money(cl)
+                try:
+                    await cache_set(day_key, str(v), ttl_sec=259200)
+                    if dt.date() == now_ist().date():
+                        await cache_set(_NIFTY_LAST_KEY, str(v), ttl_sec=_NIFTY_LAST_TTL)
+                except Exception:
+                    pass
+                return v
+    except Exception:
+        logger.debug("nifty_last_candle_close_failed", exc_info=True)
+
+    # 3) Pinned close from an earlier resolve today (REST unavailable right now).
+    try:
+        pinned = await cache_get(day_key)
+        if pinned:
+            pv = to_decimal(pinned)
+            if pv > 0:
+                return pv
+    except Exception:
+        logger.debug("nifty_last_candle_pin_read_failed", exc_info=True)
+
+    # Nothing authoritative yet → wait (retry next tick), never a bogus value.
+    return None
+
+
 async def resolve_btc_price_at(dt: datetime) -> Decimal | None:
     """BTC price AT the exact IST minute `dt` — the CLOSE of the 1-minute
     Binance candle that ENDS at `dt` (i.e. the last trade just before `dt`).

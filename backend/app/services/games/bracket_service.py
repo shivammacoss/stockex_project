@@ -32,6 +32,9 @@ from app.utils.time_utils import now_ist, now_utc
 logger = logging.getLogger(__name__)
 GAME_KEY = "niftyBracket"
 _MAX_PER_TICK = 200
+# Wait this many seconds AFTER the session close before resolving, so the final
+# 15:29→15:30 candle is closed + published (operator: "check from 15:30:30").
+_BRACKET_RESULT_GRACE_SEC = 30
 
 
 async def place_bet(
@@ -141,18 +144,21 @@ async def declare_and_settle() -> int:
     if not due:
         return 0
 
-    # Resolve at the OFFICIAL Zerodha close candle (the authoritative daily close
-    # the admin terminal shows), NOT the WS live/frozen tick — which lags the
-    # official close by ~1-20 pts (2026-07-13: streamed 24,206.75 vs official
-    # 24,208.60, flipping the bracket result). All same-day trades share the
-    # result time; resolve once at the latest expiry. None → retry next tick
-    # (the minute candle may not be published yet), never settle at a bogus price.
+    # Resolve on the LAST session candle's CLOSE — the exact "C" value the Zerodha
+    # chart shows for the final 15:29→15:30 candle (operator spec: settle on the
+    # last candle's closing). All same-day trades share the result time; resolve
+    # once at the latest expiry.
     result_dt = max(t.expires_at for t in due)
-    # strict=True → resolve against the OFFICIAL NSE close only (same value the
-    # Number & Jackpot games use), never the last-traded historical candle which
-    # can differ by a few points and flip a bracket that sits near a band edge.
-    # None → retry next tick (never settle at a divergent/bogus price).
-    ltp = await price_resolver.resolve_nifty_price_at(result_dt, strict=True)
+    # Only START checking 30s AFTER the session close (i.e. from 15:30:30) so the
+    # final 15:29→15:30 candle is fully closed AND published before we read it.
+    # Until then, wait (retry next tick) — never settle on a mid-forming candle.
+    if now_utc() < result_dt + timedelta(seconds=_BRACKET_RESULT_GRACE_SEC):
+        return 0
+    # Last-candle close is drawn from Kite HISTORICAL (REST) — immune to a frozen
+    # WS live tick — and matches the chart exactly. None → retry next tick until
+    # the correct close lands (or the super-admin types it in Manual Game Entry),
+    # so a wrong / stale result is never declared.
+    ltp = await price_resolver.resolve_nifty_last_candle_close(result_dt)
     if ltp is None or ltp <= 0:
         return 0
 
