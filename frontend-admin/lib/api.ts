@@ -974,6 +974,11 @@ export const ManagementAPI = {
   ) => unwrap<any>(api.put(`/admin/management/sub-admins/${id}/fixed-brokerage`, body)),
   setExpiryEditAllowed: (id: string, allowed: boolean) =>
     unwrap<any>(api.put(`/admin/management/sub-admins/${id}/expiry-edit-allowed`, { allowed })),
+
+  setTradingReferralEnabled: (id: string, enabled: boolean) =>
+    unwrap<any>(
+      api.put(`/admin/management/sub-admins/${id}/trading-referral-enabled`, { enabled })
+    ),
   updateSubAdmin: (id: string, body: { full_name?: string }) =>
     unwrap<any>(api.put(`/admin/management/sub-admins/${id}`, body)),
   updatePermissions: (id: string, permissions: Record<string, boolean>) =>

@@ -329,6 +329,14 @@ class User(TimestampMixin):
     # admin override. Super-admin itself is always allowed. Default False = locked.
     can_edit_expiry_settings: bool = False
 
+    # Super-admin master switch for TRADING-REFERRAL income across an ENTIRE
+    # admin's client base. Default ON. Flip OFF (sub-admins 3-dot → "Trading
+    # referral") and `referral_service.credit_referral_trading_reward` skips all
+    # accrual + payout for every client whose owning admin is this row — one
+    # switch kills the trading-referral rewards for that admin's whole pool.
+    # Only meaningful on an ADMIN / SUPER_ADMIN row; unset = True (legacy).
+    trading_referral_enabled: bool = True
+
     # Immediate broker owner. For BROKER role: their parent broker (NULL for
     # a top-level broker created by an admin/super-admin). For CLIENT role:
     # the broker that minted them (NULL when client belongs to admin pool).

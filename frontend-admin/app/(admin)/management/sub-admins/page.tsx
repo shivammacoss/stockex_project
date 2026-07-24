@@ -18,6 +18,7 @@ import {
   Trash2,
   Percent,
   DollarSign,
+  Gift,
 } from "lucide-react";
 import { SubAdminSegmentDialog } from "@/components/admin/netting/SubAdminSegmentDialog";
 
@@ -216,6 +217,19 @@ export default function SubAdminsPage() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+  const tradingReferralMut = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      ManagementAPI.setTradingReferralEnabled(id, enabled),
+    onSuccess: (_d, v) => {
+      toast.success(
+        v.enabled
+          ? "Trading referral ON for this admin's clients"
+          : "Trading referral OFF — no client under this admin earns it"
+      );
+      qc.invalidateQueries({ queryKey: ["admin", "sub-admins"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
   const resetPwMut = useMutation({
     mutationFn: ({ id, pw }: { id: string; pw: string }) =>
       ManagementAPI.resetSubAdminPassword(id, pw),
@@ -336,6 +350,21 @@ export default function SubAdminsPage() {
                   <ShieldOff className="size-4 text-muted-foreground" />
                 )}
                 Expiry edit · {r.can_edit_expiry_settings ? "ON" : "OFF"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  tradingReferralMut.mutate({
+                    id: r.id,
+                    enabled: r.trading_referral_enabled === false,
+                  })
+                }
+              >
+                {r.trading_referral_enabled === false ? (
+                  <Gift className="size-4 text-muted-foreground" />
+                ) : (
+                  <Gift className="size-4 text-emerald-500" />
+                )}
+                Trading referral · {r.trading_referral_enabled === false ? "OFF" : "ON"}
               </DropdownMenuItem>
               {r.status === "ACTIVE" ? (
                 <DropdownMenuItem onSelect={() => blockMut.mutate(r.id)}>

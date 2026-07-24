@@ -65,6 +65,7 @@ async def _ser_sub_admin(sa: User) -> SubAdminDTO:
             else None
         ),
         can_edit_expiry_settings=bool(getattr(sa, "can_edit_expiry_settings", False)),
+        trading_referral_enabled=bool(getattr(sa, "trading_referral_enabled", True)),
         user_count=await mgmt.count_assigned_users(sa.id),
         broker_count=await mgmt.count_assigned_brokers(sa.id),
         created_at=sa.created_at,
@@ -297,6 +298,22 @@ async def set_expiry_edit_allowed(
     (default OFF → the admin is locked to the super-admin's expiry config)."""
     sa = await mgmt.set_admin_expiry_edit_allowed(
         sub_admin_id, bool(payload.get("allowed")), admin.id
+    )
+    return APIResponse(data=await _ser_sub_admin(sa))
+
+
+@router.put(
+    "/sub-admins/{sub_admin_id}/trading-referral-enabled",
+    response_model=APIResponse[SubAdminDTO],
+)
+async def set_trading_referral_enabled(
+    sub_admin_id: str, payload: dict, admin: SuperAdmin
+):
+    """Super-admin switches TRADING-REFERRAL income ON/OFF for this admin's whole
+    client base at once (default ON). OFF → no client under this admin earns a
+    trading-referral reward until switched back on."""
+    sa = await mgmt.set_admin_trading_referral_enabled(
+        sub_admin_id, bool(payload.get("enabled")), admin.id
     )
     return APIResponse(data=await _ser_sub_admin(sa))
 

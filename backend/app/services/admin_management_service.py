@@ -269,6 +269,31 @@ async def set_admin_expiry_edit_allowed(
     return sa
 
 
+async def set_admin_trading_referral_enabled(
+    sub_admin_id: str | PydanticObjectId,
+    enabled: bool,
+    actor_id: PydanticObjectId,
+) -> User:
+    """Super-admin switches TRADING-REFERRAL income ON/OFF for this admin's WHOLE
+    client base at once. Default ON — flip OFF and no client whose owning admin is
+    this row accrues or earns a trading-referral reward until it's switched back
+    on. Does not touch the games (◉ coin) referral, only the trading reward."""
+    sa = await _get_sub_admin_or_404(sub_admin_id)
+    old = bool(getattr(sa, "trading_referral_enabled", True))
+    sa.trading_referral_enabled = bool(enabled)
+    await sa.save()
+    await log_event(
+        action=AuditAction.SUB_ADMIN_PNL_SHARE_UPDATE,
+        entity_type="User",
+        entity_id=sa.id,
+        actor_id=actor_id,
+        target_user_id=sa.id,
+        old_values={"trading_referral_enabled": old},
+        new_values={"trading_referral_enabled": sa.trading_referral_enabled},
+    )
+    return sa
+
+
 async def set_pnl_share(
     sub_admin_id: str | PydanticObjectId,
     pct: Decimal,

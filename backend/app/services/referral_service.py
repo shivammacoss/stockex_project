@@ -260,6 +260,17 @@ async def credit_referral_trading_reward(
         referred = await User.get(user_id)
         if referred is None or getattr(referred, "referred_by", None) is None:
             return
+        # Super-admin master switch: trading-referral income can be turned OFF for
+        # an ENTIRE admin's client base at once (sub-admins 3-dot). When the
+        # referred user's owning admin has trading_referral_enabled=False, skip
+        # all accrual + payout — one switch kills it for that admin's whole pool.
+        admin_uid = getattr(referred, "assigned_admin_id", None)
+        if admin_uid is not None:
+            owning_admin = await User.get(admin_uid)
+            if owning_admin is not None and not getattr(
+                owning_admin, "trading_referral_enabled", True
+            ):
+                return
         referrer_id = referred.referred_by
         seg = _segment_of_instrument(instrument_segment)
 
