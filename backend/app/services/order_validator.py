@@ -599,9 +599,21 @@ async def validate(
         _hard_cap_check("limit price", price)
         _hard_cap_check("trigger price", trigger_price)
 
+    # Crypto options don't follow the equity/index ATM-step model (spot in the
+    # tens of thousands, arbitrary strike ladders), so the ATM strike-distance
+    # gates below (#5 strike-step, #6d strike-far-percent) misfire. Skip them
+    # for crypto — detected via segment name or the instrument's exchange.
+    _exch_upper = str(getattr(instrument.exchange, "value", instrument.exchange) or "").upper()
+    _is_crypto = "CRYPTO" in segment_type.upper() or _exch_upper == "CRYPTO"
+
     # 5) strike difference (only for option segments)
     strike_diff = int(s.get("strike_difference") or 0)
-    if strike_diff > 0 and instrument.strike is not None and "OPTION" in segment_type.upper():
+    if (
+        strike_diff > 0
+        and instrument.strike is not None
+        and "OPTION" in segment_type.upper()
+        and not _is_crypto
+    ):
         underlying = await Instrument.find_one(
             Instrument.token == (instrument.underlying_token or "")
         )
@@ -686,6 +698,7 @@ async def validate(
         and "OPTION" in segment_type.upper()
         and instrument.strike is not None
         and instrument.underlying_token
+        and not _is_crypto
     ):
         underlying = await Instrument.find_one(Instrument.token == instrument.underlying_token)
         if underlying is not None:

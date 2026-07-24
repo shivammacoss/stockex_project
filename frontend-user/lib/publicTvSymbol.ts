@@ -43,12 +43,24 @@ export function toPublicTvSymbol(
   // Indian exchanges → keep the licensed chart (our exact datafeed).
   if (INDIAN_EXCH.has(ex)) return null;
 
+  // ── Crypto option contracts have NO public Binance symbol ───────────
+  // e.g. "BTC-260725-62000-C" / "…-P". Binance's free widget only serves
+  // spot pairs, so mapping these produces a "symbol doesn't exist" chart.
+  // Keep them on the LICENSED chart (our own datafeed = exact option price).
+  const isCryptoOption =
+    seg.includes("OPTION") || /-[CP]$/.test(s) || /-\d{4,}-[CP]$/.test(s);
+
   // ── Crypto → Binance pair ──────────────────────────────────────────
-  if (s.endsWith("USDT") || s.endsWith("USDC")) return `BINANCE:${s}`;
-  const base = s.endsWith("USD") ? s.slice(0, -3) : "";
-  if (base && CRYPTO_BASES.has(base)) return `BINANCE:${base}USDT`;
-  if (ex === "CRYPTO" || seg.includes("CRYPTO")) {
-    return `BINANCE:${s.replace(/USD$/, "USDT")}`;
+  if (!isCryptoOption) {
+    if (s.endsWith("USDT") || s.endsWith("USDC")) return `BINANCE:${s}`;
+    const base = s.endsWith("USD") ? s.slice(0, -3) : "";
+    if (base && CRYPTO_BASES.has(base)) return `BINANCE:${base}USDT`;
+    if (ex === "CRYPTO" || seg.includes("CRYPTO")) {
+      return `BINANCE:${s.replace(/USD$/, "USDT")}`;
+    }
+  } else if (ex === "CRYPTO" || seg.includes("CRYPTO")) {
+    // Crypto option → licensed chart (our datafeed handles the option token).
+    return null;
   }
 
   // ── Energy CFDs ────────────────────────────────────────────────────
