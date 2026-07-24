@@ -630,7 +630,7 @@ function CreateBrokerDialog({
       });
       toast.success(`${noun} created`);
       onOpenChange(false);
-      setForm({ full_name: "", email: "", mobile: "", password: "", confirm_password: "", pnl_share_pct: "0", brokerage_share_pct: "0", opening_fund: "0" });
+      setForm({ full_name: "", email: "", mobile: "", password: "", confirm_password: "", pnl_share_pct: "0", brokerage_share_pct: "0", opening_fund: "0", is_fixed_brokerage: false, fixed_brokerage_unit: "per_crore", fixed_brokerage_rate: "" });
       setPerms({ ...ALL_OFF });
       setSelectedAdminId("");
       onCreated();
