@@ -190,6 +190,32 @@ def _segment_of_instrument(segment: str | None) -> str:
     return {"MCX": "mcx", "CRYPTO": "crypto", "FOREX": "forex"}.get(kind, "trading")
 
 
+# Referral segment key → human label shown in the ledger detail.
+_SEGMENT_LABELS: dict[str, str] = {
+    "trading": "NSE",
+    "mcx": "MCX",
+    "crypto": "Crypto",
+    "forex": "Forex",
+}
+
+
+def _segment_label(seg: str | None) -> str:
+    """Referral segment key → display label (NSE/MCX/Crypto/Forex)."""
+    return _SEGMENT_LABELS.get((seg or "").lower(), "NSE")
+
+
+def _dominant_referral_segment(ref: "Referral") -> str:
+    """The segment key that contributed the most brokerage across this
+    referred user's accrued trades. Falls back to 'trading' (NSE)."""
+    totals: dict[str, Decimal] = {}
+    for e in ref.trading_referrals or []:
+        seg = getattr(e, "segment", None) or "trading"
+        totals[seg] = totals.get(seg, Decimal("0")) + to_decimal(getattr(e, "brokerage", 0))
+    if not totals:
+        return "trading"
+    return max(totals, key=lambda k: totals[k])
+
+
 async def _super_admin_net_brokerage_share(referred: User, brokerage: Decimal) -> Decimal:
     """The SUPER-ADMIN's NET brokerage remainder from one trade of `referred`.
 
@@ -325,10 +351,11 @@ async def credit_referral_trading_reward(
         from app.models.transaction import TransactionType
         from app.services import wallet_service
 
+        seg_label = _segment_label(_dominant_referral_segment(ref))
         await wallet_service.adjust(
             referrer_id, reward,
             transaction_type=TransactionType.REFERRAL_COMMISSION,
-            narration=f"Referral reward — {referred.user_code} reached threshold",
+            narration=f"Referral reward ({seg_label}) — {referred.user_code} reached threshold",
             reference_type="REFERRAL_THRESHOLD", reference_id=str(referred.id),
         )
         # Referrer rollup.
