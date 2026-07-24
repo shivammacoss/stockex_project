@@ -20,6 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { UsersAPI } from "@/lib/api";
+import { useAdminAuthStore } from "@/stores/authStore";
 import { TransferUserDialog } from "@/components/admin/TransferUserDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,8 @@ interface Props {
 export function UserActionMenu({ user, onChange }: Props) {
   const router = useRouter();
   const qc = useQueryClient();
+  // Only the SUPER ADMIN may delete users — admins/brokers get block/kill only.
+  const isSuperAdmin = useAdminAuthStore((s) => s.admin?.role === "SUPER_ADMIN");
   const [menuOpen, setMenuOpen] = useState(false);
   const [action, setAction] = useState<ActionKind>(null);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -299,12 +302,14 @@ export function UserActionMenu({ user, onChange }: Props) {
               label="Login As User"
               onClick={() => pick(runLoginAs)}
             />
-            <MenuButton
-              icon={<Trash2 className="size-4" />}
-              label="Delete User"
-              destructive
-              onClick={() => pick(() => setAction("delete"))}
-            />
+            {isSuperAdmin && (
+              <MenuButton
+                icon={<Trash2 className="size-4" />}
+                label="Delete User"
+                destructive
+                onClick={() => pick(() => setAction("delete"))}
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>

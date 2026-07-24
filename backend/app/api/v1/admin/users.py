@@ -819,12 +819,16 @@ async def delete_user(
     admin: CurrentAdmin,
     _: None = Depends(require_perm("users", "write")),
 ):
+    # Only the SUPER ADMIN may delete users. Admins/brokers can block/close a
+    # user (separate flow) but must never delete accounts — deletion is a
+    # destructive, super-admin-only action.
+    if admin.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=403, detail="Only the super admin can delete users"
+        )
     u = await assert_user_in_scope(admin, user_id)
     if u.role == UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=400, detail="Super admin cannot be deleted")
-    # Sub-admins must not delete other admins via this generic endpoint.
-    if admin.role != UserRole.SUPER_ADMIN and u.role == UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Cannot delete an admin user")
 
     # Demo users: hard delete everything from DB immediately
     if u.is_demo:
