@@ -310,9 +310,17 @@ async def credit_referral_trading_reward(
         # SA's net brokerage share from THIS trade.
         sa_share = await _super_admin_net_brokerage_share(referred, brok)
 
-        # Accrue + record the trade (idempotent from here on).
+        # Accrue + record the trade (idempotent from here on). Accrual is now
+        # PER SEGMENT: each segment (trading/mcx/crypto/forex) tracks its own
+        # running SA-net total so it can pay its own one-time reward (4x model).
         from app.models.referral import TradingReferralEntry
 
+        by_seg = dict(ref.sa_brokerage_accrued_by_segment or {})
+        seg_prev = to_decimal(by_seg.get(seg, Decimal128("0")))
+        seg_accrued = seg_prev + sa_share
+        by_seg[seg] = Decimal128(str(seg_accrued))
+        ref.sa_brokerage_accrued_by_segment = by_seg
+        # Keep the pooled total updated too (legacy progress display).
         ref.sa_brokerage_accrued = Decimal128(
             str(to_decimal(ref.sa_brokerage_accrued) + sa_share)
         )
@@ -331,31 +339,47 @@ async def credit_referral_trading_reward(
         # House rollup (kept for analytics / other gates).
         await bump_hierarchy_earnings(_root_admin_id(referred, await _super_admin_id()), seg, brok)
 
-        # One-time threshold payout.
+        # Per-segment one-time threshold payout.
         enabled, threshold, reward = await _trading_referral_config()
-        if not enabled or ref.trading_reward_paid:
+        if not enabled or reward <= 0:
             return
-        if to_decimal(ref.sa_brokerage_accrued) < threshold or reward <= 0:
+        # Backward-compat: a referral that already got the OLD pooled reward
+        # (trading_reward_paid=True, empty per-segment list) is seeded with its
+        # dominant segment so we never re-pay that same segment; the other 3
+        # segments remain free to earn going forward.
+        if ref.trading_reward_paid and not (ref.trading_reward_paid_segments or []):
+            dom = _dominant_referral_segment(ref)
+            await Referral.get_motor_collection().update_one(
+                {"_id": ref.id},
+                {"$addToSet": {"trading_reward_paid_segments": dom}},
+            )
+            ref.trading_reward_paid_segments = [dom]
+        if seg in (ref.trading_reward_paid_segments or []):
+            return  # this segment's reward already paid
+        if seg_accrued < threshold:
             return
 
-        # Atomically claim the one-time payout so a re-entrant tick can't double-pay.
+        # Atomically claim THIS SEGMENT's one-time payout (re-entrant/concurrent
+        # ticks for the same segment can't double-pay — the $ne gate + $addToSet
+        # only lets one through).
         claimed = await Referral.get_motor_collection().find_one_and_update(
-            {"_id": ref.id, "trading_reward_paid": {"$ne": True}},
-            {"$set": {"trading_reward_paid": True, "trading_reward_paid_at": now_utc(),
-                      "trading_reward_amount": Decimal128(str(reward)),
-                      "earnings": Decimal128(str(to_decimal(ref.earnings) + reward))}},
+            {"_id": ref.id, "trading_reward_paid_segments": {"$ne": seg}},
+            {"$addToSet": {"trading_reward_paid_segments": seg},
+             "$inc": {"earnings": Decimal128(str(reward))},
+             "$set": {"trading_reward_paid": True, "trading_reward_paid_at": now_utc(),
+                      "trading_reward_amount": Decimal128(str(reward))}},
         )
         if claimed is None:
-            return  # another tick already paid
+            return  # another tick already paid this segment
 
         from app.models.transaction import TransactionType
         from app.services import wallet_service
 
-        seg_label = _segment_label(_dominant_referral_segment(ref))
+        seg_label = _segment_label(seg)
         await wallet_service.adjust(
             referrer_id, reward,
             transaction_type=TransactionType.REFERRAL_COMMISSION,
-            narration=f"Referral reward ({seg_label}) — {referred.user_code} reached threshold",
+            narration=f"Referral reward ({seg_label}) — {referred.user_code} reached {seg_label} threshold",
             reference_type="REFERRAL_THRESHOLD", reference_id=str(referred.id),
         )
         # Referrer rollup.

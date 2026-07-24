@@ -74,6 +74,16 @@ class Referral(TimestampMixin):
     trading_reward_paid_at: datetime | None = None
     trading_reward_amount: Money = Field(default_factory=_zero)  # what was paid
 
+    # ── Per-segment threshold model (4x) ────────────────────────────────
+    # Each trading segment earns its OWN one-time reward: NSE(=trading), MCX,
+    # Crypto and Forex accrue the SUPER-ADMIN's NET brokerage SEPARATELY and
+    # each pays the reward once when that segment's own accrual crosses the
+    # threshold. So a single referred user can trigger up to 4 rewards (one
+    # per segment) instead of one pooled reward. Keys are the referral segment
+    # keys: "trading" / "mcx" / "crypto" / "forex".
+    sa_brokerage_accrued_by_segment: dict[str, Money] = Field(default_factory=dict)
+    trading_reward_paid_segments: list[str] = Field(default_factory=list)
+
     activated_at: datetime | None = None
 
     class Settings:

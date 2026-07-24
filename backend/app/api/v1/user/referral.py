@@ -35,6 +35,9 @@ async def referral_stats(user: CurrentUser):
     threshold_f = float(threshold)
     reward_f = float(reward)
 
+    # 4x model: each segment earns its own one-time reward.
+    _SEG_LABELS = [("trading", "NSE"), ("mcx", "MCX"), ("crypto", "Crypto"), ("forex", "Forex")]
+
     items = []
     total_earn = 0.0
     for r in refs:
@@ -44,6 +47,30 @@ async def referral_stats(user: CurrentUser):
         accrued = float(str(r.sa_brokerage_accrued.to_decimal())) if getattr(r, "sa_brokerage_accrued", None) else 0.0
         paid = bool(getattr(r, "trading_reward_paid", False))
         progress = 100.0 if paid else (min(100.0, accrued / threshold_f * 100.0) if threshold_f > 0 else 0.0)
+
+        # Per-segment breakdown (NSE / MCX / Crypto / Forex) — each pays once.
+        by_seg = getattr(r, "sa_brokerage_accrued_by_segment", None) or {}
+        paid_segs = set(getattr(r, "trading_reward_paid_segments", None) or [])
+        segments = []
+        for seg_key, seg_label in _SEG_LABELS:
+            raw = by_seg.get(seg_key)
+            seg_accrued = float(str(raw.to_decimal())) if raw is not None else 0.0
+            seg_paid = seg_key in paid_segs
+            seg_progress = (
+                100.0 if seg_paid
+                else (min(100.0, seg_accrued / threshold_f * 100.0) if threshold_f > 0 else 0.0)
+            )
+            segments.append(
+                {
+                    "segment": seg_key,
+                    "label": seg_label,
+                    "accrued": round(seg_accrued, 2),
+                    "paid": seg_paid,
+                    "progress_pct": round(seg_progress, 1),
+                }
+            )
+        rewards_paid_count = len(paid_segs)
+
         items.append(
             {
                 "referred_user_code": ru.user_code if ru else None,
@@ -52,12 +79,16 @@ async def referral_stats(user: CurrentUser):
                 "earnings": earn,
                 "first_game_win": bool(r.first_game_win.credited),
                 "trading_referral_count": r.trading_referral_count,
-                # Trading referral THRESHOLD progress (per referred user).
+                # Legacy pooled progress (kept for backward compat).
                 "sa_brokerage_accrued": round(accrued, 2),
                 "trading_threshold": threshold_f,
                 "trading_reward": reward_f,
                 "trading_progress_pct": round(progress, 1),
                 "trading_reward_paid": paid,
+                # 4x per-segment model.
+                "segments": segments,
+                "trading_rewards_paid_count": rewards_paid_count,
+                "trading_rewards_max": len(_SEG_LABELS),
                 "joined_at": r.created_at,
             }
         )
