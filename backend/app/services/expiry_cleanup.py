@@ -61,6 +61,7 @@ async def cleanup_expired_once() -> dict[str, int]:
             "watchlist_items": 0,
             "unsubscribed": 0,
             "positions_settled": 0,
+            "orders_cancelled": 0,
         }
 
     expired_tokens = [str(i.token) for i in expired]
@@ -92,6 +93,37 @@ async def cleanup_expired_once() -> dict[str, int]:
         except Exception:  # noqa: BLE001
             logger.exception(
                 "expiry_cleanup_settle_failed", extra={"position_id": str(_pos.id)}
+            )
+
+    # 0b) Cancel any still-parked orders (PENDING / OPEN / PARTIAL) on the
+    #     expired contracts. Once the token is unsubscribed below the pending-
+    #     order poller can never price them, so they'd sit OPEN forever holding
+    #     the user's blocked margin (a "zombie order", mirror of the zombie
+    #     position above). cancel_order flips them CANCELLED and RELEASES that
+    #     blocked margin. Do this BEFORE unsubscribe, same as position settle.
+    orders_cancelled = 0
+    from app.models.order import Order, OrderStatus
+    from app.services import matching_engine
+
+    parked_orders = await Order.find(
+        {
+            "status": {
+                "$in": [
+                    OrderStatus.PENDING.value,
+                    OrderStatus.OPEN.value,
+                    OrderStatus.PARTIAL.value,
+                ]
+            },
+            "instrument.token": {"$in": expired_tokens},
+        }
+    ).to_list()
+    for _o in parked_orders:
+        try:
+            await matching_engine.cancel_order(_o, reason="EXPIRY_CANCELLED")
+            orders_cancelled += 1
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "expiry_cleanup_cancel_order_failed", extra={"order_id": str(_o.id)}
             )
 
     # 1) Yank from every user's watchlist
@@ -133,6 +165,7 @@ async def cleanup_expired_once() -> dict[str, int]:
             "watchlist_items_removed": wl_removed,
             "tokens_unsubscribed": unsubbed,
             "positions_settled": settled,
+            "orders_cancelled": orders_cancelled,
             "cutoff_date": str(today),
         },
     )
@@ -141,6 +174,7 @@ async def cleanup_expired_once() -> dict[str, int]:
         "watchlist_items": wl_removed,
         "unsubscribed": unsubbed,
         "positions_settled": settled,
+        "orders_cancelled": orders_cancelled,
     }
 
 
