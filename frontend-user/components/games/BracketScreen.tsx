@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatCoins as formatINR } from "@/lib/games/coins";
 import { GamesAPI } from "@/lib/api";
@@ -59,6 +60,30 @@ export function BracketScreen({ id }: { id: GameUiId }) {
     refetchInterval: 5000,
   });
   const sessionResults: any[] = recentResults || [];
+  const latestResult: any | undefined = sessionResults[0];
+
+  // Result-declared popup: when TODAY's session-close result first appears,
+  // pop it once (tracked in localStorage so it doesn't re-show on reload or
+  // for older days). Same nice UP/DOWN + close-price display as "Last 5".
+  const [resultPopup, setResultPopup] = useState<any | null>(null);
+  useEffect(() => {
+    if (!latestResult?.day) return;
+    const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    if (latestResult.day !== todayIST) return; // only pop a freshly-declared result
+    let seen: string | null = null;
+    try {
+      seen = window.localStorage.getItem("nb.bracket.lastResultDay");
+    } catch {
+      /* ignore */
+    }
+    if (seen === latestResult.day) return;
+    setResultPopup(latestResult);
+    try {
+      window.localStorage.setItem("nb.bracket.lastResultDay", latestResult.day);
+    } catch {
+      /* ignore */
+    }
+  }, [latestResult?.day, latestResult?.close_price, latestResult?.direction]);
 
   const place = useMutation({
     mutationFn: async () => {
@@ -89,6 +114,45 @@ export function BracketScreen({ id }: { id: GameUiId }) {
           `Win if NIFTY moves your way past the ${gap}-pt bracket by session close`,
         ]}
       />
+
+      {/* Latest session result — mirrored at the TOP so the freshly-declared
+          outcome is impossible to miss (same nice UP/DOWN + close-price
+          display as the "Last 5 results" list below). */}
+      {latestResult?.day && (
+        <Card className="overflow-hidden border-primary/40 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                Latest result · Session close
+              </div>
+              <div className="mt-0.5 text-sm text-muted-foreground">{latestResult.day}</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold tabular-nums sm:text-3xl">
+                {Number(latestResult.close_price).toFixed(2)}
+              </span>
+              {latestResult.direction && (
+                <span
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-sm font-bold",
+                    latestResult.direction === "UP"
+                      ? "bg-buy/15 text-buy"
+                      : latestResult.direction === "DOWN"
+                        ? "bg-sell/15 text-sell"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {latestResult.direction === "UP"
+                    ? "▲ UP"
+                    : latestResult.direction === "DOWN"
+                      ? "▼ DOWN"
+                      : "— FLAT"}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-4">
         <Card className="overflow-hidden">
@@ -271,6 +335,47 @@ export function BracketScreen({ id }: { id: GameUiId }) {
         </CardContent>
       </Card>
     </div>
+
+      {/* Result-declared POPUP — fires once when today's session-close result
+          first appears. Same nice UP/DOWN + close-price display as the list. */}
+      <Dialog open={!!resultPopup} onOpenChange={(o) => !o && setResultPopup(null)}>
+        <DialogContent className="max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle className="text-center">Result declared</DialogTitle>
+          </DialogHeader>
+          {resultPopup && (
+            <div className="flex flex-col items-center gap-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                Session close · {resultPopup.day}
+              </div>
+              <div className="text-4xl font-extrabold tabular-nums">
+                {Number(resultPopup.close_price).toFixed(2)}
+              </div>
+              {resultPopup.direction && (
+                <span
+                  className={cn(
+                    "rounded-lg px-4 py-1.5 text-lg font-bold",
+                    resultPopup.direction === "UP"
+                      ? "bg-buy/15 text-buy"
+                      : resultPopup.direction === "DOWN"
+                        ? "bg-sell/15 text-sell"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {resultPopup.direction === "UP"
+                    ? "▲ UP"
+                    : resultPopup.direction === "DOWN"
+                      ? "▼ DOWN"
+                      : "— FLAT"}
+                </span>
+              )}
+              <Button className="mt-2 w-full" onClick={() => setResultPopup(null)}>
+                Got it
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
